@@ -916,7 +916,9 @@ function filterParam() {
 //  ERROR DISPLAY
 // ═══════════════════════════════════════════════════════════════
 function showError(context, err) {
+    const msg = (err && err.message) ? err.message : String(err);
     console.error(`[${context}]`, err);
+    addErrorEntry(context, msg, null);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1714,13 +1716,16 @@ function openLightbox(src) {
 //  TOAST
 // ═══════════════════════════════════════════════════════════════
 function showToast(ev) {
+    // Allow plain string calls (e.g. showToast('Copied!'))
+    if (typeof ev === 'string') { toast(ev); return; }
     const area = $('#toasts');
-    const cls = ev.type === 'location' ? 'loc' : ev.type === 'photo' ? 'photo' : ev.type === 'error' ? 'error' : ev.type;
-    const toast = document.createElement('div');
-    toast.className = `toast ${cls}`;
-    toast.textContent = `${ev.type.replace(/_/g,' ').toUpperCase()}: ${fmtEvent(ev.data).slice(0, 50)}`;
-    area.appendChild(toast);
-    setTimeout(() => toast.remove(), 4000);
+    const cls = ev.type === 'location' ? 'loc' : ev.type === 'photo' ? 'photo' : ev.type === 'error' ? 'error' : (ev.type || 'command');
+    const evType = (ev.type || '').replace(/_/g,' ').toUpperCase() || 'INFO';
+    const toast2 = document.createElement('div');
+    toast2.className = `toast ${cls}`;
+    toast2.textContent = `${evType}: ${fmtEvent(ev.data).slice(0, 50)}`;
+    area.appendChild(toast2);
+    setTimeout(() => toast2.remove(), 4000);
     // Play notification sound for important events
     if (['client_connected', 'client_disconnected', 'photo', 'media', 'error'].includes(ev.type)) {
         playAdminNotifSound(ev.type);
