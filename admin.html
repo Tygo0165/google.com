@@ -440,7 +440,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
         <button class="btn" onclick="startAllLiveFeeds()">? All Live</button>
         <button class="btn" onclick="stopAllLiveFeeds()">� Stop All</button>
         <label style="display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--dim);cursor:pointer;user-select:none">
-            <input type="checkbox" id="cam-online-only" onchange="camOnlineOnly=this.checked;loadCameraFeeds()" style="accent-color:var(--accent)"> Alleen online
+            <input type="checkbox" id="cam-online-only" onchange="camOnlineOnly=this.checked;loadCameraFeeds()" style="accent-color:var(--accent)" checked> Alleen online
         </label>
         <button class="btn" onclick="purgeStaleClients(1)" style="border-color:#f5c6c4;color:#d93025">🗑 Wis verlopen (>1d)</button>
     </div>
@@ -707,7 +707,7 @@ let currentFilter = '';
 let liveFeeds = {}; // { clientId: { active: true, lastFrame: timestamp, fps: 0 } }
 let liveFpsCounters = {}; // for FPS calculation
 let audioPlayers = {}; // { clientId: true/false }
-let camOnlineOnly = false; // filter: only show online clients in camera tab
+let camOnlineOnly = true; // filter: only show online clients in camera tab
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
