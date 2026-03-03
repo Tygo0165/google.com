@@ -534,9 +534,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         liveActive = true;
 
         // Adaptive state
-        let quality   = 0.40;   // start compressed for fast initial streaming
-        let scale     = 0.75;   // start at 75% resolution
-        let targetMs  = 80;     // aim for ~12 FPS to start
+        let quality   = 0.25;   // start light so first frames arrive fast
+        let scale     = 0.65;   // start at 65% resolution
+        let targetMs  = 33;     // aim for ~30 FPS (the `inFlight` flag lets actual RTT cap it naturally)
         let inFlight  = false;  // backpressure: skip frame if POST still running
         let seq       = 0;
         let lastW = 0, lastH = 0;
@@ -589,12 +589,12 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                             targetMs = Math.min(200,  targetMs + 10);
                         } else if (rtt < 80) {
                             // Fast connection → ramp up quality and rate
-                            quality  = Math.min(0.72, quality  + 0.03);
-                            scale    = Math.min(1.00, scale    + 0.04);
-                            targetMs = Math.max(50,   targetMs - 8);
+                            quality  = Math.min(0.82, quality  + 0.04);
+                            scale    = Math.min(1.00, scale    + 0.05);
+                            targetMs = Math.max(25,   targetMs - 8);
                         } else if (rtt < 130) {
-                            quality  = Math.min(0.65, quality  + 0.01);
-                            targetMs = Math.max(66,   targetMs - 3);
+                            quality  = Math.min(0.70, quality  + 0.01);
+                            targetMs = Math.max(33,   targetMs - 3);
                         }
                     }).catch(() => {
                         targetMs = Math.min(300, targetMs + 30); // back off on error

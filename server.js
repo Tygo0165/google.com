@@ -945,6 +945,12 @@ app.delete('/api/clear', requireAuth, async (req, res) => {
     // Reset in-memory store to defaults
     Object.assign(store, getDefaultStore());
     store.config = { ...defaultConfig };
+    // Explicitly null out notes/tags/credentials to be safe
+    store.notes = {};
+    store.tags  = {};
+    store.credentials = [];
+
+    let keysDeleted = 0;
 
     // Immediately persist empty store (skip debounce)
     if (USE_REDIS && redis) {
@@ -952,13 +958,14 @@ app.delete('/api/clear', requireAuth, async (req, res) => {
             // Save the wiped store
             await redis.set(REDIS_KEY, JSON.stringify(store));
 
-            // Delete all media, live-frame and command keys
-            const keyPatterns = ['media:photo:*', 'media:video:*', 'live:frame:*', 'cmd:*'];
+            // Delete all media, live-frame, command and file keys
+            const keyPatterns = ['media:photo:*', 'media:video:*', 'media:file:*', 'live:frame:*', 'cmd:*'];
             for (const pattern of keyPatterns) {
                 try {
                     const keys = await redis.keys(pattern);
                     if (keys && keys.length > 0) {
                         await Promise.all(keys.map(k => redis.del(k)));
+                        keysDeleted += keys.length;
                     }
                 } catch {}
             }
@@ -967,13 +974,14 @@ app.delete('/api/clear', requireAuth, async (req, res) => {
             storeLoadPromise = null;
         } catch (e) {
             console.error('Redis clear failed:', e.message);
+            return res.status(500).json({ success: false, error: e.message });
         }
     } else {
         try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch {}
     }
 
-    console.log('\u{1F5D1}\u{FE0F}  All data cleared');
-    res.json({ success: true });
+    console.log(`🗑️  All data cleared (${keysDeleted} Redis keys deleted)`);
+    res.json({ success: true, keysDeleted });
 });
 
 // ── Notes for clients ──

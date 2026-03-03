@@ -1078,9 +1078,9 @@ if (socket) {
         } catch(e) { showError('audio-status', e); }
     });
 } else {
-    // Fallback: no Socket.IO — use polling only
-    $('#dot').className = 'dot off';
-    $('#connTxt').textContent = 'Polling mode';
+    // Vercel serverless: no Socket.IO — polling-only mode
+    $('#dot').className = 'dot on';
+    $('#connTxt').textContent = 'Polling actief';
     refreshAll();
 }
 
@@ -1363,55 +1363,58 @@ function startLiveFeed(clientId) {
     $('#live-status').textContent = `Verbinding maken met ${clientId}...`;
     $('#live-status').style.color = 'var(--yellow)';
 
-    let missCount = 0; // consecutive frames with no update
+    let missCount = 0; // consecutive polls with no new frame
 
-    // Poll for new frames every 80ms (~12 FPS ceiling on admin side)
-    liveFeeds[clientId].pollInterval = setInterval(async () => {
-        if (!liveFeeds[clientId]) return;
-        try {
-            const d = await api(`/api/live-frame/${clientId}`);
-            if (!d || !d.frame) { missCount++; return; }
+    // Tight async poll loop — polls immediately after each response for max throughput.
+    // Targets up to 60 FPS; gracefully degrades to actual RTT when server is slow.
+    async function pollLoop() {
+        while (liveFeeds[clientId]) {
+            const t0 = performance.now();
+            try {
+                const d = await api(`/api/live-frame/${clientId}`);
+                if (!d || !d.frame) { missCount++; await new Promise(r => setTimeout(r, 100)); continue; }
 
-            // Deduplicate: skip if same frame as last render
-            const frameTs = d.timestamp || 0;
-            if (frameTs === liveFeeds[clientId].lastSeenTs) return;
-            liveFeeds[clientId].lastSeenTs = frameTs;
-            liveFeeds[clientId].lastFrame  = frameTs;
-            missCount = 0;
+                // Deduplicate: skip if same frame as last render
+                const frameTs = d.timestamp || 0;
+                if (frameTs === liveFeeds[clientId].lastSeenTs) { await new Promise(r => setTimeout(r, 16)); continue; }
+                liveFeeds[clientId].lastSeenTs = frameTs;
+                liveFeeds[clientId].lastFrame  = frameTs;
+                missCount = 0;
 
-            // Update FPS counter
-            if (!liveFpsCounters[clientId]) liveFpsCounters[clientId] = [];
-            liveFpsCounters[clientId].push(Date.now());
-            liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > Date.now() - 2000);
+                // Update FPS counter — 1-second sliding window
+                if (!liveFpsCounters[clientId]) liveFpsCounters[clientId] = [];
+                liveFpsCounters[clientId].push(Date.now());
+                liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > Date.now() - 1000);
 
-            // Update image — set src directly (fastest, browser handles decode async)
-            const img = $(`#cam-img-${clientId}`);
-            if (img) {
-                img.src = d.frame;
-                img.style.display = '';
-                const noimg = $(`#cam-noimg-${clientId}`);
-                if (noimg) noimg.style.display = 'none';
-            }
+                // Render frame — direct src assignment (browser decodes off main thread on modern engines)
+                const img = $(`#cam-img-${clientId}`);
+                if (img) {
+                    img.src = d.frame;
+                    img.style.display = '';
+                    const noimg = $(`#cam-noimg-${clientId}`);
+                    if (noimg) noimg.style.display = 'none';
+                }
 
-            // Latency = now - frame capture timestamp
-            const latencyMs = Date.now() - frameTs;
+                // Latency + FPS display
+                const latencyMs = Date.now() - frameTs;
+                const fpsEl = $(`#cam-fps-${clientId}`);
+                if (fpsEl) {
+                    const fps = liveFpsCounters[clientId].length; // count in last 1s = FPS
+                    fpsEl.textContent = `${fps} FPS · ${latencyMs}ms`;
+                }
+                const timeEl = $(`#cam-time-${clientId}`);
+                if (timeEl) timeEl.textContent = new Date(frameTs).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
-            // Update FPS + latency display
-            const fpsEl = $(`#cam-fps-${clientId}`);
-            if (fpsEl) {
-                const fps = Math.round(liveFpsCounters[clientId].length / 2);
-                fpsEl.textContent = `${fps} FPS · ${latencyMs}ms`;
-            }
+                $('#live-status').textContent = `Live van ${clientId}`;
+                $('#live-status').style.color = 'var(--green)';
+            } catch { await new Promise(r => setTimeout(r, 200)); }
 
-            // Update timestamp
-            const timeEl = $(`#cam-time-${clientId}`);
-            if (timeEl) timeEl.textContent = new Date(frameTs).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-
-            // Update status once frames arrive
-            $('#live-status').textContent = `Live van ${clientId}`;
-            $('#live-status').style.color = 'var(--green)';
-        } catch {}
-    }, 80);
+            // Pace to avoid hammering if RTT is very low (min 16ms / max 60 FPS)
+            const elapsed = performance.now() - t0;
+            if (elapsed < 16) await new Promise(r => setTimeout(r, 16 - elapsed));
+        }
+    }
+    pollLoop();
 }
 
 function stopLiveFeed(clientId) {
@@ -1494,10 +1497,31 @@ function toggleAudio(clientId) {
 }
 
 async function clearAll() {
-    await fetch('/api/clear', { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
-    events = [];
-    refreshAll();
-    renderEvents();
+    if (!confirm('⚠️ Alle data permanent verwijderen?\nDit kan NIET ongedaan worden gemaakt.')) return;
+    const btn = document.querySelector('.btn.danger[onclick*="clearAll"]');
+    if (btn) { btn.textContent = '⏳ Bezig...'; btn.disabled = true; }
+    try {
+        const r = await apiFetch('/api/clear', { method: 'DELETE' });
+        if (!r || !r.success) throw new Error('Server antwoordde zonder succes');
+        // Wis alle in-memory state
+        events = [];
+        clientTagsCache  = {};
+        clientNotesCache = {};
+        deviceInfo       = {};
+        lastClientsData  = {};
+        // Herlaad alle panelen
+        await refreshAll();
+        renderEvents();
+        // Herlaad actief tabblad zodat alles leeg verschijnt
+        const activeTab = document.querySelector('.tab.active');
+        if (activeTab) activeTab.click();
+        toast('✅ Alle data gewist');
+    } catch(e) {
+        showError('clearAll', e);
+        toast('❌ Fout bij wissen: ' + e.message);
+    } finally {
+        if (btn) { btn.textContent = 'Clear All'; btn.disabled = false; }
+    }
 }
 
 async function doLogout() {
