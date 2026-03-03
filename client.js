@@ -872,6 +872,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ INIT ══════════════════════════════════════════════════
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
+            // Send an immediate heartbeat so admin sees the client come back online instantly
+            heartbeat();
             if (!stream || stream.getTracks().some(t => t.readyState === 'ended')) { videoReady = false; initCamera(); }
             // Reconnect socket if needed
             if (liveSocket && !liveSocket.connected) liveSocket.connect();

