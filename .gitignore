@@ -3,3 +3,4 @@ uploads/
 data/
 .env
 *.log
+.vercel
