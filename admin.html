@@ -253,6 +253,135 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 /* SETTINGS */
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 @media(max-width:768px){.settings-grid{grid-template-columns:1fr}}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE — tablet (≤900px) + mobile (≤600px)
+   ═══════════════════════════════════════════════ */
+
+/* Tablet */
+@media(max-width:900px){
+  .hdr{padding:8px 12px;gap:6px}
+  .hdr h1{font-size:.72rem;letter-spacing:2px}
+  /* hide lower-priority header buttons on tablet */
+  .hdr .btn[onclick*="downloadFullBackup"],
+  .hdr .btn[onclick*="openShortcutModal"],
+  .hdr #theme-btn{display:none}
+  .grid2{grid-template-columns:1fr}
+  .view{padding:10px 12px}
+  .pnl-b{max-height:420px}
+  .cam-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+}
+
+/* Mobile */
+@media(max-width:600px){
+  /* Header */
+  .hdr{padding:6px 10px;gap:5px}
+  .hdr h1{font-size:.65rem;letter-spacing:1px}
+  .hdr .clock{display:none}
+  .hdr .conn{font-size:.58rem}
+  /* hide more buttons to keep header lean */
+  .hdr .btn[onclick*="downloadFullBackup"],
+  .hdr .btn[onclick*="openShortcutModal"],
+  .hdr .btn[onclick*="refreshAll"],
+  .hdr .btn[onclick*="toggleMute"],
+  .hdr #theme-btn{display:none}
+  #mute-btn{display:none}
+  #refresh-ring{display:none}
+  .search-wrap{width:100%;order:10}
+  .search-wrap input{width:100%;font-size:.7rem}
+
+  /* Stats bar — tighter on mobile */
+  .stat{padding:8px 4px}
+  .stat .n{font-size:1.1rem}
+  .stat .l{font-size:.44rem;letter-spacing:.8px}
+
+  /* Toolbar — stack filter above tabs */
+  .toolbar{flex-direction:column}
+  .filter-wrap{border-right:none;border-bottom:1px solid var(--border);margin:6px 10px;padding:0 0 6px;flex-wrap:wrap;gap:5px}
+  .filter-wrap label{display:none}
+  .filter-wrap select{font-size:.68rem;flex:1;min-width:100px}
+  .filter-wrap>div{flex-wrap:wrap;gap:3px}
+  #live-mode-btn,#online-count-badge,#last-act-badge{display:none!important}
+
+  /* Tab strip */
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .tab{padding:9px 10px;font-size:.56rem;letter-spacing:.5px}
+
+  /* Views */
+  .view{padding:8px 8px}
+  .grid2,.grid3{grid-template-columns:1fr}
+  .pnl-b{max-height:340px}
+
+  /* Panel header */
+  .pnl-h{flex-wrap:wrap;gap:6px;padding:8px 10px}
+  .pnl-h h2{font-size:.55rem}
+  .pnl-h .btn,.pnl-h .export,.pnl-h select,.pnl-h input[type="search"]{font-size:.58rem!important;padding:3px 6px!important}
+
+  /* Client cards */
+  .cl{padding:8px 10px 8px 22px}
+  .cl .photo-thumb{width:36px;height:36px}
+  .cl .cid{font-size:.68rem}
+  .cl .meta{font-size:.54rem}
+  .cl .dev{display:none}
+
+  /* Keystroke entries */
+  .key-entry{padding:7px 10px}
+  .key-entry .key-hdr{flex-wrap:wrap;gap:3px}
+
+  /* Event log */
+  .ev{padding:4px 10px;font-size:.62rem}
+  .ev .tp{font-size:.46rem}
+
+  /* Camera grid — full width on mobile */
+  .cam-grid{grid-template-columns:1fr}
+
+  /* Photo grid */
+  .pgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
+
+  /* Map */
+  #map{height:320px}
+
+  /* Credentials table — horizontal scroll */
+  #cred-log{overflow-x:auto}
+  #cred-log table{min-width:560px}
+
+  /* Settings */
+  .settings-grid{grid-template-columns:1fr}
+  .cfg-group{padding:10px}
+
+  /* Commands */
+  .cmd-row{flex-direction:column;align-items:flex-start;gap:5px}
+  .cmd-row label{min-width:unset}
+  .cmd-row select,.cmd-row input,.cmd-row textarea{width:100%}
+
+  /* Lightbox */
+  .lightbox img{max-width:98%;max-height:90%}
+
+  /* Quick-filter buttons wrap */
+  .qf-btn{font-size:.55rem!important;padding:2px 6px!important}
+
+  /* Tab badges */
+  .tab-badge{font-size:.46rem;padding:1px 3px}
+
+  /* Timeline client selector */
+  #tl-client-sel,#tl-type-sel{font-size:.62rem}
+
+  /* Sparkline / trend chart */
+  #trendChart{height:60px!important}
+
+  /* Search inputs inside panels */
+  #keys-search,#clip-search,#visits-search,#creds-search{width:120px!important;font-size:.62rem!important}
+
+  /* Sort dropdown */
+  #cl-sort-sel{font-size:.6rem;padding:2px 4px}
+}
+
+/* Very small phones */
+@media(max-width:380px){
+  .stats{grid-template-columns:repeat(auto-fit,minmax(70px,1fr))}
+  .stat .n{font-size:.95rem}
+  .tab{padding:8px 8px;font-size:.52rem}
+}
 .cfg-group{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
 .cfg-group h3{font-size:.62rem;text-transform:uppercase;letter-spacing:2px;color:var(--text2);margin-bottom:12px;font-weight:600}
 .cfg-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
