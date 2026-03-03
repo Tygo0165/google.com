@@ -414,6 +414,11 @@ a {
     color: #70757a;
 }
 
+/* Knowledge panel – hide on narrow screens */
+@media (max-width: 900px) {
+    #knowledgePanel { display: none !important; }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .results-main {
