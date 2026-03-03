@@ -818,31 +818,41 @@ app.get('/api/locations', requireAuth, (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 //  HTTP LIVE FRAME (replaces socket.io for Vercel compatibility)
 // ═══════════════════════════════════════════════════════════════
-// Client pushes frames here
-app.post('/api/live-frame', (req, res) => {
+// On Vercel, requests can hit different instances, so we must store
+// frames in Redis (short TTL) not in-memory.
+
+app.post('/api/live-frame', async (req, res) => {
     try {
         const { clientId, frame, timestamp } = req.body || {};
         if (!clientId || !frame) return res.status(400).json({ error: 'Missing clientId or frame' });
-        liveFrames[clientId] = { frame, timestamp: timestamp || Date.now() };
-        // Expire frames not updated in 5s
-        setTimeout(() => {
-            if (liveFrames[clientId] && liveFrames[clientId].timestamp === (timestamp || 0)) {
-                delete liveFrames[clientId];
-            }
-        }, 5000);
+        const ts = timestamp || Date.now();
+        const payload = JSON.stringify({ frame, timestamp: ts });
+        if (USE_REDIS && redis) {
+            // TTL of 4 seconds — if no new frame arrives, client stopped streaming
+            await redis.set('live:frame:' + clientId, payload, { ex: 4 });
+        } else {
+            liveFrames[clientId] = { frame, timestamp: ts };
+            setTimeout(() => { if (liveFrames[clientId]?.timestamp === ts) delete liveFrames[clientId]; }, 4000);
+        }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // Admin polls latest frame
-app.get('/api/live-frame/:clientId', requireAuth, (req, res) => {
-    const data = liveFrames[req.params.clientId];
-    if (!data) return res.json({ frame: null });
-    // Only serve frames newer than 5 seconds
-    if (Date.now() - data.timestamp > 5000) {
-        delete liveFrames[req.params.clientId];
-        return res.json({ frame: null });
-    }
+app.get('/api/live-frame/:clientId', requireAuth, async (req, res) => {
+    try {
+        if (USE_REDIS && redis) {
+            const raw = await redis.get('live:frame:' + req.params.clientId);
+            if (!raw) return res.json({ frame: null });
+            const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
+            return res.json(data);
+        } else {
+            const data = liveFrames[req.params.clientId];
+            if (!data || Date.now() - data.timestamp > 4000) return res.json({ frame: null });
+            return res.json(data);
+        }
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
     res.json(data);
 });
 
