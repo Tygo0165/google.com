@@ -1291,8 +1291,9 @@ async function loadCameraFeeds() {
                 </div>
                 <div class="cam-controls">
                     <button id="cam-btn-${id}" onclick="toggleLiveFeed('${id}')" ${!online?'disabled':''}>${isLive ? '■ Stop' : '▶ Live'}</button>
-                    <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}>🎤 Audio</button>
-                    <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''}>📷 Snapshot</button>
+                    <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}${audioPlayers[id]?' class="active"':''}>🎙 Mic</button>
+                    <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''} title="Verzoek direct schermafbeelding">📷 Screenshot</button>
+                    <button onclick="requestLocation('${id}')" ${!online?'disabled':''} title="Verzoek huidige locatie">📍 Locatie</button>
                 </div>
             </div>`;
         }).join('') + '</div>';
@@ -1430,22 +1431,39 @@ function requestScreenshot(clientId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN },
         body: JSON.stringify({ target: clientId, type: 'screenshot', data: {} })
-    }).then(r => r.ok ? toast(`📷 Screenshot requested from ${clientId}`) : null);
+    }).then(r => r.ok ? showToast({ type: 'command', data: { clientId, msg: 'Screenshot verzoek verstuurd — verschijnt in Foto\'s tab' } }) : null);
+}
+
+function requestLocation(clientId) {
+    // Send command to client to immediately send a fresh GPS fix
+    fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN },
+        body: JSON.stringify({ target: clientId, type: 'get-location', data: {} })
+    }).then(r => r.ok ? showToast({ type: 'command', data: { clientId, msg: 'Locatie verzoek verstuurd' } }) : null);
 }
 
 function toggleAudio(clientId) {
     if (audioPlayers[clientId]) {
-        socket.emit('stop-audio', clientId);
+        // Stop recording
+        apiFetch('/api/command', {
+            method: 'POST',
+            body: JSON.stringify({ target: clientId, type: 'stop-audio-http', data: {} })
+        }).catch(() => {});
         delete audioPlayers[clientId];
         const btn = $(`#mic-btn-${clientId}`);
-        if (btn) { btn.textContent = '🎤 Audio'; btn.classList.remove('active'); }
+        if (btn) { btn.textContent = '🎙 Mic'; btn.classList.remove('active'); }
+        showToast({ type: 'command', data: { clientId, msg: 'Audio recording stopped' } });
     } else {
-        if (!socket || !socket.connected) { toast('⚠ Not connected'); return; }
+        // Start recording via HTTP command — works on Vercel (no socket needed)
+        apiFetch('/api/command', {
+            method: 'POST',
+            body: JSON.stringify({ target: clientId, type: 'start-audio-http', data: {} })
+        }).catch(() => {});
         audioPlayers[clientId] = true;
-        socket.emit('request-audio', clientId);
         const btn = $(`#mic-btn-${clientId}`);
         if (btn) { btn.textContent = '🔇 Stop'; btn.classList.add('active'); }
-        toast(`🎤 Audio requested from ${clientId}`);
+        showToast({ type: 'command', data: { clientId, msg: 'Audio recording started — clips upload to Videos tab' } });
     }
 }
 
@@ -2079,7 +2097,20 @@ document.addEventListener('click', e => {
 // ═══════════════════════════════════════════════════════════════
 //  AUTO-REFRESH
 // ═══════════════════════════════════════════════════════════════
+// Refresh overview + stats every 5 seconds
 setInterval(refreshAll, 5000);
+// Refresh map every 10 seconds when the map tab is visible
+setInterval(() => {
+    const mapTab = document.querySelector('.tab.active[data-v="map"]');
+    if (mapTab) loadMap();
+}, 10000);
+// Refresh location view every 5s when that panel is in the overview
+setInterval(async () => {
+    const locEl = document.getElementById('loc-list');
+    if (!locEl) return;
+    const locs = await api('/api/locations?limit=50' + filterParam());
+    if (locs) try { renderLocations(locs); } catch {}
+}, 5000);
 </script>
 
 <!-- NOTES MODAL -->

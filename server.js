@@ -853,8 +853,6 @@ app.get('/api/live-frame/:clientId', requireAuth, async (req, res) => {
         }
     } catch (e) { res.status(500).json({ error: e.message }); }
 });
-    res.json(data);
-});
 
 app.get('/api/media', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);

