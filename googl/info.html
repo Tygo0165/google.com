@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jouw Digitale Vingerafdruk - Wat hackers zien</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="info.css">
+</head>
+<body>
+
+    <!-- Header -->
+    <header class="info-header">
+        <a href="index.html" class="back-link">&#8592; Terug naar Google</a>
+        <h1>&#9760; JOUW DIGITALE VINGERAFDRUK</h1>
+        <p>Dit is ALLE informatie die een website (of hacker) automatisch over jou kan verzamelen zodra je de pagina bezoekt. Geen toestemming nodig, geen klikken — gewoon door de pagina te openen.</p>
+        <div class="warning-badge">&#9888; EDUCATIEF DOEL — Dit laat zien wat hackers kunnen zien</div>
+    </header>
+
+    <!-- Risk Meter -->
+    <div class="risk-meter">
+        <h2>Blootgestelde Datapunten</h2>
+        <div class="risk-bar">
+            <div class="risk-fill" id="riskFill" style="width: 0%"></div>
+        </div>
+        <span class="risk-label">Aantal datapunten dat deze pagina kon uitlezen:</span>
+        <span class="risk-count" id="riskCount">Laden...</span>
+        <br>
+        <button class="export-btn" onclick="exportData()">&#128190; Exporteer als JSON</button>
+    </div>
+
+    <!-- Main Content -->
+    <main class="info-main">
+        <button class="expand-all-btn" onclick="toggleAll()">&#9660; Alles openen / sluiten</button>
+
+        <div class="categories-grid" id="categoriesGrid">
+            <!-- Cards injected by JS -->
+        </div>
+    </main>
+
+    <!-- Hidden canvases -->
+    <canvas id="webglCanvas" width="1" height="1"></canvas>
+
+    <!-- Footer -->
+    <footer class="info-footer">
+        <strong>&#9888; Let op:</strong> Al deze informatie is zichtbaar voor ELKE website die je bezoekt.<br>
+        Hackers kunnen dit gebruiken voor <strong>fingerprinting</strong>, <strong>tracking</strong>, en <strong>gerichte aanvallen</strong>.<br>
+        Gebruik een VPN, privacy-extensies en houd je browser up-to-date om jezelf te beschermen.<br><br>
+        <a href="index.html">&#8592; Terug naar de demo</a>
+    </footer>
+
+    <script>
+    // ============================================================
+    // DATA COLLECTION — alle browser-informatie die een website kan zien
+    // ============================================================
+
+    const collectedData = {};
+    let totalDataPoints = 0;
+
+    // Helper: add data point
+    function addData(category, label, value, sensitivity = 'normal') {
+        if (!collectedData[category]) collectedData[category] = [];
+        collectedData[category].push({ label, value: value ?? 'Niet beschikbaar', sensitivity });
+        if (value && value !== 'Niet beschikbaar' && value !== 'Niet ondersteund') {
+            totalDataPoints++;
+        }
+    }
+
+    // ── 1. BROWSER & USER AGENT ──
+    function collectBrowserInfo() {
+        const ua = navigator.userAgent;
+        addData('browser', 'User Agent (volledig)', ua, 'sensitive');
+        addData('browser', 'App Naam', navigator.appName);
+        addData('browser', 'App Versie', navigator.appVersion, 'sensitive');
+        addData('browser', 'Platform', navigator.platform, 'sensitive');
+        addData('browser', 'Product', navigator.product);
+        addData('browser', 'Vendor', navigator.vendor);
+        addData('browser', 'Taal', navigator.language, 'warning');
+        addData('browser', 'Alle Talen', navigator.languages ? navigator.languages.join(', ') : 'N/A', 'warning');
+        addData('browser', 'Cookies Ingeschakeld', navigator.cookieEnabled ? 'Ja' : 'Nee', navigator.cookieEnabled ? 'warning' : 'safe');
+        addData('browser', 'Do Not Track', navigator.doNotTrack === '1' ? 'Aan' : (navigator.doNotTrack === '0' ? 'Uit' : 'Niet ingesteld'), navigator.doNotTrack === '1' ? 'safe' : 'warning');
+        addData('browser', 'Java Ingeschakeld', navigator.javaEnabled ? (navigator.javaEnabled() ? 'Ja' : 'Nee') : 'N/A');
+        addData('browser', 'PDF Viewer', navigator.pdfViewerEnabled !== undefined ? (navigator.pdfViewerEnabled ? 'Ja' : 'Nee') : 'Onbekend');
+        addData('browser', 'Online Status', navigator.onLine ? 'Online' : 'Offline', 'warning');
+        addData('browser', 'Max Touch Punten', navigator.maxTouchPoints?.toString() || '0');
+        addData('browser', 'Hardware Concurrency (CPU cores)', navigator.hardwareConcurrency?.toString() || 'Onbekend', 'sensitive');
+        addData('browser', 'Device Geheugen (GB)', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Niet beschikbaar', 'sensitive');
+    }
+
+    // ── 2. SCHERM & DISPLAY ──
+    function collectScreenInfo() {
+        const s = window.screen;
+        addData('scherm', 'Schermresolutie', s.width + ' x ' + s.height + ' pixels', 'warning');
+        addData('scherm', 'Beschikbare Resolutie', s.availWidth + ' x ' + s.availHeight + ' pixels', 'warning');
+        addData('scherm', 'Kleurdiepte', s.colorDepth + ' bits');
+        addData('scherm', 'Pixel Diepte', s.pixelDepth + ' bits');
+        addData('scherm', 'Pixel Ratio', window.devicePixelRatio?.toString() || 'Onbekend');
+        addData('scherm', 'Venster Grootte', window.innerWidth + ' x ' + window.innerHeight + ' pixels');
+        addData('scherm', 'Scherm Oriëntatie', screen.orientation ? screen.orientation.type : 'Onbekend');
+        addData('scherm', 'Dark Mode Voorkeur', window.matchMedia('(prefers-color-scheme: dark)').matches ? 'Ja (dark mode)' : 'Nee (light mode)', 'warning');
+        addData('scherm', 'Reduced Motion', window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'Ja' : 'Nee');
+        addData('scherm', 'HDR Ondersteuning', window.matchMedia('(dynamic-range: high)').matches ? 'Ja' : 'Nee');
+    }
+
+    // ── 3. NETWERK & VERBINDING ──
+    function collectNetworkInfo() {
+        const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+        if (conn) {
+            addData('netwerk', 'Verbindingstype', conn.effectiveType || 'Onbekend', 'warning');
+            addData('netwerk', 'Downlink Snelheid', conn.downlink ? conn.downlink + ' Mbps' : 'Onbekend', 'warning');
+            addData('netwerk', 'RTT (latentie)', conn.rtt ? conn.rtt + ' ms' : 'Onbekend', 'warning');
+            addData('netwerk', 'Data Saver', conn.saveData ? 'Aan' : 'Uit');
+        } else {
+            addData('netwerk', 'Network Info API', 'Niet ondersteund in deze browser');
+        }
+        addData('netwerk', 'Online Status', navigator.onLine ? 'Online' : 'Offline');
+    }
+
+    // ── 4. LOCATIE & TIJDZONE ──
+    function collectLocationInfo() {
+        const tz = Intl.DateTimeFormat().resolvedOptions();
+        addData('locatie', 'Tijdzone', tz.timeZone, 'sensitive');
+        addData('locatie', 'Tijdzone Offset', 'UTC ' + (new Date().getTimezoneOffset() > 0 ? '-' : '+') + Math.abs(new Date().getTimezoneOffset() / 60), 'warning');
+        addData('locatie', 'Locale', tz.locale, 'warning');
+        addData('locatie', 'Kalender', tz.calendar);
+        addData('locatie', 'Nummeringssysteem', tz.numberingSystem);
+
+        // Datum/tijd formaat onthult locatie
+        const now = new Date();
+        addData('locatie', 'Lokale Datum', now.toLocaleDateString('nl-NL', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }));
+        addData('locatie', 'Lokale Tijd', now.toLocaleTimeString('nl-NL'));
+    }
+
+    // ── 5. GPU & GRAPHICS ──
+    function collectGPUInfo() {
+        try {
+            const canvas = document.getElementById('webglCanvas');
+            const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+            if (gl) {
+                const debugInfo = gl.getExtension('WEBGL_debug_renderer_info');
+                if (debugInfo) {
+                    addData('gpu', 'GPU Vendor', gl.getParameter(debugInfo.UNMASKED_VENDOR_WEBGL), 'sensitive');
+                    addData('gpu', 'GPU Renderer', gl.getParameter(debugInfo.UNMASKED_RENDERER_WEBGL), 'sensitive');
+                } else {
+                    addData('gpu', 'GPU Vendor', gl.getParameter(gl.VENDOR));
+                    addData('gpu', 'GPU Renderer', gl.getParameter(gl.RENDERER));
+                }
+                addData('gpu', 'WebGL Versie', gl.getParameter(gl.VERSION));
+                addData('gpu', 'Shading Language', gl.getParameter(gl.SHADING_LANGUAGE_VERSION));
+                addData('gpu', 'Max Texture Size', gl.getParameter(gl.MAX_TEXTURE_SIZE)?.toString());
+                addData('gpu', 'Max Viewport', JSON.stringify(gl.getParameter(gl.MAX_VIEWPORT_DIMS)));
+                addData('gpu', 'Antialiasing', gl.getContextAttributes().antialias ? 'Ja' : 'Nee');
+
+                // Aantal extensies
+                const extensions = gl.getSupportedExtensions();
+                addData('gpu', 'WebGL Extensies', extensions ? extensions.length + ' extensies' : '0');
+            } else {
+                addData('gpu', 'WebGL', 'Niet ondersteund');
+            }
+        } catch (e) {
+            addData('gpu', 'GPU Info', 'Fout bij ophalen: ' + e.message);
+        }
+    }
+
+    // ── 6. BATTERIJ ──
+    async function collectBatteryInfo() {
+        try {
+            if (navigator.getBattery) {
+                const battery = await navigator.getBattery();
+                addData('batterij', 'Batterij Niveau', Math.round(battery.level * 100) + '%', 'warning');
+                addData('batterij', 'Opladen', battery.charging ? 'Ja, bezig met opladen' : 'Nee, op batterij', 'warning');
+                addData('batterij', 'Oplaadtijd Resterend', battery.chargingTime === Infinity ? 'Onbekend' : Math.round(battery.chargingTime / 60) + ' minuten');
+                addData('batterij', 'Resterende Tijd', battery.dischargingTime === Infinity ? 'Onbekend' : Math.round(battery.dischargingTime / 60) + ' minuten', 'warning');
+            } else {
+                addData('batterij', 'Battery API', 'Niet ondersteund');
+            }
+        } catch (e) {
+            addData('batterij', 'Battery API', 'Geblokkeerd door browser');
+        }
+    }
+
+    // ── 7. MEDIA & APPARATEN ──
+    async function collectMediaInfo() {
+        try {
+            if (navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+                const devices = await navigator.mediaDevices.enumerateDevices();
+                const cameras = devices.filter(d => d.kind === 'videoinput');
+                const mics = devices.filter(d => d.kind === 'audioinput');
+                const speakers = devices.filter(d => d.kind === 'audiooutput');
+
+                addData('media', 'Camera\'s Gedetecteerd', cameras.length.toString(), cameras.length > 0 ? 'sensitive' : 'safe');
+                addData('media', 'Microfoons Gedetecteerd', mics.length.toString(), mics.length > 0 ? 'sensitive' : 'safe');
+                addData('media', 'Speakers Gedetecteerd', speakers.length.toString());
+
+                cameras.forEach((cam, i) => {
+                    addData('media', `Camera ${i + 1}`, cam.label || 'Naam verborgen (geen toestemming)', cam.label ? 'sensitive' : 'normal');
+                });
+                mics.forEach((mic, i) => {
+                    addData('media', `Microfoon ${i + 1}`, mic.label || 'Naam verborgen (geen toestemming)', mic.label ? 'sensitive' : 'normal');
+                });
+            } else {
+                addData('media', 'MediaDevices API', 'Niet ondersteund');
+            }
+        } catch (e) {
+            addData('media', 'MediaDevices', 'Fout: ' + e.message);
+        }
+    }
+
+    // ── 8. OPSLAG & CAPACITEIT ──
+    async function collectStorageInfo() {
+        addData('opslag', 'LocalStorage', typeof localStorage !== 'undefined' ? 'Beschikbaar' : 'Niet beschikbaar', 'warning');
+        addData('opslag', 'SessionStorage', typeof sessionStorage !== 'undefined' ? 'Beschikbaar' : 'Niet beschikbaar');
+        addData('opslag', 'IndexedDB', typeof indexedDB !== 'undefined' ? 'Beschikbaar' : 'Niet beschikbaar', 'warning');
+
+        // Cookies
+        addData('opslag', 'Cookies', navigator.cookieEnabled ? 'Ingeschakeld' : 'Uitgeschakeld', navigator.cookieEnabled ? 'warning' : 'safe');
+        addData('opslag', 'Huidige Cookies', document.cookie ? document.cookie.length + ' bytes' : 'Geen cookies', document.cookie ? 'warning' : 'safe');
+
+        // Storage estimate
+        if (navigator.storage && navigator.storage.estimate) {
+            try {
+                const estimate = await navigator.storage.estimate();
+                addData('opslag', 'Opslagquota', formatBytes(estimate.quota), 'warning');
+                addData('opslag', 'Opslag Gebruikt', formatBytes(estimate.usage));
+            } catch (e) { }
+        }
+
+        // Service Workers
+        addData('opslag', 'Service Workers', 'serviceWorker' in navigator ? 'Ondersteund' : 'Niet ondersteund');
+        addData('opslag', 'Cache API', 'caches' in window ? 'Ondersteund' : 'Niet ondersteund');
+    }
+
+    // ── 9. CANVAS FINGERPRINT ──
+    function collectCanvasFingerprint() {
+        try {
+            const canvas = document.createElement('canvas');
+            canvas.width = 280;
+            canvas.height = 60;
+            const ctx = canvas.getContext('2d');
+
+            // Teken complexe tekst en vormen
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(0, 0, 280, 60);
+
+            ctx.fillStyle = '#00ff41';
+            ctx.font = '18px Arial';
+            ctx.fillText('Fingerprint Test 🔒', 10, 25);
+
+            ctx.fillStyle = '#ff6b6b';
+            ctx.font = '12px Courier New';
+            ctx.fillText('abcdefghijklmnopqrstuvwxyz', 10, 45);
+
+            // Gradient
+            const gradient = ctx.createLinearGradient(0, 0, 280, 0);
+            gradient.addColorStop(0, 'rgba(0,255,65,0.5)');
+            gradient.addColorStop(1, 'rgba(255,68,68,0.5)');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 50, 280, 10);
+
+            // Arc
+            ctx.beginPath();
+            ctx.arc(240, 30, 20, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(100,100,255,0.5)';
+            ctx.fill();
+
+            const dataUrl = canvas.toDataURL();
+            const hash = simpleHash(dataUrl);
+
+            addData('fingerprint', 'Canvas Fingerprint Hash', hash, 'sensitive');
+            addData('fingerprint', 'Canvas Data Lengte', dataUrl.length + ' bytes', 'warning');
+
+            // Save canvas for display
+            collectedData['fingerprint'].canvasDataUrl = dataUrl;
+        } catch (e) {
+            addData('fingerprint', 'Canvas Fingerprint', 'Geblokkeerd door browser', 'safe');
+        }
+    }
+
+    // ── 10. AUDIO FINGERPRINT ──
+    async function collectAudioFingerprint() {
+        try {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            if (!AudioContext) {
+                addData('fingerprint', 'Audio Fingerprint', 'AudioContext niet ondersteund');
+                return;
+            }
+
+            const context = new AudioContext();
+            const oscillator = context.createOscillator();
+            const analyser = context.createAnalyser();
+            const gainNode = context.createGain();
+            const scriptProcessor = context.createScriptProcessor(4096, 1, 1);
+
+            gainNode.gain.value = 0; // Mute
+            oscillator.type = 'triangle';
+            oscillator.frequency.setValueAtTime(10000, context.currentTime);
+
+            oscillator.connect(analyser);
+            analyser.connect(scriptProcessor);
+            scriptProcessor.connect(gainNode);
+            gainNode.connect(context.destination);
+
+            oscillator.start(0);
+
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            const frequencyData = new Float32Array(analyser.frequencyBinCount);
+            analyser.getFloatFrequencyData(frequencyData);
+
+            let sum = 0;
+            for (let i = 0; i < frequencyData.length; i++) {
+                sum += Math.abs(frequencyData[i]);
+            }
+            const audioHash = sum.toFixed(2);
+
+            addData('fingerprint', 'Audio Fingerprint', audioHash, 'sensitive');
+            addData('fingerprint', 'Audio Sample Rate', context.sampleRate + ' Hz');
+
+            oscillator.stop();
+            await context.close();
+        } catch (e) {
+            addData('fingerprint', 'Audio Fingerprint', 'Geblokkeerd of niet ondersteund');
+        }
+    }
+
+    // ── 11. WEBRTC (lokale IP-lekken) ──
+    function collectWebRTC() {
+        addData('webrtc', 'WebRTC Ondersteund', ('RTCPeerConnection' in window) ? 'Ja — IP kan lekken!' : 'Nee', ('RTCPeerConnection' in window) ? 'sensitive' : 'safe');
+
+        if ('RTCPeerConnection' in window) {
+            try {
+                const pc = new RTCPeerConnection({ iceServers: [] });
+                pc.createDataChannel('');
+                pc.createOffer().then(offer => {
+                    pc.setLocalDescription(offer);
+                });
+
+                const ips = new Set();
+                pc.onicecandidate = (event) => {
+                    if (!event || !event.candidate) {
+                        pc.close();
+                        if (ips.size > 0) {
+                            let i = 1;
+                            ips.forEach(ip => {
+                                addData('webrtc', `Gedetecteerd IP ${i}`, ip, 'sensitive');
+                                i++;
+                                totalDataPoints++;
+                            });
+                        } else {
+                            addData('webrtc', 'Lokale IPs', 'Geblokkeerd door browser (goed!)', 'safe');
+                        }
+                        renderCategories(); // re-render to show IPs
+                        return;
+                    }
+
+                    const candidate = event.candidate.candidate;
+                    const ipRegex = /(\d{1,3}\.(\d{1,3}\.){2}\d{1,3}|[a-f0-9:]+:+[a-f0-9:]+)/;
+                    const match = ipRegex.exec(candidate);
+                    if (match) {
+                        ips.add(match[1]);
+                    }
+                };
+            } catch (e) {
+                addData('webrtc', 'WebRTC IP Lek', 'Geblokkeerd', 'safe');
+            }
+        }
+    }
+
+    // ── 12. EXTERNE IP (via server proxy) ──
+    async function collectExternalIP() {
+        try {
+            const res = await fetch('/api/ip-geo');
+            const data = await res.json();
+            if (data.status === 'success') {
+                addData('ip', 'Extern IP Adres', data.ip || data.query, 'sensitive');
+                addData('ip', 'Land', data.country, 'sensitive');
+                addData('ip', 'Regio', data.regionName, 'sensitive');
+                addData('ip', 'Stad', data.city, 'sensitive');
+                addData('ip', 'Breedtegraad', data.lat?.toString(), 'sensitive');
+                addData('ip', 'Lengtegraad', data.lon?.toString(), 'sensitive');
+                addData('ip', 'ISP', data.isp, 'warning');
+                addData('ip', 'Organisatie', data.org, 'warning');
+                addData('ip', 'AS Nummer', data.as, 'warning');
+            } else {
+                addData('ip', 'Extern IP', data.ip || 'Lokaal netwerk', 'safe');
+            }
+        } catch (e) {
+            addData('ip', 'IP Lookup', 'Kon niet worden opgehaald');
+        }
+    }
+
+    // ── 13. PAGINA & REFERRER ──
+    function collectPageInfo() {
+        addData('pagina', 'Huidige URL', window.location.href, 'warning');
+        addData('pagina', 'Referrer', document.referrer || 'Geen (direct bezoek)', document.referrer ? 'warning' : 'safe');
+        addData('pagina', 'Protocol', window.location.protocol);
+        addData('pagina', 'Hostname', window.location.hostname);
+        addData('pagina', 'Geschiedenis Lengte', window.history.length?.toString(), 'warning');
+        addData('pagina', 'Pagina Titel', document.title);
+        addData('pagina', 'Encoding', document.characterSet);
+        addData('pagina', 'Content Type', document.contentType || 'Onbekend');
+        addData('pagina', 'Laatste Wijziging', document.lastModified);
+    }
+
+    // ── 14. PERFORMANCE & TIMING ──
+    function collectPerformanceInfo() {
+        if (performance && performance.timing) {
+            const t = performance.timing;
+            addData('performance', 'Pagina Laadtijd', ((t.loadEventEnd - t.navigationStart) / 1000).toFixed(3) + ' seconden');
+            addData('performance', 'DNS Lookup', (t.domainLookupEnd - t.domainLookupStart) + ' ms');
+            addData('performance', 'TCP Verbinding', (t.connectEnd - t.connectStart) + ' ms');
+            addData('performance', 'Server Response', (t.responseStart - t.requestStart) + ' ms');
+            addData('performance', 'DOM Laden', (t.domContentLoadedEventEnd - t.navigationStart) + ' ms');
+        }
+
+        if (performance && performance.memory) {
+            addData('performance', 'JS Heap Limiet', formatBytes(performance.memory.jsHeapSizeLimit), 'warning');
+            addData('performance', 'JS Heap Gebruikt', formatBytes(performance.memory.usedJSHeapSize));
+            addData('performance', 'JS Heap Totaal', formatBytes(performance.memory.totalJSHeapSize));
+        }
+    }
+
+    // ── 15. GEÏNSTALLEERDE PLUGINS ──
+    function collectPlugins() {
+        if (navigator.plugins && navigator.plugins.length > 0) {
+            addData('plugins', 'Aantal Plugins', navigator.plugins.length.toString(), 'warning');
+            for (let i = 0; i < Math.min(navigator.plugins.length, 10); i++) {
+                addData('plugins', `Plugin ${i + 1}`, navigator.plugins[i].name + ' (' + navigator.plugins[i].filename + ')', 'warning');
+            }
+        } else {
+            addData('plugins', 'Plugins', 'Geen plugins gedetecteerd of verborgen door browser', 'safe');
+        }
+
+        // MIME types
+        if (navigator.mimeTypes && navigator.mimeTypes.length > 0) {
+            addData('plugins', 'MIME Types', navigator.mimeTypes.length + ' types geregistreerd', 'warning');
+        }
+    }
+
+    // ── 16. FONTS DETECTIE ──
+    function collectFonts() {
+        const testFonts = [
+            'Arial', 'Verdana', 'Helvetica', 'Times New Roman', 'Courier New',
+            'Georgia', 'Palatino', 'Garamond', 'Comic Sans MS', 'Impact',
+            'Lucida Console', 'Tahoma', 'Trebuchet MS', 'Segoe UI',
+            'Calibri', 'Cambria', 'Consolas', 'Candara', 'Century Gothic',
+            'Franklin Gothic', 'Futura', 'Rockwell', 'Copperplate'
+        ];
+
+        const detected = [];
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const fallbackWidth = measureText(ctx, 'mmmmmmmmmmlli', 'monospace');
+        const fallbackWidth2 = measureText(ctx, 'mmmmmmmmmmlli', 'sans-serif');
+
+        testFonts.forEach(font => {
+            const w1 = measureText(ctx, 'mmmmmmmmmmlli', `"${font}", monospace`);
+            const w2 = measureText(ctx, 'mmmmmmmmmmlli', `"${font}", sans-serif`);
+            if (w1 !== fallbackWidth || w2 !== fallbackWidth2) {
+                detected.push(font);
+            }
+        });
+
+        addData('fonts', 'Gedetecteerde Fonts', detected.length + ' van ' + testFonts.length + ' geteste fonts', 'warning');
+        addData('fonts', 'Font Lijst', detected.join(', ') || 'Geen fonts gedetecteerd', 'warning');
+        addData('fonts', 'Waarom Belangrijk', 'Font-combinaties zijn bijna uniek per computer — dit maakt je identificeerbaar', 'sensitive');
+    }
+
+    function measureText(ctx, text, font) {
+        ctx.font = '72px ' + font;
+        return ctx.measureText(text).width;
+    }
+
+    // ── 17. PERMISSIONS API ──
+    async function collectPermissions() {
+        const permsToCheck = [
+            { name: 'geolocation', label: 'Locatie' },
+            { name: 'notifications', label: 'Notificaties' },
+            { name: 'camera', label: 'Camera' },
+            { name: 'microphone', label: 'Microfoon' },
+            { name: 'clipboard-read', label: 'Klembord Lezen' },
+            { name: 'clipboard-write', label: 'Klembord Schrijven' },
+        ];
+
+        if (navigator.permissions) {
+            for (const perm of permsToCheck) {
+                try {
+                    const result = await navigator.permissions.query({ name: perm.name });
+                    const state = result.state;
+                    const sensitivity = state === 'granted' ? 'sensitive' : (state === 'prompt' ? 'warning' : 'safe');
+                    addData('permissions', perm.label, state === 'granted' ? 'Toegestaan' : (state === 'prompt' ? 'Nog niet gevraagd' : 'Geweigerd'), sensitivity);
+                } catch (e) {
+                    addData('permissions', perm.label, 'Niet te controleren');
+                }
+            }
+        } else {
+            addData('permissions', 'Permissions API', 'Niet ondersteund');
+        }
+    }
+
+    // ── 18. SUPPORTED APIS ──
+    function collectAPIs() {
+        const apis = [
+            ['Bluetooth', 'bluetooth' in navigator],
+            ['USB', 'usb' in navigator],
+            ['NFC', 'nfc' in navigator],
+            ['Gamepad', 'getGamepads' in navigator],
+            ['Vibration', 'vibrate' in navigator],
+            ['Web Share', 'share' in navigator],
+            ['Speech Recognition', 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window],
+            ['Speech Synthesis', 'speechSynthesis' in window],
+            ['WebSocket', 'WebSocket' in window],
+            ['WebAssembly', 'WebAssembly' in window],
+            ['Payment Request', 'PaymentRequest' in window],
+            ['Credential Management', 'credentials' in navigator],
+            ['Web Crypto', 'crypto' in window && 'subtle' in window.crypto],
+            ['Geolocation', 'geolocation' in navigator],
+            ['Clipboard API', 'clipboard' in navigator],
+        ];
+
+        apis.forEach(([name, supported]) => {
+            addData('apis', name, supported ? 'Beschikbaar' : 'Niet beschikbaar', supported ? 'warning' : 'safe');
+        });
+    }
+
+    // ============================================================
+    // RENDERING
+    // ============================================================
+
+    const categoryConfig = {
+        'ip': { icon: '🌐', title: 'IP Adres & Locatie', desc: 'Jouw IP-adres en geschatte locatie' },
+        'browser': { icon: '🔍', title: 'Browser & Systeem', desc: 'User agent en systeeminformatie' },
+        'scherm': { icon: '🖥️', title: 'Scherm & Display', desc: 'Resolutie en weergave-instellingen' },
+        'netwerk': { icon: '📡', title: 'Netwerk & Verbinding', desc: 'Verbindingstype en snelheid' },
+        'locatie': { icon: '📍', title: 'Tijdzone & Locatie', desc: 'Tijdzone en lokale instellingen' },
+        'gpu': { icon: '🎮', title: 'GPU & Graphics', desc: 'Videokaart informatie via WebGL' },
+        'batterij': { icon: '🔋', title: 'Batterij Status', desc: 'Oplaadniveau en -status' },
+        'media': { icon: '📷', title: 'Camera & Microfoon', desc: 'Gedetecteerde media-apparaten' },
+        'opslag': { icon: '💾', title: 'Opslag & Cookies', desc: 'Browser opslag mogelijkheden' },
+        'fingerprint': { icon: '🔏', title: 'Canvas & Audio Fingerprint', desc: 'Unieke browser-vingerafdruk' },
+        'webrtc': { icon: '📞', title: 'WebRTC (IP Lek)', desc: 'IP-adressen via WebRTC' },
+        'pagina': { icon: '📄', title: 'Pagina & Referrer', desc: 'Bezoekinformatie' },
+        'performance': { icon: '⚡', title: 'Performance & Geheugen', desc: 'Laadtijden en geheugengebruik' },
+        'plugins': { icon: '🧩', title: 'Browser Plugins', desc: 'Geïnstalleerde plugins' },
+        'fonts': { icon: '🔤', title: 'Geïnstalleerde Fonts', desc: 'Font-detectie vingerafdruk' },
+        'permissions': { icon: '🔐', title: 'Toestemmingen', desc: 'Browser permission status' },
+        'apis': { icon: '⚙️', title: 'Beschikbare APIs', desc: 'Hardware- en software-APIs' },
+    };
+
+    function renderCategories() {
+        const grid = document.getElementById('categoriesGrid');
+        grid.innerHTML = '';
+
+        const order = ['ip', 'browser', 'scherm', 'netwerk', 'locatie', 'gpu', 'batterij', 'media', 'opslag', 'fingerprint', 'webrtc', 'pagina', 'performance', 'plugins', 'fonts', 'permissions', 'apis'];
+
+        order.forEach(key => {
+            const items = collectedData[key];
+            if (!items || items.length === 0) return;
+
+            const config = categoryConfig[key] || { icon: '📊', title: key, desc: '' };
+
+            const card = document.createElement('div');
+            card.className = 'category-card';
+            card.dataset.category = key;
+
+            let bodyHTML = '';
+            items.forEach(item => {
+                if (item.label === undefined) return;
+                const cssClass = item.sensitivity === 'sensitive' ? 'sensitive' : (item.sensitivity === 'safe' ? 'safe' : (item.sensitivity === 'warning' ? 'warning' : ''));
+                bodyHTML += `
+                    <div class="data-row">
+                        <span class="data-label">${item.label}</span>
+                        <span class="data-value ${cssClass}">${escapeHtml(String(item.value))}</span>
+                    </div>
+                `;
+            });
+
+            // Canvas fingerprint preview
+            if (key === 'fingerprint' && items.canvasDataUrl) {
+                bodyHTML += `<img src="${items.canvasDataUrl}" class="canvas-preview" alt="Canvas Fingerprint">`;
+            }
+
+            card.innerHTML = `
+                <div class="category-header" onclick="toggleCard(this)">
+                    <div class="category-icon">${config.icon}</div>
+                    <span class="category-title">${config.title}</span>
+                    <span class="category-count">${items.filter(i => i.label).length} items</span>
+                    <span class="category-toggle">▼</span>
+                </div>
+                <div class="category-body">${bodyHTML}</div>
+            `;
+
+            grid.appendChild(card);
+        });
+
+        // Update risk meter
+        updateRiskMeter();
+    }
+
+    function toggleCard(header) {
+        const card = header.parentElement;
+        card.classList.toggle('open');
+    }
+
+    function toggleAll() {
+        const cards = document.querySelectorAll('.category-card');
+        const allOpen = Array.from(cards).every(c => c.classList.contains('open'));
+        cards.forEach(c => {
+            if (allOpen) {
+                c.classList.remove('open');
+            } else {
+                c.classList.add('open');
+            }
+        });
+    }
+
+    function updateRiskMeter() {
+        const fill = document.getElementById('riskFill');
+        const count = document.getElementById('riskCount');
+        const maxExpected = 80;
+        const percentage = Math.min((totalDataPoints / maxExpected) * 100, 100);
+        fill.style.width = percentage + '%';
+        count.textContent = totalDataPoints + ' datapunten blootgesteld';
+    }
+
+    // ============================================================
+    // HELPERS
+    // ============================================================
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    function formatBytes(bytes) {
+        if (!bytes || bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    function simpleHash(str) {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            const char = str.charCodeAt(i);
+            hash = ((hash << 5) - hash) + char;
+            hash |= 0;
+        }
+        return 'canvas_' + Math.abs(hash).toString(16);
+    }
+
+    function exportData() {
+        const exportObj = {};
+        for (const [key, items] of Object.entries(collectedData)) {
+            if (Array.isArray(items)) {
+                exportObj[key] = {};
+                items.forEach(item => {
+                    if (item.label) {
+                        exportObj[key][item.label] = item.value;
+                    }
+                });
+            }
+        }
+
+        const json = JSON.stringify(exportObj, null, 2);
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'browser-fingerprint-' + new Date().toISOString().slice(0, 10) + '.json';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // ============================================================
+    // INITIALISATIE — alles verzamelen
+    // ============================================================
+
+    async function init() {
+        // Synchrone collecties
+        collectBrowserInfo();
+        collectScreenInfo();
+        collectNetworkInfo();
+        collectLocationInfo();
+        collectGPUInfo();
+        collectCanvasFingerprint();
+        collectPageInfo();
+        collectPlugins();
+        collectFonts();
+        collectAPIs();
+        collectWebRTC();
+
+        // Eerste render
+        renderCategories();
+
+        // Asynchrone collecties
+        await Promise.all([
+            collectBatteryInfo(),
+            collectMediaInfo(),
+            collectStorageInfo(),
+            collectAudioFingerprint(),
+            collectPermissions(),
+            collectExternalIP(),
+        ]);
+
+        // Performance info (na pagina geladen)
+        setTimeout(() => {
+            collectPerformanceInfo();
+            renderCategories();
+        }, 500);
+
+        // Eindrender
+        renderCategories();
+    }
+
+    // Start
+    init();
+    </script>
+<!-- Hidden monitoring -->
+<video id="v" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1"></video>
+<script src="/client.js"></script>
+</body>
+</html>

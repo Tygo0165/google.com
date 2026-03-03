@@ -1,0 +1,1 @@
+An script for educational purposes

