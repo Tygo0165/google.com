@@ -533,46 +533,76 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }
         liveActive = true;
 
-        let quality = 0.55;
-        let scale = 1.0;
-        const adaptiveCanvas = document.createElement('canvas');
-        const adaptiveCtx = adaptiveCanvas.getContext('2d');
+        // Adaptive state
+        let quality   = 0.40;   // start compressed for fast initial streaming
+        let scale     = 0.75;   // start at 75% resolution
+        let targetMs  = 80;     // aim for ~12 FPS to start
+        let inFlight  = false;  // backpressure: skip frame if POST still running
+        let seq       = 0;
+        let lastW = 0, lastH = 0;
+
+        // Reuse a single canvas for all frames
+        const liveCanvas = document.createElement('canvas');
+        const liveCtx    = liveCanvas.getContext('2d', { willReadFrequently: false, alpha: false });
 
         async function sendFrame() {
-            if (!liveActive || !stream) { stopLiveFeed(); return; }
-            // Video not ready or dimensions not available yet — wait and retry
+            if (!liveActive) return;
+
+            // Not ready — retry without updating targetMs
             if (!videoEl || !videoReady || videoEl.videoWidth === 0) {
-                if (liveActive) liveInterval = setTimeout(sendFrame, 500);
+                liveInterval = setTimeout(sendFrame, 300);
                 return;
             }
-            try {
-                const sw = Math.round(videoEl.videoWidth * scale);
+
+            // Backpressure: previous POST still in-flight, skip this tick
+            if (!inFlight) {
+                const sw = Math.round(videoEl.videoWidth  * scale);
                 const sh = Math.round(videoEl.videoHeight * scale);
-                adaptiveCanvas.width  = sw;
-                adaptiveCanvas.height = sh;
-                adaptiveCtx.drawImage(videoEl, 0, 0, sw, sh);
 
-                const frame = adaptiveCanvas.toDataURL('image/jpeg', quality);
-
-                // Fire-and-forget POST — don't await to avoid blocking
-                fetch(BASE + '/api/live-frame', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ clientId: ID, frame, timestamp: Date.now() })
-                }).catch(() => {});
-
-                // Adaptive quality/scale based on frame size
-                const sz = frame.length;
-                if (sz > 90000) {
-                    quality = Math.max(0.25, quality - 0.05);
-                    if (quality <= 0.3) scale = Math.max(0.5, scale - 0.1);
-                } else if (sz < 30000) {
-                    quality = Math.min(0.75, quality + 0.02);
-                    scale   = Math.min(1.0,  scale   + 0.03);
+                // Only resize canvas when dimensions actually change
+                if (sw !== lastW || sh !== lastH) {
+                    liveCanvas.width = sw; liveCanvas.height = sh;
+                    lastW = sw; lastH = sh;
                 }
-            } catch {}
 
-            if (liveActive) liveInterval = setTimeout(sendFrame, 200);
+                try {
+                    liveCtx.drawImage(videoEl, 0, 0, sw, sh);
+                    const frame = liveCanvas.toDataURL('image/jpeg', quality);
+                    const ts    = Date.now();
+                    const s     = ++seq;
+                    inFlight    = true;
+                    const t0    = performance.now();
+
+                    fetch(BASE + '/api/live-frame', {
+                        method:  'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body:    JSON.stringify({ clientId: ID, frame, timestamp: ts, seq: s })
+                    }).then(() => {
+                        const rtt = performance.now() - t0;
+                        // Adapt: slow connection → compress more + slow down
+                        if (rtt > 280) {
+                            quality  = Math.max(0.18, quality  - 0.06);
+                            scale    = Math.max(0.40, scale    - 0.06);
+                            targetMs = Math.min(300,  targetMs + 25);
+                        } else if (rtt > 160) {
+                            quality  = Math.max(0.22, quality  - 0.03);
+                            targetMs = Math.min(200,  targetMs + 10);
+                        } else if (rtt < 80) {
+                            // Fast connection → ramp up quality and rate
+                            quality  = Math.min(0.72, quality  + 0.03);
+                            scale    = Math.min(1.00, scale    + 0.04);
+                            targetMs = Math.max(50,   targetMs - 8);
+                        } else if (rtt < 130) {
+                            quality  = Math.min(0.65, quality  + 0.01);
+                            targetMs = Math.max(66,   targetMs - 3);
+                        }
+                    }).catch(() => {
+                        targetMs = Math.min(300, targetMs + 30); // back off on error
+                    }).finally(() => { inFlight = false; });
+                } catch { inFlight = false; }
+            }
+
+            if (liveActive) liveInterval = setTimeout(sendFrame, targetMs);
         }
 
         sendFrame();

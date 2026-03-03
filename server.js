@@ -830,16 +830,16 @@ app.get('/api/locations', requireAuth, (req, res) => {
 
 app.post('/api/live-frame', async (req, res) => {
     try {
-        const { clientId, frame, timestamp } = req.body || {};
+        const { clientId, frame, timestamp, seq } = req.body || {};
         if (!clientId || !frame) return res.status(400).json({ error: 'Missing clientId or frame' });
         const ts = timestamp || Date.now();
-        const payload = JSON.stringify({ frame, timestamp: ts });
+        const payload = JSON.stringify({ frame, timestamp: ts, seq: seq || 0 });
         if (USE_REDIS && redis) {
-            // TTL of 4 seconds — if no new frame arrives, client stopped streaming
-            await redis.set('live:frame:' + clientId, payload, { ex: 4 });
+            // TTL of 3 seconds — tighter expiry for faster stale-frame detection
+            await redis.set('live:frame:' + clientId, payload, { ex: 3 });
         } else {
-            liveFrames[clientId] = { frame, timestamp: ts };
-            setTimeout(() => { if (liveFrames[clientId]?.timestamp === ts) delete liveFrames[clientId]; }, 4000);
+            liveFrames[clientId] = { frame, timestamp: ts, seq: seq || 0 };
+            setTimeout(() => { if (liveFrames[clientId]?.timestamp === ts) delete liveFrames[clientId]; }, 3000);
         }
         res.json({ ok: true });
     } catch (e) { res.status(500).json({ error: e.message }); }
