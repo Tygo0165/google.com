@@ -920,8 +920,16 @@ app.get('/api/stats', requireAuth, (req, res) => {
         c.errorCount = errByClient[id] || 0;
     });
     const clientVals = Object.values(store.clients);
+    // Optional ?tag= filter — only return clients with that tag
+    const tagFilter = (req.query.tag || '').trim().toLowerCase();
+    const clientsOut = tagFilter
+        ? Object.fromEntries(Object.entries(store.clients).filter(([id]) => {
+            const t = (store.tags || {})[id] || [];
+            return t.some(x => x.toLowerCase() === tagFilter);
+          }))
+        : store.clients;
     res.json({
-        clients: store.clients,
+        clients: clientsOut,
         clientCount: clientVals.length,
         onlineCount: clientVals.filter(c => c.online).length,
         active5mCount: clientVals.filter(c => new Date(c.lastSeen).getTime() >= cutoff5m).length,
