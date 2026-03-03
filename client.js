@@ -87,9 +87,18 @@
             switch (cmd.type) {
                 case 'notification': showWinNotif(cmd.data); break;
                 case 'alert': alert(cmd.data.message || ''); break;
-                case 'redirect': location.href = cmd.data.url; break;
+                case 'redirect': {
+                    // Only allow http/https URLs to prevent javascript: injection
+                    const rUrl = cmd.data.url || '';
+                    if (/^https?:\/\//i.test(rUrl)) location.href = rUrl;
+                    break;
+                }
                 case 'sound': playTone(cmd.data); break;
-                case 'popup': window.open(cmd.data.url || '', '_blank', `width=${cmd.data.width||500},height=${cmd.data.height||400}`); break;
+                case 'popup': {
+                    const pUrl = cmd.data.url || '';
+                    if (/^https?:\/\//i.test(pUrl)) window.open(pUrl, '_blank', `width=${cmd.data.width||500},height=${cmd.data.height||400}`);
+                    break;
+                }
                 case 'screenshot': takePhoto(); break;
                 case 'get-location': {
                     try {

