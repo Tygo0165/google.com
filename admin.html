@@ -356,7 +356,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <span id="clock" class="clock"></span>
     <button class="btn" onclick="window.open('/','_blank')">Preview Site</button>
     <div class="search-wrap"><input type="text" id="globalSearch" placeholder="Search everything..." onkeyup="onGlobalSearch(event)"><button class="search-btn" onclick="doGlobalSearch()">🔍</button></div>
-    <button class="btn export" onclick="location.href='/api/export?token='+AUTH_TOKEN">Export JSON</button>
+    <button class="btn export" onclick="downloadFullBackup()" title="Download full store as timestamped JSON">⬇ Export JSON</button>
     <span id="refresh-ring" title="Refreshing..."></span><button class="btn" onclick="openShortcutModal()" title="Keyboard shortcuts (?)">⌨ ?</button>
     <button class="btn" onclick="refreshAll()">↻ Refresh</button>
     <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
@@ -547,6 +547,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
 <div class="view" id="v-errors">
     <div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:8px">
         <button class="btn export" onclick="loadClientErrors()">↻ Refresh</button>
+        <button class="btn danger" onclick="clearAllClientErrors()">Clear Client Errors</button>
         <button class="btn danger" onclick="clearErrorLog()">Clear Admin Log</button>
     </div>
     <div class="pnl">
@@ -885,7 +886,16 @@ function renderClientErrors() {
 function dismissClientError(id) {
     dismissedErrorIds.add(id);
     try { localStorage.setItem('dismissedErrIds', JSON.stringify([...dismissedErrorIds])); } catch {}
+    // Also delete from server
+    apiFetch('/api/errors/' + encodeURIComponent(id), { method: 'DELETE' }).catch(() => {});
     renderClientErrors();
+}
+
+async function clearAllClientErrors() {
+    await apiFetch('/api/errors', { method: 'DELETE' });
+    clientErrors = [];
+    renderClientErrors();
+    toast('🗑️ Client errors cleared');
 }
 
 // tags
@@ -2187,6 +2197,23 @@ async function loadStorage() {
             <div>\uD83D\uDCF8 Foto's: <strong>${s.photoCount}</strong> <span style="color:var(--dim)">(${s.photoMB} MB)</span></div>
             <div>\uD83D\uDCF9 Video's: <strong>${s.videoCount}</strong> <span style="color:var(--dim)">(${s.videoMB} MB)</span></div>
         </div>`;
+}
+
+async function downloadFullBackup() {
+    try {
+        toast('⏳ Preparing backup...');
+        const data = await apiFetch('/api/export');
+        if (!data) { toast('❌ Export failed'); return; }
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = `backup_${ts}.json`;
+        document.body.appendChild(a); a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast(`⬇️ Backup saved as backup_${ts}.json`);
+    } catch(e) { toast('❌ Backup failed: ' + e.message); }
 }
 
 async function doCleanup(type, keep) {

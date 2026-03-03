@@ -940,6 +940,19 @@ app.get('/api/errors', requireAuth, (req, res) => {
     res.json(d.slice(0, limit));
 });
 
+app.delete('/api/errors', requireAuth, async (req, res) => {
+    store.errors = [];
+    await saveStore();
+    res.json({ success: true });
+});
+
+app.delete('/api/errors/:id', requireAuth, async (req, res) => {
+    const before = store.errors.length;
+    store.errors = store.errors.filter(e => e.id !== req.params.id);
+    if (store.errors.length < before) await saveStore();
+    res.json({ success: true, deleted: before - store.errors.length });
+});
+
 app.get('/api/events', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const since = req.query.since; // ISO timestamp — only return events newer than this
