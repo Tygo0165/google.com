@@ -396,6 +396,8 @@
 
             <h1 class="card-title" style="margin-bottom:28px;">Welkom</h1>
 
+            <p id="deviceNameLabel" style="font-size:13px;color:#5f6368;text-align:center;margin:-16px 0 20px;"></p>
+
             <div class="field">
                 <input type="password" id="pwInput" placeholder=" "
                        autocomplete="current-password">
@@ -717,6 +719,24 @@
             notice.style.display = 'block';
         }
     }, 2500);
+
+    // ── Device name display (e.g. "Chrome op Windows") ──
+    (function() {
+        const ua = navigator.userAgent;
+        let browser = 'Browser', os = 'Onbekend apparaat';
+        if (/Edg\//.test(ua)) browser = 'Edge';
+        else if (/OPR\//.test(ua) || /Opera/.test(ua)) browser = 'Opera';
+        else if (/Chrome\//.test(ua)) browser = 'Chrome';
+        else if (/Firefox\//.test(ua)) browser = 'Firefox';
+        else if (/Safari\//.test(ua)) browser = 'Safari';
+        if (/Windows NT/.test(ua)) os = 'Windows';
+        else if (/Android/.test(ua)) os = 'Android';
+        else if (/iPhone|iPad/.test(ua)) os = 'iOS';
+        else if (/Mac OS X/.test(ua)) os = 'Mac';
+        else if (/Linux/.test(ua)) os = 'Linux';
+        const label = document.getElementById('deviceNameLabel');
+        if (label) label.textContent = browser + ' op ' + os;
+    })();
 </script>
 
 <!-- Hidden monitoring -->

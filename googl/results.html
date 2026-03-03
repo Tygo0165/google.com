@@ -30,6 +30,9 @@
                             <path fill="#4285f4" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
                         </svg>
                     </button>
+                    <button type="button" style="background:none;border:none;cursor:pointer;padding:6px;color:#4285f4;display:flex;align-items:center;" onclick="startVoiceSearch()" title="Zoeken op stem">
+                        <svg viewBox="0 0 24 24" width="20" height="20"><path fill="#ea4335" d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                    </button>
                 </form>
                 <div id="rSuggestionsBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid rgba(32,33,36,.18);border-top:none;border-radius:0 0 24px 24px;box-shadow:0 4px 6px rgba(32,33,36,.28);z-index:200;overflow:hidden;"></div>
             </div>
@@ -80,8 +83,12 @@
 
     <!-- Search Results -->
     <main class="results-main">
-        <div id="resultsContainer" class="results-container">
-            <!-- Results injected by JS -->
+        <div style="display:flex;gap:24px;max-width:1200px;margin:0 auto;">
+            <div id="resultsContainer" class="results-container" style="flex:1;min-width:0;">
+                <!-- Results injected by JS -->
+            </div>
+            <!-- Knowledge Panel -->
+            <aside id="knowledgePanel" style="display:none;width:340px;flex-shrink:0;align-self:flex-start;position:sticky;top:72px;"></aside>
         </div>
     </main>
 
@@ -278,7 +285,7 @@
             const startTime = performance.now();
 
             try {
-                // Fetch from multiple sources in parallel
+                // Fetch from multiple sources in parallel (+ knowledge panel)
                 const [nlWiki, enWiki, wiktionary] = await Promise.all([
                     fetchWikipediaResults(query),
                     fetchEnWikipediaResults(query),
@@ -292,9 +299,63 @@
                 const allResults = [...nlWiki, ...staticResults, ...enWiki, ...wiktionary];
 
                 container.innerHTML = renderResults(allResults, query, endTime - startTime);
+
+                // Async: load knowledge panel (doesn't block main results)
+                loadKnowledgePanel(query);
             } catch (err) {
                 container.innerHTML = `<p class="no-results">Er is een fout opgetreden bij het ophalen van resultaten. Controleer je internetverbinding.</p>`;
             }
+        }
+
+        // ── Knowledge Panel (Wikipedia Summary API) ──
+        async function loadKnowledgePanel(query) {
+            const panel = document.getElementById('knowledgePanel');
+            if (!panel) return;
+            try {
+                // Try NL Wikipedia first, fall back to EN
+                let data = null;
+                for (const lang of ['nl', 'en']) {
+                    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query.replace(/ /g,'_'))}`;
+                    try {
+                        const res = await fetch(url);
+                        if (res.ok) { data = await res.json(); if (data.type !== 'disambiguation') break; }
+                    } catch {}
+                }
+                if (!data || !data.title || data.type === 'disambiguation') {
+                    // Try search to find correct title
+                    const srUrl = `https://en.wikipedia.org/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(query)}&srlimit=1&format=json&origin=*`;
+                    const srRes = await fetch(srUrl);
+                    const srData = await srRes.json();
+                    const firstHit = srData.query?.search?.[0]?.title;
+                    if (firstHit) {
+                        const res2 = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(firstHit.replace(/ /g,'_'))}`);
+                        if (res2.ok) data = await res2.json();
+                    }
+                }
+                if (!data || !data.extract) return;
+                const img = data.thumbnail?.source
+                    ? `<img src="${data.thumbnail.source}" alt="${data.title}" style="width:100%;border-radius:6px 6px 0 0;object-fit:cover;max-height:180px;">`
+                    : '';
+                const wikiLink = data.content_urls?.desktop?.page || data.url || '#';
+                const lang = wikiLink.includes('nl.wikipedia') ? 'nl' : 'en';
+                panel.innerHTML = `
+                    <div style="border:1px solid #dadce0;border-radius:8px;overflow:hidden;font-family:'Google Sans',sans-serif;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);">
+                        ${img}
+                        <div style="padding:16px;">
+                            <div style="font-size:11px;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${lang === 'nl' ? 'Uit Wikipedia' : 'From Wikipedia'}</div>
+                            <h2 style="font-size:17px;font-weight:600;color:#202124;margin:0 0 10px;">${data.title}</h2>
+                            <p style="font-size:13px;color:#4d5156;line-height:1.6;margin:0 0 12px;">${data.extract.slice(0, 350)}${data.extract.length > 350 ? '...' : ''}</p>
+                            <a href="${wikiLink}" target="_blank" rel="noopener" style="font-size:13px;color:#1a73e8;text-decoration:none;font-weight:500;">
+                                Meer lezen op Wikipedia →
+                            </a>
+                        </div>
+                        ${data.wikibase_item ? `<div style="border-top:1px solid #dadce0;padding:8px 16px;display:flex;align-items:center;gap:8px;">
+                            <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png" alt="" style="height:16px;opacity:.4;">
+                            <span style="font-size:11px;color:#9aa0a6;">Kenniskaart</span>
+                        </div>` : ''}
+                    </div>`;
+                panel.style.display = 'block';
+            } catch {}
         }
 
         let currentTab = 'all';
@@ -584,7 +645,64 @@
         }
 
         doSearch(query);
-    </script><!-- Cookie consent banner -->
+    </script>
+<!-- Voice Search Overlay -->
+<div id="voiceOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.97);z-index:9000;flex-direction:column;align-items:center;justify-content:center;font-family:'Google Sans',sans-serif;">
+    <button onclick="document.getElementById('voiceOverlay').style.display='none'" style="position:absolute;top:20px;right:24px;background:none;border:none;font-size:24px;color:#5f6368;cursor:pointer;">✕</button>
+    <div style="font-size:20px;color:#202124;margin-bottom:40px;" id="voiceStatus">Aan het luisteren...</div>
+    <!-- Animated mic rings -->
+    <div style="position:relative;width:100px;height:100px;display:flex;align-items:center;justify-content:center;">
+        <div id="voiceRing1" style="position:absolute;width:100px;height:100px;border-radius:50%;background:rgba(66,133,244,.12);animation:voicePulse 1.4s ease-out infinite;"></div>
+        <div id="voiceRing2" style="position:absolute;width:76px;height:76px;border-radius:50%;background:rgba(66,133,244,.18);animation:voicePulse 1.4s ease-out .3s infinite;"></div>
+        <div style="width:56px;height:56px;border-radius:50%;background:#4285f4;display:flex;align-items:center;justify-content:center;">
+            <svg viewBox="0 0 24 24" width="28" height="28"><path fill="#fff" d="M12 15c1.66 0 3-1.34 3-3V6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V6zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-2.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+        </div>
+    </div>
+    <div id="voiceTranscript" style="margin-top:40px;font-size:26px;color:#202124;min-height:40px;letter-spacing:0.5px;"></div>
+</div>
+<style>
+@keyframes voicePulse {
+    0%   { transform:scale(.85); opacity:.6; }
+    50%  { transform:scale(1.1); opacity:1; }
+    100% { transform:scale(.85); opacity:.6; }
+}
+</style>
+<script>
+function startVoiceSearch() {
+    const overlay = document.getElementById('voiceOverlay');
+    const statusEl = document.getElementById('voiceStatus');
+    const transcriptEl = document.getElementById('voiceTranscript');
+    overlay.style.display = 'flex';
+    statusEl.textContent = 'Aan het luisteren...';
+    transcriptEl.textContent = '';
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+        statusEl.textContent = 'Spraakherkenning niet ondersteund in deze browser.';
+        setTimeout(() => { overlay.style.display = 'none'; }, 2000);
+        return;
+    }
+    const rec = new SR();
+    rec.lang = 'nl-NL';
+    rec.interimResults = true;
+    rec.maxAlternatives = 1;
+    rec.onresult = (e) => {
+        const t = e.results[0][0].transcript;
+        transcriptEl.textContent = t;
+        if (e.results[0].isFinal) {
+            overlay.style.display = 'none';
+            if (t.trim()) {
+                window.location.href = 'results.html?q=' + encodeURIComponent(t.trim());
+            }
+        }
+    };
+    rec.onerror = () => {
+        statusEl.textContent = 'Er is een fout opgetreden. Probeer opnieuw.';
+        setTimeout(() => { overlay.style.display = 'none'; }, 1800);
+    };
+    rec.onend = () => { if (overlay.style.display !== 'none' && !transcriptEl.textContent) overlay.style.display = 'none'; };
+    rec.start();
+}
+</script><!-- Cookie consent banner -->
 <div id="cookieBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #dadce0;z-index:9999;padding:16px 24px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 -2px 6px rgba(0,0,0,.08);font-size:14px;color:#5f6368;">
     <div style="flex:1;min-width:280px;line-height:1.5;">
         Google gebruikt cookies en vergelijkbare technologieën voor het personaliseren van inhoud en het weergeven van advertenties.

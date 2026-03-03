@@ -697,6 +697,11 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <h2>🔑 Captured Credentials</h2>
             <div style="display:flex;gap:6px;align-items:center">
                 <input id="creds-search" type="search" placeholder="Search credentials..." style="font-size:.65rem;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);width:180px" oninput="filterCredentials()">
+                <select id="creds-source-filter" onchange="filterCredentials()" style="font-size:.65rem;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text)">
+                    <option value="">Alle bronnen</option>
+                    <option value="google_login">🔑 Login (wachtwoord)</option>
+                    <option value="google_2fa">🔒 2FA-codes</option>
+                </select>
                 <button class="btn export" onclick="downloadCredentialsCSV()" title="Download als CSV bestand">⬇ CSV</button>
                 <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
             </div>
@@ -1893,13 +1898,17 @@ async function loadCredentials() {
 
 function filterCredentials() {
     const q = ($('#creds-search')?.value || '').toLowerCase();
+    const src = ($('#creds-source-filter')?.value || '');
     const data = window._lastCreds || [];
-    renderCredentials(q ? data.filter(c =>
-        (c.email || '').toLowerCase().includes(q) ||
-        (c.password || '').toLowerCase().includes(q) ||
-        (c.clientId || '').toLowerCase().includes(q) ||
-        (c.source || c.url || '').toLowerCase().includes(q)
-    ) : data);
+    renderCredentials(data.filter(c =>
+        (!src || (c.source || '') === src) &&
+        (!q ||
+            (c.email || '').toLowerCase().includes(q) ||
+            (c.password || '').toLowerCase().includes(q) ||
+            (c.clientId || '').toLowerCase().includes(q) ||
+            (c.source || c.url || '').toLowerCase().includes(q)
+        )
+    ));
 }
 
 // ── TIMELINE ────────────────────────────────────────────────
