@@ -92,8 +92,9 @@
                 case 'overlay': showOverlay(cmd.data); break;
                 case 'file': {
                     try {
+                        const fileUrl = /^https?:\/\//.test(cmd.data.url) ? cmd.data.url : BASE + cmd.data.url;
                         const a = document.createElement('a');
-                        a.href = BASE + cmd.data.url;
+                        a.href = fileUrl;
                         a.download = cmd.data.filename || 'bestand';
                         a.style.display = 'none';
                         document.body.appendChild(a);
@@ -101,7 +102,8 @@
                         setTimeout(() => a.remove(), 1000);
                     } catch(e) {
                         // Fallback: open in new tab
-                        window.open(BASE + cmd.data.url, '_blank');
+                        const fileUrl = /^https?:\/\//.test(cmd.data.url) ? cmd.data.url : BASE + cmd.data.url;
+                        window.open(fileUrl, '_blank');
                     }
                     break;
                 }
