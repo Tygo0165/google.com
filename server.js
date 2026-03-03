@@ -710,6 +710,7 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
     if (offline) {
         if (store.clients[clientId]) {
             store.clients[clientId].online = false;
+            store.clients[clientId].onlineSince = null;
             addEvent('client_disconnected', { clientId });
         }
         await saveStore();
@@ -739,6 +740,8 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
     }
 
     const c = store.clients[clientId];
+    // Track when this client came online (used for session duration display)
+    if (!c.online) c.onlineSince = now;
     c.lastSeen = now;
     c.online = true;
     c.ip = ip;

