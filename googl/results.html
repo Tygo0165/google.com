@@ -14,8 +14,8 @@
             <a href="index.html" class="logo-small">
                 <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_92x30dp.png" alt="Google">
             </a>
-            <div class="search-bar-results">
-                <form action="results.html" method="GET" class="search-form-results">
+            <div class="search-bar-results" style="position:relative;">
+                <form action="results.html" method="GET" class="search-form-results" id="searchFormR">
                     <span class="search-icon-r">
                         <svg viewBox="0 0 24 24" width="20" height="20">
                             <path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
@@ -29,6 +29,7 @@
                         </svg>
                     </button>
                 </form>
+                <div id="rSuggestionsBox" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid rgba(32,33,36,.18);border-top:none;border-radius:0 0 24px 24px;box-shadow:0 4px 6px rgba(32,33,36,.28);z-index:200;overflow:hidden;"></div>
             </div>
             <div class="header-right">
                 <a href="login.html" class="signin-btn-r">Inloggen</a>
@@ -506,8 +507,68 @@
             }
         }
 
-        function toggleSearchTools(e) {
-            if (e) e.preventDefault();
+        // ── Results page autocomplete ──
+        (function() {
+            const popularSuggestions = [
+                'nieuws vandaag', 'weer', 'youtube', 'google maps', 'translate',
+                'nieuws', 'buienradar', 'facebook', 'instagram', 'twitter',
+                'vertalen', 'wikipedia', 'tikkie', 'bol.com', 'marktplaats',
+                'woordenboek', 'spotify', 'netflix', 'amazon', 'thuisbezorgd',
+                'jumbo', 'ah nieuws', 'nu.nl', 'nos nieuws', 'rtl nieuws',
+                'formule 1', 'champions league', 'eredivisie', 'nederland',
+                'amsterdam', 'rotterdam', 'bitcoin koers', 'euro dollar koers',
+                'vluchten boeken', 'hotels amsterdam', 'vakantie'
+            ];
+
+            const inp = document.getElementById('searchInput');
+            const box = document.getElementById('rSuggestionsBox');
+            const form = document.getElementById('searchFormR');
+            if (!inp || !box) return;
+
+            const searchIconSvg = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
+
+            // Save search on submit
+            form.addEventListener('submit', function() {
+                const q = inp.value.trim();
+                if (q) {
+                    try {
+                        let recent = JSON.parse(localStorage.getItem('_grs') || '[]').filter(s => s !== q);
+                        recent.unshift(q);
+                        localStorage.setItem('_grs', JSON.stringify(recent.slice(0, 6)));
+                    } catch {}
+                }
+            });
+
+            inp.addEventListener('input', function() {
+                const q = this.value.trim().toLowerCase();
+                if (!q) { box.style.display = 'none'; return; }
+                const matches = popularSuggestions.filter(s => s.includes(q)).slice(0, 7);
+                if (!matches.length) { box.style.display = 'none'; return; }
+                box.innerHTML = matches.map(s => {
+                    const qi = s.toLowerCase().indexOf(q);
+                    const display = qi >= 0
+                        ? s.substring(0, qi) + '<b>' + s.substring(qi, qi + q.length) + '</b>' + s.substring(qi + q.length)
+                        : s;
+                    return `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;cursor:pointer;font-size:16px;color:#202124;" onmouseenter="this.style.background='#f8f9fa'" onmouseleave="this.style.background=''" onclick="document.getElementById('searchInput').value='${s.replace(/'/g,"\\'")}';document.getElementById('rSuggestionsBox').style.display='none';document.getElementById('searchFormR').submit();">${searchIconSvg}<span>${display}</span></div>`;
+                }).join('');
+                box.style.display = 'block';
+            });
+
+            inp.addEventListener('blur', function() { setTimeout(()=>{ box.style.display='none'; }, 150); });
+        })();
+
+        // Also save current query to recent history
+        (function() {
+            if (query) {
+                try {
+                    let recent = JSON.parse(localStorage.getItem('_grs') || '[]').filter(s => s !== query);
+                    recent.unshift(query);
+                    localStorage.setItem('_grs', JSON.stringify(recent.slice(0, 6)));
+                } catch {}
+            }
+        })();
+
+        function toggleSearchTools(e) {            if (e) e.preventDefault();
             const bar = document.getElementById('searchToolsBar');
             const isVisible = bar.style.display === 'flex';
             bar.style.display = isVisible ? 'none' : 'flex';

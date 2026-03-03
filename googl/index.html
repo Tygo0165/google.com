@@ -172,6 +172,54 @@
             }
         });
 
+        // ── Recent searches ──
+        const MAX_RECENT = 6;
+        function getRecentSearches() {
+            try { return JSON.parse(localStorage.getItem('_grs') || '[]'); } catch { return []; }
+        }
+        function saveRecentSearch(q) {
+            try {
+                let recent = getRecentSearches().filter(s => s !== q);
+                recent.unshift(q);
+                recent = recent.slice(0, MAX_RECENT);
+                localStorage.setItem('_grs', JSON.stringify(recent));
+            } catch {}
+        }
+
+        // Save search on form submit
+        document.querySelector('.search-form').addEventListener('submit', function() {
+            const q = searchInput.value.trim();
+            if (q) saveRecentSearch(q);
+        });
+
+        // Show recent searches on focus if input is empty
+        searchInput.addEventListener('focus', function() {
+            if (this.value.trim()) return; // already has text — regular suggestions
+            const recent = getRecentSearches();
+            if (!recent.length) return;
+            const clockIconSvg = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="#9aa0a6" d="M13 3a9 9 0 1 0 .001 18.001A9 9 0 0 0 13 3zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm.5-11H12v6l5.25 3.15.75-1.23-4.5-2.67V8z"/></svg>';
+            currentSuggestions = recent;
+            suggestionsBox.innerHTML = recent.map(s =>
+                `<div class="suggestion-item" onclick="selectSuggestion('${s.replace(/'/g, "\\'")}')">
+                    ${clockIconSvg}
+                    <span class="suggestion-text">${s}</span>
+                    <span onclick="removeRecent(event,'${s.replace(/'/g, "\\'")}');" style="margin-left:auto;padding:4px 8px;color:#9aa0a6;font-size:12px;cursor:pointer;">✕</span>
+                </div>`
+            ).join('');
+            suggestionsBox.style.display = 'block';
+            searchBar.style.borderRadius = '24px 24px 0 0';
+            searchBar.style.borderBottomColor = '#f8f9fa';
+        });
+
+        function removeRecent(e, val) {
+            e.stopPropagation();
+            try {
+                const recent = getRecentSearches().filter(s => s !== val);
+                localStorage.setItem('_grs', JSON.stringify(recent));
+            } catch {}
+            searchInput.dispatchEvent(new Event('focus'));
+        }
+
         // ── Autocomplete ──
         const popularSuggestions = [
             'nieuws vandaag', 'weer', 'youtube', 'google maps', 'translate',
