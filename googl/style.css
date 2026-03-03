@@ -393,3 +393,59 @@ a {
         padding: 0 12px;
     }
 }
+
+/* Search Suggestions Dropdown */
+.suggestions-box {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid rgba(32,33,36,0.18);
+    border-top: none;
+    border-radius: 0 0 24px 24px;
+    box-shadow: 0 4px 6px rgba(32,33,36,0.28);
+    z-index: 200;
+    overflow: hidden;
+    margin-top: -1px;
+}
+
+.suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 16px;
+    color: #202124;
+    transition: background 0.1s;
+}
+
+.suggestion-item:hover,
+.suggestion-item.selected {
+    background: #f8f9fa;
+}
+
+.suggestion-item svg {
+    flex-shrink: 0;
+}
+
+.suggestion-text {
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.suggestion-text b {
+    font-weight: normal;
+}
+
+.suggestion-text .match {
+    font-weight: 500;
+}
+
+/* Make search container relative so suggestions position correctly */
+.search-container .search-form {
+    position: relative;
+}

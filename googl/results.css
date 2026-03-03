@@ -518,3 +518,23 @@ a {
         grid-template-columns: 1fr;
     }
 }
+
+/* Sponsored result */
+.sponsored-result {
+    border: 1px solid #dadce0;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 28px;
+    background: #fff;
+}
+
+/* People Also Ask */
+.paa-item summary::-webkit-details-marker { display: none; }
+.paa-item[open] summary svg { transform: rotate(180deg); }
+.paa-item summary svg { transition: transform .2s; }
+
+/* Pagination */
+.pagination a:hover {
+    background: #f8f9fa !important;
+    text-decoration: none;
+}
