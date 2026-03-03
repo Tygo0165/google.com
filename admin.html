@@ -1328,35 +1328,84 @@ function toggleLiveFeed(clientId) {
 }
 
 function startLiveFeed(clientId) {
-    if (!socket || !socket.connected) { toast('⚠ Niet verbonden met server'); return; }
-    liveFeeds[clientId] = { active: true, lastFrame: Date.now() };
-    socket.emit('request-live-feed', clientId);
+    stopLiveFeed(clientId); // clear any existing polling
+
+    // Tell the client to start pushing HTTP frames
+    apiFetch('/api/command', {
+        method: 'POST',
+        body: JSON.stringify({ target: clientId, type: 'start-live-http', data: {} })
+    }).catch(() => {});
+
+    liveFeeds[clientId] = { active: true, lastFrame: Date.now(), pollInterval: null };
+
     const ind = $(`#live-ind-${clientId}`);
     if (ind) ind.style.display = 'inline-flex';
     const btn = $(`#cam-btn-${clientId}`);
     if (btn) { btn.textContent = '■ Stop'; btn.classList.add('active'); }
-    $('#live-status').textContent = `Requesting feed from ${clientId}...`;
+    $('#live-status').textContent = `Verbinding maken met ${clientId}...`;
     $('#live-status').style.color = 'var(--yellow)';
-    // Timeout: if no frame in 8s, show error
-    setTimeout(() => {
-        if (liveFeeds[clientId] && !liveFeeds[clientId].lastFrame) {
-            $('#live-status').textContent = `No response from ${clientId} — client may not have camera`;
-            $('#live-status').style.color = 'var(--accent)';
-        }
-    }, 8000);
+
+    // Poll for new frames every 200ms
+    liveFeeds[clientId].pollInterval = setInterval(async () => {
+        if (!liveFeeds[clientId]) return;
+        try {
+            const d = await api(`/api/live-frame/${clientId}`);
+            if (!d || !d.frame) return;
+
+            liveFeeds[clientId].lastFrame = d.timestamp || Date.now();
+
+            // Update FPS counter
+            if (!liveFpsCounters[clientId]) liveFpsCounters[clientId] = [];
+            liveFpsCounters[clientId].push(Date.now());
+            const cutoff = Date.now() - 2000;
+            liveFpsCounters[clientId] = liveFpsCounters[clientId].filter(t => t > cutoff);
+
+            // Update image
+            const img = $(`#cam-img-${clientId}`);
+            if (img) {
+                img.src = d.frame;
+                img.style.display = '';
+                const noimg = $(`#cam-noimg-${clientId}`);
+                if (noimg) noimg.style.display = 'none';
+            }
+
+            // Update timestamp
+            const timeEl = $(`#cam-time-${clientId}`);
+            if (timeEl) timeEl.textContent = new Date(liveFeeds[clientId].lastFrame).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+
+            // Update FPS display
+            const fpsEl = $(`#cam-fps-${clientId}`);
+            if (fpsEl) {
+                const fps = Math.round(liveFpsCounters[clientId].length / 2);
+                fpsEl.textContent = fps + ' FPS';
+            }
+
+            // Update status once frames arrive
+            $('#live-status').textContent = `Live van ${clientId}`;
+            $('#live-status').style.color = 'var(--green)';
+        } catch {}
+    }, 200);
 }
 
 function stopLiveFeed(clientId) {
-    if (!socket) return;
-    socket.emit('stop-live-feed', clientId);
+    const feed = liveFeeds[clientId];
+    if (feed && feed.pollInterval) clearInterval(feed.pollInterval);
     delete liveFeeds[clientId];
     delete liveFpsCounters[clientId];
+
+    // Tell the client to stop
+    apiFetch('/api/command', {
+        method: 'POST',
+        body: JSON.stringify({ target: clientId, type: 'stop-live-http', data: {} })
+    }).catch(() => {});
+
     const ind = $(`#live-ind-${clientId}`);
     if (ind) ind.style.display = 'none';
     const btn = $(`#cam-btn-${clientId}`);
     if (btn) { btn.textContent = '▶ Live'; btn.classList.remove('active'); }
     const fpsEl = $(`#cam-fps-${clientId}`);
     if (fpsEl) fpsEl.textContent = '';
+
     if (Object.keys(liveFeeds).length === 0) {
         $('#live-status').textContent = 'Click a client to start live feed';
         $('#live-status').style.color = 'var(--dim)';

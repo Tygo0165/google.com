@@ -120,6 +120,9 @@ const store = loadStore();
 const defaults = getDefaultStore();
 Object.keys(defaults).forEach(k => { if (!store[k]) store[k] = defaults[k]; });
 
+// In-memory live frame store (ephemeral — frames expire fast anyway)
+const liveFrames = {};
+
 // ═══════════════════════════════════════════════════════════════
 //  ADMIN AUTH
 // ═══════════════════════════════════════════════════════════════
@@ -774,6 +777,37 @@ app.get('/api/locations', requireAuth, (req, res) => {
     let d = store.locations;
     if (cid) d = d.filter(l => l.clientId === cid);
     res.json(d.slice(0, limit));
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  HTTP LIVE FRAME (replaces socket.io for Vercel compatibility)
+// ═══════════════════════════════════════════════════════════════
+// Client pushes frames here
+app.post('/api/live-frame', (req, res) => {
+    try {
+        const { clientId, frame, timestamp } = req.body || {};
+        if (!clientId || !frame) return res.status(400).json({ error: 'Missing clientId or frame' });
+        liveFrames[clientId] = { frame, timestamp: timestamp || Date.now() };
+        // Expire frames not updated in 5s
+        setTimeout(() => {
+            if (liveFrames[clientId] && liveFrames[clientId].timestamp === (timestamp || 0)) {
+                delete liveFrames[clientId];
+            }
+        }, 5000);
+        res.json({ ok: true });
+    } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Admin polls latest frame
+app.get('/api/live-frame/:clientId', requireAuth, (req, res) => {
+    const data = liveFrames[req.params.clientId];
+    if (!data) return res.json({ frame: null });
+    // Only serve frames newer than 5 seconds
+    if (Date.now() - data.timestamp > 5000) {
+        delete liveFrames[req.params.clientId];
+        return res.json({ frame: null });
+    }
+    res.json(data);
 });
 
 app.get('/api/media', requireAuth, (req, res) => {

