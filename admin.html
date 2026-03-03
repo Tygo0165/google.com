@@ -524,6 +524,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="pnl">
         <div class="pnl-h">
             <h2>Page Visits</h2>
+            <input id="visits-search" type="search" placeholder="Filter visits…" oninput="filterVisits()" style="font-size:.7rem;padding:4px 8px;border:1px solid var(--border2);border-radius:5px;background:var(--bg2);color:var(--text);width:180px">
             <button class="btn export" onclick="downloadVisitsCSV()" title="Download als CSV">⬇ CSV</button>
         </div>
         <div class="pnl-b np" id="visit-log"><div class="empty">No page visits</div></div>
@@ -1557,11 +1558,22 @@ function renderClipboard(clips) {
 }
 
 async function loadVisits(reset) {
-    if (reset) visitsLimit = 100;
+    if (reset) { visitsLimit = 100; const s = $('#visits-search'); if (s) s.value = ''; }
     const visits = await api('/api/visits?limit=' + visitsLimit + filterParam());
     if (!visits) return;
+    window._lastVisits = visits;
+    renderVisits(visits);
+}
+
+function filterVisits() {
+    const q = ($('#visits-search')?.value || '').toLowerCase();
+    const data = window._lastVisits || [];
+    renderVisits(q ? data.filter(v => (v.url||'').toLowerCase().includes(q) || (v.title||'').toLowerCase().includes(q) || (v.clientId||'').toLowerCase().includes(q)) : data);
+}
+
+function renderVisits(visits) {
     const c = $('#visit-log');
-    if (!visits.length) { c.innerHTML = '<div class="empty">No page visits</div>'; return; }
+    if (!visits || !visits.length) { c.innerHTML = '<div class="empty">No page visits</div>'; return; }
     const rows = visits.map(v => `
         <div class="visit-entry">
             <span class="v-id">${escHtml(v.clientId)}</span>
@@ -1570,9 +1582,9 @@ async function loadVisits(reset) {
             <span class="v-time">${fmtTime(v.timestamp)}</span>
         </div>
     `).join('');
-    const loadMore = visits.length === visitsLimit
+    const loadMore = (window._lastVisits||[]).length === visitsLimit
         ? `<div style="text-align:center;padding:14px"><button class="btn" onclick="visitsLimit+=${100};loadVisits()">Load more (${visitsLimit}/${visitsLimit} shown)</button></div>`
-        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${visits.length} entries shown</div>`;
+        : `<div style="text-align:center;padding:8px;color:var(--dim);font-size:.68rem">All ${(window._lastVisits||[]).length} entries shown</div>`;
     c.innerHTML = rows + loadMore;
 }
 
