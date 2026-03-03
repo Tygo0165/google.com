@@ -234,10 +234,10 @@ async function geolocateIP(ip) {
     }
     return new Promise(resolve => {
         const url = `http://ip-api.com/json/${cleanIP}?fields=status,country,regionName,city,lat,lon,timezone,isp,org,as,query`;
-        http.get(url, res => {
+        const req = http.get(url, httpRes => {
             let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => {
+            httpRes.on('data', chunk => data += chunk);
+            httpRes.on('end', () => {
                 try {
                     const json = JSON.parse(data);
                     if (json.status === 'success') {
@@ -247,7 +247,9 @@ async function geolocateIP(ip) {
                     } else resolve(null);
                 } catch { resolve(null); }
             });
-        }).on('error', () => resolve(null));
+        });
+        req.setTimeout(5000, () => { req.destroy(); resolve(null); });
+        req.on('error', () => resolve(null));
     });
 }
 
@@ -644,11 +646,23 @@ app.post('/api/capture', (req, res) => {
 
 // ── Heartbeat with server-side IP geo ──
 app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
-    const { clientId, userAgent, screenW, screenH, battery, charging,
+    const { clientId, offline, userAgent, screenW, screenH, battery, charging,
             networkType, downlink, saveData,
             language, timezone,
             isIdle, idleSecs, tabHidden, hiddenMs, maxScrollPct } = req.body;
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+
+    await ensureStoreLoaded();
+
+    // Offline signal — client tab is closing, mark immediately
+    if (offline) {
+        if (store.clients[clientId]) {
+            store.clients[clientId].online = false;
+            addEvent('client_disconnected', { clientId });
+        }
+        await saveStore();
+        return res.json({ success: true });
+    }
 
     const now = new Date().toISOString();
     const ip = getClientIP(req);
@@ -920,8 +934,10 @@ app.get('/api/errors', requireAuth, (req, res) => {
 app.get('/api/events', requireAuth, (req, res) => {
     const limit = Math.min(parseInt(req.query.limit) || 100, 500);
     const since = req.query.since; // ISO timestamp — only return events newer than this
+    const cid = req.query.clientId;
     let d = store.events;
     if (since) d = d.filter(e => e.timestamp > since);
+    if (cid) d = d.filter(e => (e.data && e.data.clientId === cid) || e.clientId === cid);
     res.json(d.slice(0, limit));
 });
 

