@@ -72,15 +72,27 @@ const ADMIN_PASSWORD = process.env.ADMIN_PASS || 'admin123';
 const adminTokens = new Set();
 const crypto = require('crypto');
 
+// On Vercel: deterministic token based on password so it survives cold starts
+const VERCEL_TOKEN = IS_VERCEL
+    ? crypto.createHmac('sha256', ADMIN_PASSWORD + 'vercel-v1').update('admin-session').digest('hex')
+    : null;
+
 function generateToken() {
+    if (IS_VERCEL) return VERCEL_TOKEN;
     const token = crypto.randomBytes(32).toString('hex');
     adminTokens.add(token);
     return token;
 }
 
+function isValidToken(token) {
+    if (!token) return false;
+    if (IS_VERCEL) return token === VERCEL_TOKEN;
+    return adminTokens.has(token);
+}
+
 function requireAuth(req, res, next) {
     const token = req.headers['x-admin-token'] || req.query.token || req.cookies?.adminToken;
-    if (adminTokens.has(token)) return next();
+    if (isValidToken(token)) return next();
     res.status(401).json({ error: 'Unauthorized' });
 }
 
@@ -481,7 +493,7 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 app.get('/admin', (req, res) => {
     const token = req.cookies?.adminToken || req.query.token;
-    if (adminTokens.has(token)) {
+    if (isValidToken(token)) {
         return res.sendFile(path.join(__dirname, 'admin.html'));
     }
     // Show login page
@@ -508,6 +520,8 @@ app.post('/api/auth/login', (req, res) => {
     const { password } = req.body;
     if (password === ADMIN_PASSWORD) {
         const token = generateToken();
+        // Set cookie server-side so it persists across cold starts on Vercel
+        res.cookie('adminToken', token, { path: '/', sameSite: 'lax', maxAge: 30 * 24 * 3600 * 1000 });
         console.log('🔓 Admin logged in');
         res.json({ success: true, token });
     } else {
@@ -518,13 +532,14 @@ app.post('/api/auth/login', (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
     const token = req.cookies?.adminToken || req.headers['x-admin-token'];
-    if (token) adminTokens.delete(token);
+    if (token && !IS_VERCEL) adminTokens.delete(token);
+    res.clearCookie('adminToken');
     res.json({ success: true });
 });
 
 app.get('/api/auth/check', (req, res) => {
     const token = req.cookies?.adminToken || req.headers['x-admin-token'];
-    res.json({ authenticated: adminTokens.has(token) });
+    res.json({ authenticated: isValidToken(token) });
 });
 
 // ── Search across all data ──
