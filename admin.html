@@ -38,6 +38,9 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .hdr .btn:hover{background:var(--panel2);border-color:var(--text2);color:var(--accent)}
 .hdr .btn.danger{border-color:#f5c6c4}.hdr .btn.danger:hover{background:#fce8e6;border-color:var(--danger);color:var(--danger)}
 .hdr .btn.export{border-color:#c8e6c9}.hdr .btn.export:hover{background:#e8f5e9;border-color:#0f9d58;color:#0f9d58}
+/* hdr-extras: flat on desktop, dropdown on mobile */
+.hdr-extras{display:contents}
+.hdr-menu-btn{display:none;padding:5px 10px;font-size:1rem;line-height:1}
 
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
 
@@ -260,73 +263,67 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 /* ── Tablet ─────────────────────────────────────────── */
 @media(max-width:900px){
-  .hdr{padding:8px 12px;gap:6px;flex-wrap:wrap}
+  .hdr{padding:8px 12px;gap:6px}
   .hdr h1{font-size:.72rem;letter-spacing:2px}
-  .hdr .btn[onclick*="downloadFullBackup"],
-  .hdr .btn[onclick*="openShortcutModal"],
-  .hdr #theme-btn{display:none}
-  .pnl-h{flex-wrap:wrap;gap:5px}
-  .pnl-h>div{flex-wrap:wrap;gap:4px}
-  .grid2{grid-template-columns:1fr}
+  #btn-preview,#btn-export,#btn-shortcuts,#btn-refresh,#mute-btn,#theme-btn,#refresh-ring{display:none}
   .view{padding:10px 12px}
   .pnl-b{max-height:420px}
+  .pnl-h{flex-wrap:wrap;gap:5px}
+  .pnl-h>div{flex-wrap:wrap;gap:4px}
   .cam-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
-  /* Filter quick-buttons scroll horizontally on tablet too */
-  .filter-wrap>div{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  .filter-wrap>div{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:2px}
   .filter-wrap>div::-webkit-scrollbar{height:0}
   .qf-btn{flex-shrink:0}
+  .grid2{grid-template-columns:1fr}
 }
 
-/* ── Search results popup — responsive ──────────────── */
+/* ── Tablet: search results popup ───────────────────── */
 @media(max-width:700px){
-  .search-results{
-    left:8px!important;
-    right:8px!important;
-    width:auto!important;
-    top:0;
-    max-height:70vh
-  }
+  .search-results{left:8px!important;right:8px!important;width:auto!important;top:0;max-height:70vh}
   .toast-area{right:8px;max-width:calc(100vw - 16px)}
   .toast{max-width:100%}
 }
 
-/* ── Mobile ─────────────────────────────────────────── */
+/* ── Mobile (≤600px) ────────────────────────────────── */
 @media(max-width:600px){
-  /* Header: two-row layout — brand+conn on top, search fills bottom */
-  .hdr{padding:6px 10px;gap:4px;flex-wrap:wrap}
-  .hdr h1{font-size:.64rem;letter-spacing:1px}
+  /* ── Header: show hamburger, hide extras by default ── */
+  .hdr{padding:6px 10px;gap:5px;position:relative;flex-wrap:nowrap}
+  .hdr h1{font-size:.65rem;letter-spacing:1px;white-space:nowrap}
+  .hdr .conn{font-size:.56rem;white-space:nowrap}
   .hdr .clock{display:none}
-  .hdr .conn{font-size:.56rem}
-  .hdr .spacer{flex:0 0 100%;display:none} /* kill the spacer so wrapping is predictable */
-  /* Hide all non-essential header buttons */
-  .hdr .btn[onclick*="downloadFullBackup"],
-  .hdr .btn[onclick*="openShortcutModal"],
-  .hdr .btn[onclick*="refreshAll"],
-  .hdr .btn[onclick*="toggleMute"],
-  .hdr .btn[onclick*="window.open"],
-  .hdr #theme-btn{display:none}
-  #mute-btn{display:none}
-  #refresh-ring{display:none}
-  /* Keep danger + logout but compact */
-  .hdr .btn.danger,.hdr .btn[onclick*="doLogout"]{font-size:.58rem;padding:4px 8px}
-  /* Search takes full second row */
-  .search-wrap{width:100%;order:10;margin:2px 0 0;flex-shrink:0}
-  .search-wrap input{width:100%;font-size:.7rem}
+  .hdr .spacer{flex:1;min-width:0}
+  .hdr-extras{
+    display:none;flex-direction:column;align-items:stretch;
+    position:absolute;top:100%;right:0;
+    background:var(--panel);border:1px solid var(--border);
+    border-radius:0 0 var(--radius) var(--radius);
+    box-shadow:0 6px 24px rgba(0,0,0,.18);
+    padding:6px;min-width:160px;z-index:500;gap:3px
+  }
+  .hdr-extras.open{display:flex}
+  .hdr-extras .btn,.hdr-extras .btn.export,.hdr-extras .btn.danger{
+    display:flex!important;width:100%;justify-content:flex-start;
+    font-size:.68rem;padding:7px 10px
+  }
+  .hdr-extras #refresh-ring{display:none}
+  .hdr-menu-btn{display:flex;align-items:center;justify-content:center;flex-shrink:0}
+  /* Search stays in header row, shrinks to fill available space */
+  .search-wrap{flex:1;min-width:0;max-width:200px}
+  .search-wrap input{font-size:.68rem;width:100%}
 
-  /* Stats bar */
+  /* ── Stats bar ── */
   .stat{padding:8px 4px}
-  .stat .n{font-size:1.1rem}
-  .stat .l{font-size:.44rem;letter-spacing:.8px}
+  .stat .n{font-size:1.05rem}
+  .stat .l{font-size:.44rem;letter-spacing:.7px}
 
-  /* Toolbar: stack filter strip above tab strip */
+  /* ── Toolbar ── */
   .toolbar{flex-direction:column}
   .filter-wrap{
     border-right:none;border-bottom:1px solid var(--border);
-    margin:5px 8px;padding:0 0 5px;flex-wrap:wrap;gap:4px
+    margin:5px 8px;padding:0 0 5px;gap:4px;flex-wrap:wrap
   }
   .filter-wrap label{display:none}
   .filter-wrap select{font-size:.66rem;flex:1;min-width:90px}
-  /* Quick-filter inner row: horizontal scroll, no wrap so buttons never break */
   .filter-wrap>div{
     overflow-x:auto;flex-wrap:nowrap;
     -webkit-overflow-scrolling:touch;
@@ -336,126 +333,119 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   #live-mode-btn,#online-count-badge,#last-act-badge{display:none!important}
   .qf-btn{font-size:.54rem!important;padding:2px 5px!important;flex-shrink:0}
 
-  /* Tab strip: horizontal scroll */
+  /* ── Tab strip ── */
   .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .tab{padding:9px 10px;font-size:.56rem;letter-spacing:.5px;flex-shrink:0}
+  .tab{padding:9px 10px;font-size:.56rem;letter-spacing:.4px;flex-shrink:0}
   .tab-badge{font-size:.46rem;padding:1px 3px}
 
-  /* Views */
+  /* ── Views ── */
   .view{padding:8px 8px}
   .grid2,.grid3{grid-template-columns:1fr}
   .pnl-b{max-height:360px}
 
-  /* Panel headers: wrap everything */
+  /* ── Panel headers ── */
   .pnl-h{flex-wrap:wrap;gap:5px;padding:8px 10px}
-  .pnl-h h2{font-size:.55rem;flex:0 1 auto}
+  .pnl-h h2{font-size:.56rem;flex:0 1 auto;margin-right:auto}
   .pnl-h>div{flex-wrap:wrap;gap:4px;width:100%}
-  .pnl-h .btn,.pnl-h .export{font-size:.55rem!important;padding:2px 6px!important}
-  .pnl-h select{font-size:.56rem!important;padding:2px 4px!important}
+  .pnl-h .btn,.pnl-h .export,.pnl-h .btn.danger{
+    font-size:.56rem!important;padding:2px 7px!important
+  }
+  .pnl-h select{font-size:.57rem!important;padding:2px 4px!important;max-width:160px}
   .pnl-h input[type="search"],.pnl-h input[type="text"]{
-    font-size:.56rem!important;padding:3px 6px!important;
-    width:auto!important;flex:1;min-width:80px
+    font-size:.57rem!important;padding:3px 7px!important;
+    width:auto!important;flex:1;min-width:80px!important;max-width:100%!important
   }
 
-  /* Client cards */
+  /* ── Client cards ── */
   .cl{padding:8px 10px 8px 20px}
   .cl .photo-thumb{width:36px;height:36px}
   .cl .cid{font-size:.68rem}
   .cl .meta{font-size:.54rem}
   .cl .dev{display:none}
-  .cl-action-bar{margin-top:4px}
+  .cl-action-bar{margin-top:4px;flex-wrap:wrap}
   .cl-action-btn{font-size:.55rem;padding:2px 5px}
+  #cl-sort-sel{font-size:.57rem;padding:2px 4px}
 
-  /* Overview clients panel header inner actions */
-  #v-overview .pnl-h>div{flex-wrap:wrap;gap:4px;width:auto;margin-left:auto}
-  #cl-sort-sel{font-size:.58rem;padding:2px 4px}
-
-  /* Keystroke entries */
+  /* ── Keys / Clipboard ── */
   .key-entry{padding:7px 10px}
-  .key-entry .key-hdr{flex-wrap:wrap;gap:3px}
-  #keys-search,#clip-search,#visits-search{flex:1;min-width:80px;width:auto!important}
+  .key-entry .key-hdr,.clip-entry .clip-hdr{flex-wrap:wrap;gap:3px}
+  #keys-search,#clip-search,#visits-search{
+    flex:1;width:auto!important;min-width:80px!important
+  }
 
-  /* Clipboard */
-  .clip-entry .clip-hdr{flex-wrap:wrap;gap:3px}
-
-  /* Event log entries */
+  /* ── Events ── */
   .ev{padding:4px 10px;font-size:.62rem}
   .ev .tp{font-size:.46rem;padding:1px 4px}
+  #ev-search{flex:1;width:auto!important;min-width:80px!important;font-size:.6rem!important}
 
-  /* Events filter bar (inside pnl-h) */
-  #ev-search{flex:1;min-width:80px;width:auto!important;font-size:.6rem!important}
-
-  /* Camera view top bar */
+  /* ── Cameras ── */
   #v-cameras>div:first-child{flex-wrap:wrap;gap:6px}
-  /* Camera grid: 1 col on narrow, controls wrap */
   .cam-grid{grid-template-columns:1fr}
   .cam-card .cam-controls{flex-wrap:wrap;gap:4px}
 
-  /* Photos */
+  /* ── Photos ── */
   .pgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 
-  /* Map view */
+  /* ── Map ── */
   #map{height:280px}
   #v-map>div:first-child{flex-wrap:wrap;gap:5px}
 
-  /* Credentials panel header + table */
+  /* ── Credentials ── */
   #v-credentials .pnl-h>div{flex-wrap:wrap;gap:4px;width:100%}
-  #creds-search{flex:1;min-width:80px;width:auto!important;font-size:.58rem!important}
-  #creds-source-filter{flex:1;min-width:80px;font-size:.58rem!important}
+  #creds-search,#creds-source-filter{
+    flex:1;width:auto!important;min-width:80px!important;font-size:.57rem!important
+  }
   #cred-log{overflow-x:auto}
-  #cred-log table{min-width:700px}
+  #cred-log table{min-width:680px}
   #credGeoMap{height:180px!important}
-  #credsSummaryBar{flex-wrap:wrap;gap:4px}
 
-  /* Errors view: action bar wraps, search shrinks */
+  /* ── Errors ── */
   #v-errors>div:first-child{flex-wrap:wrap;justify-content:flex-start!important;gap:5px}
-  #err-search{flex:1;min-width:100px;width:auto!important}
+  #err-search{flex:1;width:auto!important;min-width:100px!important}
 
-  /* Location list: wrap on small screens */
+  /* ── Locations ── */
   .loci{flex-wrap:wrap;gap:4px}
   .loci a{margin-left:0}
 
-  /* Visit entries */
+  /* ── Visit entries ── */
   .visit-entry{flex-wrap:wrap;gap:4px;padding:6px 10px}
   .visit-entry .v-id{min-width:60px}
-  .visit-entry .v-url{min-width:0;max-width:100%;white-space:normal;word-break:break-all}
-  .visit-entry .v-title{max-width:100%;white-space:normal}
+  .visit-entry .v-url{white-space:normal;word-break:break-all;flex:0 0 100%}
+  .visit-entry .v-title{white-space:normal;max-width:100%}
 
-  /* Settings */
+  /* ── Settings ── */
   .settings-grid{grid-template-columns:1fr}
   .cfg-group{padding:10px}
   .cfg-actions{flex-wrap:wrap;gap:6px}
   .cfg-btn{flex:1;min-width:80px}
 
-  /* Commands */
+  /* ── Commands ── */
   .cmd-row{flex-direction:column;align-items:flex-start;gap:5px}
   .cmd-row label{min-width:unset;width:100%}
   .cmd-row select,.cmd-row input,.cmd-row textarea{width:100%}
   .cmd-preset{flex-wrap:wrap}
 
-  /* Timeline */
-  #tl-client-sel,#tl-type-sel{font-size:.62rem;max-width:140px;flex:1}
+  /* ── Timeline ── */
+  #tl-client-sel,#tl-type-sel{flex:1;max-width:140px;font-size:.62rem}
 
-  /* Charts */
+  /* ── Charts ── */
   #trendChart{height:60px!important}
   #activityChart{height:80px!important}
   #weeklyChart{height:70px!important}
 
-  /* Lightbox */
+  /* ── Misc ── */
   .lightbox img{max-width:98%;max-height:90%}
-
-  /* Client summary bar */
   #client-summary-bar{flex-wrap:wrap;gap:5px;padding:5px 10px}
   .csum-pill{font-size:.6rem}
 }
 
 /* ── Very small phones (≤380px) ─────────────────────── */
 @media(max-width:380px){
+  .hdr h1{font-size:.58rem}
   .stats{grid-template-columns:repeat(auto-fit,minmax(68px,1fr))}
   .stat .n{font-size:.9rem}
   .stat .l{font-size:.42rem}
   .tab{padding:8px 8px;font-size:.52rem}
-  .hdr .btn.danger,.hdr .btn[onclick*="doLogout"]{font-size:.54rem;padding:3px 6px}
   .pgrid{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}
   .cam-grid{grid-template-columns:1fr}
   #map{height:240px}
@@ -549,6 +539,7 @@ body[data-dark] .sr-item:hover{background:#25262b}
 body[data-dark] ::-webkit-scrollbar-track{background:#1e1f23}
 body[data-dark] ::-webkit-scrollbar-thumb{background:#454852}
 body[data-dark] .hdr{background:var(--panel);border-color:var(--border)}
+body[data-dark] .hdr-extras{background:var(--panel);border-color:var(--border)}
 body[data-dark] .toolbar{background:var(--panel);border-color:var(--border)}
 body[data-dark] .stats{background:var(--border)}
 body[data-dark] .stat{background:var(--panel)}
@@ -563,15 +554,20 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="conn"><div id="dot" class="dot"></div><span id="connTxt">Connecting...</span></div>
     <div class="spacer"></div>
     <span id="clock" class="clock"></span>
-    <button class="btn" onclick="window.open('/','_blank')">Preview Site</button>
     <div class="search-wrap"><input type="text" id="globalSearch" placeholder="Search everything..." onkeyup="onGlobalSearch(event)"><button class="search-btn" onclick="doGlobalSearch()">🔍</button></div>
-    <button class="btn export" onclick="downloadFullBackup()" title="Download full store as timestamped JSON">⬇ Export JSON</button>
-    <button id="mute-btn" class="btn" onclick="toggleMute()" title="Toggle audio alerts">🔔</button>
-    <span id="refresh-ring" title="Refreshing..."></span><button class="btn" onclick="openShortcutModal()" title="Keyboard shortcuts (?)">⌨ ?</button>
-    <button class="btn" onclick="refreshAll()">↻ Refresh</button>
-    <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
-    <button class="btn danger" onclick="if(confirm('Delete ALL data?'))clearAll()">Clear All</button>
-    <button class="btn" onclick="doLogout()" title="Logout" style="border-color:#a00">🔒 Logout</button>
+    <!-- Secondary actions: inline on desktop, dropdown on mobile -->
+    <div id="hdr-extras" class="hdr-extras">
+        <button class="btn" id="btn-preview" onclick="window.open('/','_blank')">Preview</button>
+        <button class="btn export" id="btn-export" onclick="downloadFullBackup()" title="Export JSON">⬇ Export</button>
+        <button id="mute-btn" class="btn" onclick="toggleMute()" title="Toggle audio alerts">🔔</button>
+        <span id="refresh-ring" title="Refreshing..."></span>
+        <button class="btn" id="btn-shortcuts" onclick="openShortcutModal()" title="Keyboard shortcuts">⌨ ?</button>
+        <button class="btn" id="btn-refresh" onclick="refreshAll()" title="Refresh">↻</button>
+        <button id="theme-btn" class="btn" onclick="toggleTheme()" title="Toggle dark/light mode">🌙</button>
+        <button class="btn danger" id="btn-clearall" onclick="if(confirm('Delete ALL data?'))clearAll()">Clear All</button>
+        <button class="btn" id="btn-logout" onclick="doLogout()" title="Logout" style="border-color:#a00">🔒 Logout</button>
+    </div>
+    <button class="btn hdr-menu-btn" id="hdr-menu-btn" onclick="document.getElementById('hdr-extras').classList.toggle('open')" title="Menu">☰</button>
 </div>
 
 <!-- STATS -->
