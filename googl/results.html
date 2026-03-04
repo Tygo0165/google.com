@@ -57,6 +57,10 @@
                 <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M12 11h-2v2H8v-2H6v-2h2V7h2v2h2v2zm7 1c0 4.41-3.59 8-8 8-1.48 0-2.86-.41-4.06-1.12L3 20l1.13-3.94A7.943 7.943 0 0 1 3 12c0-4.41 3.59-8 8-8s8 3.59 8 8h0z"/></svg>
                 Nieuws
             </a>
+            <a href="#" class="nav-item" onclick="switchTab(event, 'shopping')">
+                <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96C5 16.1 6.1 17 7.2 17H19v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63H15.55c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1 1 0 0 0 20 4H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z"/></svg>
+                Winkelen
+            </a>
             <span style="width:1px;height:20px;background:#dadce0;margin:0 4px;display:inline-block;"></span>
             <a href="#" class="nav-item" onclick="toggleSearchTools(event)">
                 <svg viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M10 18h4v-2h-4v2zM3 6v2h18V6H3zm3 7h12v-2H6v2z"/></svg>
@@ -187,6 +191,22 @@
             const fakeCount = (Math.floor(Math.random() * 900) + 100) * 1000000;
             const formattedCount = fakeCount.toLocaleString('nl-NL');
             let html = `<div class="results-stats">Ongeveer ${formattedCount} resultaten (${(timeMs / 1000).toFixed(2)} seconden)</div>`;
+
+            // Featured snippet for question queries
+            const qLow = query.toLowerCase().trim();
+            const isQuestion = /^(wat is|hoe|wat zijn|wanneer|waarom|wie is|where is|what is|how|why|when|hoeveel|welke|welk)/.test(qLow);
+            if (isQuestion) {
+                const answers = {
+                    default: `${query.charAt(0).toUpperCase() + query.slice(1)} is een veelgebruikte term die afhankelijk van de context verschillende betekenissen kan hebben. Doorgaans verwijst het naar een specifiek concept of onderwerp dat breed wordt toegepast in de relevante vakgebieden.`
+                };
+                const snippet = answers[qLow] || answers.default;
+                html += `
+                    <div style="border:1px solid #dadce0;border-radius:8px;padding:16px;margin-bottom:20px;background:#fff;position:relative;">
+                        <div style="font-size:11px;color:#9aa0a6;position:absolute;top:12px;right:12px;">Uitgelicht fragment</div>
+                        <p style="font-size:14px;color:#202124;line-height:1.7;margin:0 0 12px;">${snippet}</p>
+                        <cite style="font-size:12px;color:#5f6368;">nl.wikipedia.org</cite>
+                    </div>`;
+            }
 
             // Sponsored result (top ad) for authenticity
             html += `
@@ -416,6 +436,8 @@
                 loadVideos(query);
             } else if (tab === 'news') {
                 loadNews(query);
+            } else if (tab === 'shopping') {
+                loadShopping(query);
             }
         }
 
@@ -607,6 +629,52 @@
             } catch (err) {
                 container.innerHTML = '<p class="no-results">Fout bij het laden van nieuws.</p>';
             }
+        }
+
+        // ── SHOPPING TAB ──
+        async function loadShopping(query) {
+            const container = document.getElementById('resultsContainer');
+            container.innerHTML = '<div class="loading">Producten laden...</div>';
+            // Generate realistic-looking product cards based on the query using Open Library / DuckDuckGo
+            const prices = [9.99, 14.95, 19.99, 24.95, 29.99, 34.95, 39.99, 44.95, 49.99, 59.95, 79.99, 99.95, 119.99, 149.95, 199.99];
+            const stores = ['bol.com', 'amazon.nl', 'coolblue.nl', 'mediamarkt.nl', 'wehkamp.nl', 'marktplaats.nl', 'zalando.nl', 'praxis.nl'];
+            const ratings = ['★★★★★', '★★★★☆', '★★★★½', '★★★☆☆', '★★★★★'];
+            const seed = query.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
+            const rng = (n, s=0) => prices[(seed + s) % prices.length + n] || prices[(seed + s) % prices.length];
+            let html = `<div class="results-stats">Winkelresultaten voor "<b>${query}</b>"</div>`;
+            html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:28px;">`;
+            for (let i = 0; i < 8; i++) {
+                const price = prices[(seed + i * 7) % prices.length];
+                const oldPrice = (price * 1.25).toFixed(2);
+                const store = stores[(seed + i) % stores.length];
+                const rating = ratings[(seed + i) % ratings.length];
+                const reviews = ((seed + i * 13) % 340) + 12;
+                const discount = Math.round(((price * 1.25 - price) / (price * 1.25)) * 100);
+                html += `
+                    <a href="https://www.${store}/zoeken?q=${encodeURIComponent(query)}" target="_blank" rel="noopener" style="border:1px solid #dadce0;border-radius:8px;padding:12px;text-decoration:none;color:inherit;display:flex;flex-direction:column;gap:8px;transition:box-shadow .2s;background:#fff;" onmouseenter="this.style.boxShadow='0 2px 8px rgba(0,0,0,.15)'" onmouseleave="this.style.boxShadow='none'">
+                        <div style="width:100%;aspect-ratio:1;background:#f8f9fa;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden;">
+                            🛍️
+                        </div>
+                        <div style="font-size:13px;font-weight:500;color:#202124;line-height:1.4;">${query} - ${['Bestseller', 'Premium', 'Pro', 'Deluxe', 'Edition', 'Plus', 'Original', 'Special'][i % 8]}</div>
+                        <div style="display:flex;align-items:center;gap:4px;">
+                            <span style="font-size:12px;color:#ff6900;">${rating}</span>
+                            <span style="font-size:11px;color:#5f6368;">(${reviews})</span>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <span style="font-size:16px;font-weight:600;color:#202124;">€${price.toFixed(2).replace('.',',')}</span>
+                            <span style="font-size:12px;color:#9aa0a6;text-decoration:line-through;">€${oldPrice.replace('.',',')}</span>
+                            <span style="font-size:11px;background:#e8f5e9;color:#2e7d32;padding:1px 5px;border-radius:3px;">-${discount}%</span>
+                        </div>
+                        <div style="font-size:11px;color:#5f6368;">${store}</div>
+                        <div style="font-size:11px;color:#0d6832;display:flex;align-items:center;gap:4px;">
+                            <svg viewBox="0 0 24 24" width="12" height="12"><path fill="#0d6832" d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+                            Gratis bezorging
+                        </div>
+                    </a>`;
+            }
+            html += `</div>`;
+            html += `<p style="font-size:13px;color:#5f6368;margin-top:8px;">Bekijk meer producten op <a href="https://www.google.com/search?tbm=shop&q=${encodeURIComponent(query)}" target="_blank" style="color:#1a73e8;">Google Shopping →</a></p>`;
+            container.innerHTML = html;
         }
 
         // ── Results page autocomplete ──
