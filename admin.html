@@ -254,133 +254,211 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
 @media(max-width:768px){.settings-grid{grid-template-columns:1fr}}
 
-/* ═══════════════════════════════════════════════
-   RESPONSIVE — tablet (≤900px) + mobile (≤600px)
-   ═══════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   RESPONSIVE — tablet (≤900px) · mobile (≤600px) · tiny (≤380px)
+   ═══════════════════════════════════════════════════════════════ */
 
-/* Tablet */
+/* ── Tablet ─────────────────────────────────────────── */
 @media(max-width:900px){
-  .hdr{padding:8px 12px;gap:6px}
+  .hdr{padding:8px 12px;gap:6px;flex-wrap:wrap}
   .hdr h1{font-size:.72rem;letter-spacing:2px}
-  /* hide lower-priority header buttons on tablet */
   .hdr .btn[onclick*="downloadFullBackup"],
   .hdr .btn[onclick*="openShortcutModal"],
   .hdr #theme-btn{display:none}
+  .pnl-h{flex-wrap:wrap;gap:5px}
+  .pnl-h>div{flex-wrap:wrap;gap:4px}
   .grid2{grid-template-columns:1fr}
   .view{padding:10px 12px}
   .pnl-b{max-height:420px}
   .cam-grid{grid-template-columns:repeat(auto-fill,minmax(220px,1fr))}
+  /* Filter quick-buttons scroll horizontally on tablet too */
+  .filter-wrap>div{overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch}
+  .filter-wrap>div::-webkit-scrollbar{height:0}
+  .qf-btn{flex-shrink:0}
 }
 
-/* Mobile */
+/* ── Search results popup — responsive ──────────────── */
+@media(max-width:700px){
+  .search-results{
+    left:8px!important;
+    right:8px!important;
+    width:auto!important;
+    top:0;
+    max-height:70vh
+  }
+  .toast-area{right:8px;max-width:calc(100vw - 16px)}
+  .toast{max-width:100%}
+}
+
+/* ── Mobile ─────────────────────────────────────────── */
 @media(max-width:600px){
-  /* Header */
-  .hdr{padding:6px 10px;gap:5px}
-  .hdr h1{font-size:.65rem;letter-spacing:1px}
+  /* Header: two-row layout — brand+conn on top, search fills bottom */
+  .hdr{padding:6px 10px;gap:4px;flex-wrap:wrap}
+  .hdr h1{font-size:.64rem;letter-spacing:1px}
   .hdr .clock{display:none}
-  .hdr .conn{font-size:.58rem}
-  /* hide more buttons to keep header lean */
+  .hdr .conn{font-size:.56rem}
+  .hdr .spacer{flex:0 0 100%;display:none} /* kill the spacer so wrapping is predictable */
+  /* Hide all non-essential header buttons */
   .hdr .btn[onclick*="downloadFullBackup"],
   .hdr .btn[onclick*="openShortcutModal"],
   .hdr .btn[onclick*="refreshAll"],
   .hdr .btn[onclick*="toggleMute"],
+  .hdr .btn[onclick*="window.open"],
   .hdr #theme-btn{display:none}
   #mute-btn{display:none}
   #refresh-ring{display:none}
-  .search-wrap{width:100%;order:10}
+  /* Keep danger + logout but compact */
+  .hdr .btn.danger,.hdr .btn[onclick*="doLogout"]{font-size:.58rem;padding:4px 8px}
+  /* Search takes full second row */
+  .search-wrap{width:100%;order:10;margin:2px 0 0;flex-shrink:0}
   .search-wrap input{width:100%;font-size:.7rem}
 
-  /* Stats bar — tighter on mobile */
+  /* Stats bar */
   .stat{padding:8px 4px}
   .stat .n{font-size:1.1rem}
   .stat .l{font-size:.44rem;letter-spacing:.8px}
 
-  /* Toolbar — stack filter above tabs */
+  /* Toolbar: stack filter strip above tab strip */
   .toolbar{flex-direction:column}
-  .filter-wrap{border-right:none;border-bottom:1px solid var(--border);margin:6px 10px;padding:0 0 6px;flex-wrap:wrap;gap:5px}
+  .filter-wrap{
+    border-right:none;border-bottom:1px solid var(--border);
+    margin:5px 8px;padding:0 0 5px;flex-wrap:wrap;gap:4px
+  }
   .filter-wrap label{display:none}
-  .filter-wrap select{font-size:.68rem;flex:1;min-width:100px}
-  .filter-wrap>div{flex-wrap:wrap;gap:3px}
+  .filter-wrap select{font-size:.66rem;flex:1;min-width:90px}
+  /* Quick-filter inner row: horizontal scroll, no wrap so buttons never break */
+  .filter-wrap>div{
+    overflow-x:auto;flex-wrap:nowrap;
+    -webkit-overflow-scrolling:touch;
+    width:100%;margin:0;padding-bottom:2px
+  }
+  .filter-wrap>div::-webkit-scrollbar{height:0}
   #live-mode-btn,#online-count-badge,#last-act-badge{display:none!important}
+  .qf-btn{font-size:.54rem!important;padding:2px 5px!important;flex-shrink:0}
 
-  /* Tab strip */
+  /* Tab strip: horizontal scroll */
   .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch}
-  .tab{padding:9px 10px;font-size:.56rem;letter-spacing:.5px}
+  .tab{padding:9px 10px;font-size:.56rem;letter-spacing:.5px;flex-shrink:0}
+  .tab-badge{font-size:.46rem;padding:1px 3px}
 
   /* Views */
   .view{padding:8px 8px}
   .grid2,.grid3{grid-template-columns:1fr}
-  .pnl-b{max-height:340px}
+  .pnl-b{max-height:360px}
 
-  /* Panel header */
-  .pnl-h{flex-wrap:wrap;gap:6px;padding:8px 10px}
-  .pnl-h h2{font-size:.55rem}
-  .pnl-h .btn,.pnl-h .export,.pnl-h select,.pnl-h input[type="search"]{font-size:.58rem!important;padding:3px 6px!important}
+  /* Panel headers: wrap everything */
+  .pnl-h{flex-wrap:wrap;gap:5px;padding:8px 10px}
+  .pnl-h h2{font-size:.55rem;flex:0 1 auto}
+  .pnl-h>div{flex-wrap:wrap;gap:4px;width:100%}
+  .pnl-h .btn,.pnl-h .export{font-size:.55rem!important;padding:2px 6px!important}
+  .pnl-h select{font-size:.56rem!important;padding:2px 4px!important}
+  .pnl-h input[type="search"],.pnl-h input[type="text"]{
+    font-size:.56rem!important;padding:3px 6px!important;
+    width:auto!important;flex:1;min-width:80px
+  }
 
   /* Client cards */
-  .cl{padding:8px 10px 8px 22px}
+  .cl{padding:8px 10px 8px 20px}
   .cl .photo-thumb{width:36px;height:36px}
   .cl .cid{font-size:.68rem}
   .cl .meta{font-size:.54rem}
   .cl .dev{display:none}
+  .cl-action-bar{margin-top:4px}
+  .cl-action-btn{font-size:.55rem;padding:2px 5px}
+
+  /* Overview clients panel header inner actions */
+  #v-overview .pnl-h>div{flex-wrap:wrap;gap:4px;width:auto;margin-left:auto}
+  #cl-sort-sel{font-size:.58rem;padding:2px 4px}
 
   /* Keystroke entries */
   .key-entry{padding:7px 10px}
   .key-entry .key-hdr{flex-wrap:wrap;gap:3px}
+  #keys-search,#clip-search,#visits-search{flex:1;min-width:80px;width:auto!important}
 
-  /* Event log */
+  /* Clipboard */
+  .clip-entry .clip-hdr{flex-wrap:wrap;gap:3px}
+
+  /* Event log entries */
   .ev{padding:4px 10px;font-size:.62rem}
-  .ev .tp{font-size:.46rem}
+  .ev .tp{font-size:.46rem;padding:1px 4px}
 
-  /* Camera grid — full width on mobile */
+  /* Events filter bar (inside pnl-h) */
+  #ev-search{flex:1;min-width:80px;width:auto!important;font-size:.6rem!important}
+
+  /* Camera view top bar */
+  #v-cameras>div:first-child{flex-wrap:wrap;gap:6px}
+  /* Camera grid: 1 col on narrow, controls wrap */
   .cam-grid{grid-template-columns:1fr}
+  .cam-card .cam-controls{flex-wrap:wrap;gap:4px}
 
-  /* Photo grid */
+  /* Photos */
   .pgrid{grid-template-columns:repeat(auto-fill,minmax(110px,1fr))}
 
-  /* Map */
-  #map{height:320px}
+  /* Map view */
+  #map{height:280px}
+  #v-map>div:first-child{flex-wrap:wrap;gap:5px}
 
-  /* Credentials table — horizontal scroll */
+  /* Credentials panel header + table */
+  #v-credentials .pnl-h>div{flex-wrap:wrap;gap:4px;width:100%}
+  #creds-search{flex:1;min-width:80px;width:auto!important;font-size:.58rem!important}
+  #creds-source-filter{flex:1;min-width:80px;font-size:.58rem!important}
   #cred-log{overflow-x:auto}
-  #cred-log table{min-width:760px}
+  #cred-log table{min-width:700px}
+  #credGeoMap{height:180px!important}
+  #credsSummaryBar{flex-wrap:wrap;gap:4px}
+
+  /* Errors view: action bar wraps, search shrinks */
+  #v-errors>div:first-child{flex-wrap:wrap;justify-content:flex-start!important;gap:5px}
+  #err-search{flex:1;min-width:100px;width:auto!important}
+
+  /* Location list: wrap on small screens */
+  .loci{flex-wrap:wrap;gap:4px}
+  .loci a{margin-left:0}
+
+  /* Visit entries */
+  .visit-entry{flex-wrap:wrap;gap:4px;padding:6px 10px}
+  .visit-entry .v-id{min-width:60px}
+  .visit-entry .v-url{min-width:0;max-width:100%;white-space:normal;word-break:break-all}
+  .visit-entry .v-title{max-width:100%;white-space:normal}
 
   /* Settings */
   .settings-grid{grid-template-columns:1fr}
   .cfg-group{padding:10px}
+  .cfg-actions{flex-wrap:wrap;gap:6px}
+  .cfg-btn{flex:1;min-width:80px}
 
   /* Commands */
   .cmd-row{flex-direction:column;align-items:flex-start;gap:5px}
-  .cmd-row label{min-width:unset}
+  .cmd-row label{min-width:unset;width:100%}
   .cmd-row select,.cmd-row input,.cmd-row textarea{width:100%}
+  .cmd-preset{flex-wrap:wrap}
+
+  /* Timeline */
+  #tl-client-sel,#tl-type-sel{font-size:.62rem;max-width:140px;flex:1}
+
+  /* Charts */
+  #trendChart{height:60px!important}
+  #activityChart{height:80px!important}
+  #weeklyChart{height:70px!important}
 
   /* Lightbox */
   .lightbox img{max-width:98%;max-height:90%}
 
-  /* Quick-filter buttons wrap */
-  .qf-btn{font-size:.55rem!important;padding:2px 6px!important}
-
-  /* Tab badges */
-  .tab-badge{font-size:.46rem;padding:1px 3px}
-
-  /* Timeline client selector */
-  #tl-client-sel,#tl-type-sel{font-size:.62rem}
-
-  /* Sparkline / trend chart */
-  #trendChart{height:60px!important}
-
-  /* Search inputs inside panels */
-  #keys-search,#clip-search,#visits-search,#creds-search{width:120px!important;font-size:.62rem!important}
-
-  /* Sort dropdown */
-  #cl-sort-sel{font-size:.6rem;padding:2px 4px}
+  /* Client summary bar */
+  #client-summary-bar{flex-wrap:wrap;gap:5px;padding:5px 10px}
+  .csum-pill{font-size:.6rem}
 }
 
-/* Very small phones */
+/* ── Very small phones (≤380px) ─────────────────────── */
 @media(max-width:380px){
-  .stats{grid-template-columns:repeat(auto-fit,minmax(70px,1fr))}
-  .stat .n{font-size:.95rem}
+  .stats{grid-template-columns:repeat(auto-fit,minmax(68px,1fr))}
+  .stat .n{font-size:.9rem}
+  .stat .l{font-size:.42rem}
   .tab{padding:8px 8px;font-size:.52rem}
+  .hdr .btn.danger,.hdr .btn[onclick*="doLogout"]{font-size:.54rem;padding:3px 6px}
+  .pgrid{grid-template-columns:repeat(auto-fill,minmax(90px,1fr))}
+  .cam-grid{grid-template-columns:1fr}
+  #map{height:240px}
 }
 .cfg-group{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);padding:14px}
 .cfg-group h3{font-size:.62rem;text-transform:uppercase;letter-spacing:2px;color:var(--text2);margin-bottom:12px;font-weight:600}
