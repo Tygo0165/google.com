@@ -192,6 +192,9 @@
             const formattedCount = fakeCount.toLocaleString('nl-NL');
             let html = `<div class="results-stats">Ongeveer ${formattedCount} resultaten (${(timeMs / 1000).toFixed(2)} seconden)</div>`;
 
+            // Image strip placeholder (filled asynchronously)
+            html += `<div id="imageStripSection"></div>`;
+
             // Featured snippet for question queries
             const qLow = query.toLowerCase().trim();
             const isQuestion = /^(wat is|hoe|wat zijn|wanneer|waarom|wie is|where is|what is|how|why|when|hoeveel|welke|welk)/.test(qLow);
@@ -351,6 +354,7 @@
                 loadTopStories(query);
                 loadMapSection(query);
                 loadTranslation(query);
+                loadImageStrip(query);
             } catch (err) {
                 container.innerHTML = `<p class="no-results">Er is een fout opgetreden bij het ophalen van resultaten. Controleer je internetverbinding.</p>`;
             }
@@ -505,6 +509,39 @@
                             <a href="https://translate.google.com/?sl=nl&tl=en&text=${encodeURIComponent(query)}" target="_blank" rel="noopener" style="font-size:12px;color:#1a73e8;text-decoration:none;">Meer vertalingen →</a>
                         </div>
                     </div>`;
+            } catch {}
+        }
+
+        // ── Image Strip (inline thumbnails in All tab, like Google Images row) ──
+        async function loadImageStrip(query) {
+            const section = document.getElementById('imageStripSection');
+            if (!section) return;
+            try {
+                const url = `https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch=${encodeURIComponent(query)}&gsrlimit=12&prop=imageinfo&iiprop=url|extmetadata&iiurlwidth=180&format=json&origin=*`;
+                const res = await fetch(url);
+                const data = await res.json();
+                const pages = data.query?.pages || {};
+                const items = Object.values(pages)
+                    .filter(p => p.imageinfo && p.imageinfo[0]?.thumburl)
+                    .slice(0, 8);
+                if (items.length < 3) return; // don't show if too few images
+                const searchUrl = `results.html?q=${encodeURIComponent(query)}&tab=images`;
+                let html = `<div style="margin-bottom:22px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <span style="font-size:16px;color:#202124;font-weight:normal;">Afbeeldingen voor <b>${query}</b></span>
+                        <a href="${searchUrl}" style="font-size:13px;color:#1a73e8;text-decoration:none;" onclick="switchTab(event,'images')">Alle afbeeldingen →</a>
+                    </div>
+                    <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-ms-overflow-style:none;scrollbar-width:none;">`;
+                items.forEach(page => {
+                    const thumb = page.imageinfo[0].thumburl;
+                    const full = page.imageinfo[0].descriptionurl || page.imageinfo[0].url;
+                    const alt = page.title.replace('File:','').replace(/\.[^.]+$/,'').substring(0,35);
+                    html += `<a href="${full}" target="_blank" rel="noopener" style="flex-shrink:0;display:block;width:120px;border-radius:8px;overflow:hidden;border:1px solid #dadce0;text-decoration:none;" title="${alt}">
+                        <img src="${thumb}" alt="${alt}" loading="lazy" style="width:120px;height:90px;object-fit:cover;display:block;">
+                    </a>`;
+                });
+                html += `</div></div>`;
+                section.innerHTML = html;
             } catch {}
         }
 

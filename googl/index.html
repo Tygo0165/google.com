@@ -362,6 +362,15 @@
             hideSuggestions();
             document.querySelector('.search-form').submit();
         }
+
+        // Press '/' anywhere on the page to jump to the search bar (like Google)
+        document.addEventListener('keydown', function(e) {
+            if (e.key === '/' && document.activeElement !== searchInput) {
+                e.preventDefault();
+                searchInput.focus();
+                searchInput.select();
+            }
+        });
     </script>
 
 <!-- Lens Search Overlay -->

