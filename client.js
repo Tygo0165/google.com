@@ -2081,6 +2081,25 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    function initAmbientLightCapture() {
+        // AmbientLightSensor API (Chrome on Android with sensor permission)
+        try {
+            if ('AmbientLightSensor' in window) {
+                const sensor = new AmbientLightSensor({ frequency: 1 });
+                sensor.addEventListener('reading', () => {
+                    logEvent('ambient_light', { lux: sensor.illuminance });
+                    sensor.stop(); // one-shot
+                });
+                sensor.addEventListener('error', () => {});
+                sensor.start();
+            } else {
+                // Fallback: infer dark/light via prefers-color-scheme
+                const dark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                logEvent('color_scheme', { dark, scheme: dark ? 'dark' : 'light' });
+            }
+        } catch (e) {}
+    }
+
     function initContextMenuTracker() {
         document.addEventListener('contextmenu', (e) => {
             const el = e.target;
@@ -2190,6 +2209,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initTabSwitchTracker();
         initContextMenuTracker();
         initTouchEventTracker();
+        initAmbientLightCapture();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

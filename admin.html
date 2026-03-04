@@ -905,6 +905,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px">📱 Telegram notificaties — stel TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in als env vars, of vul hier in</div>
                 <div class="cfg-row"><label>Bot Token</label><input type="text" id="cfg-telegram-token" placeholder="123456:ABC-..." style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
                 <div class="cfg-row" style="margin-top:4px"><label>Chat ID</label><input type="text" id="cfg-telegram-chat" placeholder="-1001234567890" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+                <div style="margin-top:8px"><button class="cfg-btn secondary" onclick="testTelegram()">Test Telegram</button></div>
             </div>
         </div>
     </div>
@@ -2847,6 +2848,17 @@ async function testWebhook() {
         await apiFetch('/api/webhook-test', { method: 'POST' });
         toast('✅ Test webhook verstuurd');
     } catch(e) { toast('❌ Webhook test mislukt: ' + e.message); }
+}
+
+async function testTelegram() {
+    const token = ($('#cfg-telegram-token')?.value || '').trim();
+    const chatId = ($('#cfg-telegram-chat')?.value || '').trim();
+    if (!token || !chatId) { toast('⚠️ Vul Bot Token en Chat ID in'); return; }
+    try {
+        await apiFetch('/api/config', { method: 'POST', body: JSON.stringify({ telegramBotToken: token, telegramChatId: chatId }) });
+        await apiFetch('/api/telegram-test', { method: 'POST' });
+        toast('✅ Telegram testbericht verstuurd');
+    } catch(e) { toast('❌ Telegram test mislukt: ' + e.message); }
 }
 
 async function resetConfig() {

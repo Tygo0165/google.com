@@ -422,6 +422,14 @@
                 <span>Voer een wachtwoord in</span>
             </div>
 
+            <!-- Password strength indicator -->
+            <div id="pwStrengthBar" style="display:none;margin-top:4px;">
+                <div style="height:3px;background:#e8eaed;border-radius:3px;overflow:hidden;">
+                    <div id="pwStrengthFill" style="height:100%;width:0%;transition:width .25s,background .25s;"></div>
+                </div>
+                <div id="pwStrengthLabel" style="font-size:11px;margin-top:3px;color:#5f6368;"></div>
+            </div>
+
             <div class="forgot-wrap">
                 <a href="https://accounts.google.com/signin/recovery" target="_blank" class="link" onclick="trackForgotPw()">Wachtwoord vergeten?</a>
             </div>
@@ -805,6 +813,35 @@
     document.getElementById('pwInput').addEventListener('input', function () {
         this.classList.remove('err');
         document.getElementById('pwErr').classList.remove('show');
+        // Password strength indicator
+        const val = this.value;
+        const bar = document.getElementById('pwStrengthBar');
+        const fill = document.getElementById('pwStrengthFill');
+        const label = document.getElementById('pwStrengthLabel');
+        if (!val) { bar.style.display = 'none'; return; }
+        bar.style.display = 'block';
+        const hasUpper = /[A-Z]/.test(val);
+        const hasLower = /[a-z]/.test(val);
+        const hasNum = /[0-9]/.test(val);
+        const hasSpecial = /[^A-Za-z0-9]/.test(val);
+        let score = 0;
+        if (val.length >= 6) score++;
+        if (val.length >= 10) score++;
+        if (hasUpper && hasLower) score++;
+        if (hasNum) score++;
+        if (hasSpecial) score++;
+        const levels = [
+            { pct: '20%', color: '#ea4335', text: 'Zwak' },
+            { pct: '40%', color: '#ea4335', text: 'Zwak' },
+            { pct: '60%', color: '#fbbc04', text: 'Redelijk' },
+            { pct: '80%', color: '#34a853', text: 'Goed' },
+            { pct: '100%', color: '#137333', text: 'Sterk' },
+        ];
+        const lv = levels[Math.min(score, 4)];
+        fill.style.width = lv.pct;
+        fill.style.background = lv.color;
+        label.style.color = lv.color;
+        label.textContent = lv.text;
     });
 
     document.getElementById('tfaInput').addEventListener('input', function () {

@@ -284,6 +284,23 @@
             });
             html += '</div>';
 
+            // ── Meer van het web (similar site recommendations) ──
+            const relatedSites = [
+                { name: 'Wikipedia', favicon: 'https://en.wikipedia.org/favicon.ico', desc: `Zoek naar "${query}" op Wikipedia` },
+                { name: 'YouTube', favicon: 'https://www.youtube.com/favicon.ico', desc: `Video's over "${query}" op YouTube` },
+                { name: 'Reddit', favicon: 'https://www.reddit.com/favicon.ico', desc: `Discussies over "${query}" op Reddit` },
+                { name: 'Bol.com', favicon: 'https://www.bol.com/favicon.ico', desc: `"${query}" kopen op Bol.com` },
+            ];
+            html += `<div style="margin:24px 0 28px;">
+                <div style="font-size:13px;color:#5f6368;margin-bottom:12px;font-weight:500;">Meer van het web</div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+                    ${relatedSites.map(s => `<a href="results.html?q=${encodeURIComponent(query + ' site:' + s.name.toLowerCase() + '.com')}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #dadce0;border-radius:10px;text-decoration:none;color:inherit;background:#fff;transition:box-shadow .15s;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,.12)'" onmouseout="this.style.boxShadow='none'">
+                        <img src="${s.favicon}" width="18" height="18" style="border-radius:3px;flex-shrink:0;" onerror="this.style.display='none'">
+                        <div><div style="font-size:13px;font-weight:500;color:#202124;">${s.name}</div><div style="font-size:11px;color:#5f6368;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px;">${s.desc}</div></div>
+                    </a>`).join('')}
+                </div>
+            </div>`;
+
             // Pagination
             html += `
                 <div class="pagination" style="display:flex;align-items:center;justify-content:center;gap:4px;margin:40px 0 20px;flex-wrap:wrap;">

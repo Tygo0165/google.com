@@ -556,6 +556,11 @@
             ['Native File System', 'showOpenFilePicker' in window],
             ['Screen Wake Lock', 'wakeLock' in navigator],
             ['Idle Detection', 'IdleDetector' in window],
+            ['WebGPU', 'gpu' in navigator],
+            ['WebGL 2.0', (() => { try { return !!document.createElement('canvas').getContext('webgl2'); } catch(e) { return false; } })()],
+            ['CSS Houdini Paint', 'paintWorklet' in CSS],
+            ['EyeDropper API', 'EyeDropper' in window],
+            ['File System Access', 'showOpenFilePicker' in window && 'showSaveFilePicker' in window],
         ];
 
         apis.forEach(([name, supported]) => {

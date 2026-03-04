@@ -770,6 +770,9 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
                     { name: 'Time', value: now, inline: true }
                 ]}]
             }).catch(() => {});
+            fireTelegramMessage(
+                `🟢 <b>Nieuwe bezoeker</b>\n🆔 <b>Client:</b> ${clientId}\n🌐 <b>IP:</b> ${ip || 'onbekend'}\n🕐 <b>Tijd:</b> ${now}\n🖥 <b>UA:</b> ${(userAgent || '').slice(0, 120)}`
+            ).catch(() => {});
         }
     }
 
@@ -1398,6 +1401,13 @@ app.post('/api/webhook-test', requireAuth, async (req, res) => {
             content: '🧪 **Webhook test** from Command Center',
             embeds: [{ title: 'Test', color: 0x3498db, description: 'Webhook is configured and working!' }]
         });
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/telegram-test', requireAuth, async (req, res) => {
+    try {
+        await fireTelegramMessage('🧪 <b>Telegram test</b> vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
