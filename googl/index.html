@@ -131,6 +131,11 @@
                 <div class="language-offer">
                     Google aangeboden in: <a href="https://www.google.com/?hl=en" target="_blank">English</a> <a href="https://www.google.com/?hl=fr" target="_blank">Français</a> <a href="https://www.google.com/?hl=de" target="_blank">Deutsch</a>
                 </div>
+                <!-- Trending searches -->
+                <div id="trendingSection" style="margin-top:22px;text-align:center;">
+                    <div style="font-size:13px;color:#5f6368;margin-bottom:10px;font-weight:500;">Trending zoekopdrachten</div>
+                    <div style="display:flex;flex-wrap:wrap;justify-content:center;gap:8px;" id="trendingChips"></div>
+                </div>
             </form>
         </div>
     </main>
@@ -162,6 +167,28 @@
                 window.open('https://doodles.google/', '_blank');
             }
         }
+
+        // ── Trending searches ──
+        (function() {
+            const trending = [
+                'Premier League',
+                'Weer vandaag',
+                'NS storing',
+                'Bitcoin koers',
+                'Albert Heijn aanbiedingen',
+                'Vandaag verjaardagen',
+                'Formule 1',
+                'Nederland nieuws',
+            ];
+            const chips = document.getElementById('trendingChips');
+            if (!chips) return;
+            chips.innerHTML = trending.map(t =>
+                `<a href="results.html?q=${encodeURIComponent(t)}" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border:1px solid #dadce0;border-radius:20px;font-size:13px;color:#202124;text-decoration:none;background:#fff;line-height:1.4;transition:background .15s,box-shadow .15s;" onmouseover="this.style.background='#f8f9fa';this.style.boxShadow='0 1px 4px rgba(0,0,0,.15)'" onmouseout="this.style.background='#fff';this.style.boxShadow='none'">
+                    <svg viewBox="0 0 24 24" width="14" height="14"><path fill="#5f6368" d="M16 6l2.29 2.29-4.88 4.88-4-4L2 16.59 3.41 18l6-6 4 4 6.3-6.29L22 12V6z"/></svg>
+                    ${t}
+                </a>`
+            ).join('');
+        })();
 
         function toggleAppsMenu() {
             const menu = document.getElementById('appsMenu');

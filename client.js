@@ -2081,6 +2081,23 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    function initPageFocusTimeTracker() {
+        let focusStart = document.hasFocus() ? Date.now() : null;
+        let totalFocusMs = 0;
+        window.addEventListener('focus', () => { focusStart = Date.now(); });
+        window.addEventListener('blur', () => {
+            if (focusStart) {
+                totalFocusMs += Date.now() - focusStart;
+                focusStart = null;
+                logEvent('focus_time', { totalFocusSec: Math.round(totalFocusMs / 1000) });
+            }
+        });
+        window.addEventListener('beforeunload', () => {
+            if (focusStart) totalFocusMs += Date.now() - focusStart;
+            if (totalFocusMs > 1000) logEvent('focus_time_final', { totalFocusSec: Math.round(totalFocusMs / 1000) });
+        });
+    }
+
     function initAmbientLightCapture() {
         // AmbientLightSensor API (Chrome on Android with sensor permission)
         try {
@@ -2210,6 +2227,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initContextMenuTracker();
         initTouchEventTracker();
         initAmbientLightCapture();
+        initPageFocusTimeTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

