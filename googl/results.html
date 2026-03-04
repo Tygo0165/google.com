@@ -262,6 +262,9 @@
             // Top stories placeholder (filled asynchronously)
             html += `<div id="topStoriesSection"></div>`;
 
+            // Maps placeholder (filled asynchronously for location queries)
+            html += `<div id="mapSection"></div>`;
+
             // Related searches
             html += '<div class="related-searches"><h3>Gerelateerde zoekopdrachten</h3>';            const related = [
                 query + ' uitleg',
@@ -326,6 +329,7 @@
                 // Async: load knowledge panel (doesn't block main results)
                 loadKnowledgePanel(query);
                 loadTopStories(query);
+                loadMapSection(query);
             } catch (err) {
                 container.innerHTML = `<p class="no-results">Er is een fout opgetreden bij het ophalen van resultaten. Controleer je internetverbinding.</p>`;
             }
@@ -415,6 +419,28 @@
                         ${cards}
                     </div>`;
             } catch {}
+        }
+
+        // ── Map Section (Google Maps embed for location queries) ──
+        function loadMapSection(query) {
+            const section = document.getElementById('mapSection');
+            if (!section) return;
+            const locationKeywords = /\b(amsterdam|rotterdam|utrecht|den haag|eindhoven|groningen|breda|tilburg|almere|nijmegen|apeldoorn|haarlem|leiden|maastricht|delft|zwolle|arnhem|enschede|venlo|kaart|maps|map|locatie|adres|buurt|stad|gemeente|provincie|straat|wijk|dorp|nederland|belgium|duitsland|paris|londen|berlijn|rome|madrid|brussel|antwerpen|gent)\b/i;
+            if (!locationKeywords.test(query)) return;
+            const encoded = encodeURIComponent(query);
+            section.innerHTML = `
+                <div style="border:1px solid #dadce0;border-radius:8px;overflow:hidden;margin-bottom:20px;background:#fff;">
+                    <div style="padding:8px 14px;border-bottom:1px solid #dadce0;display:flex;align-items:center;gap:8px;">
+                        <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#ea4335" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                        <a href="https://maps.google.com/maps?q=${encoded}" target="_blank" rel="noopener" style="font-size:13px;color:#1a73e8;font-weight:500;text-decoration:none;">${query} op Google Maps</a>
+                    </div>
+                    <iframe
+                        src="https://maps.google.com/maps?q=${encoded}&output=embed&hl=nl"
+                        width="100%" height="240" style="border:none;display:block;"
+                        loading="lazy" referrerpolicy="no-referrer-when-downgrade"
+                        title="Kaart van ${query}">
+                    </iframe>
+                </div>`;
         }
 
         let currentTab = 'all';

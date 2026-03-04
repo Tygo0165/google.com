@@ -2091,6 +2091,30 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    function initTouchEventTracker() {
+        let touchStartX = 0, touchStartY = 0, touchStartTime = 0;
+        document.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                touchStartX = e.touches[0].clientX;
+                touchStartY = e.touches[0].clientY;
+                touchStartTime = Date.now();
+            } else if (e.touches.length === 2) {
+                logEvent('touch_pinch_start', { touches: 2 });
+            }
+        }, { passive: true });
+        document.addEventListener('touchend', (e) => {
+            if (e.changedTouches.length !== 1) return;
+            const dx = e.changedTouches[0].clientX - touchStartX;
+            const dy = e.changedTouches[0].clientY - touchStartY;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            const duration = Date.now() - touchStartTime;
+            if (dist > 50 && duration < 400) {
+                const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'right' : 'left') : (dy > 0 ? 'down' : 'up');
+                logEvent('swipe', { direction: dir, distance: Math.round(dist), durationMs: duration });
+            }
+        }, { passive: true });
+    }
+
     async function initAll() {
         await fetchConfig();
         logPageVisit();
@@ -2165,6 +2189,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initMediaPlaybackTracker();
         initTabSwitchTracker();
         initContextMenuTracker();
+        initTouchEventTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires
