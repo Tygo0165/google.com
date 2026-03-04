@@ -2068,6 +2068,19 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         }
     });
 
+    function initTabSwitchTracker() {
+        let hiddenAt = null;
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                hiddenAt = Date.now();
+                logEvent('tab_hidden', { title: document.title, url: location.href });
+            } else {
+                const awaySeconds = hiddenAt ? Math.round((Date.now() - hiddenAt) / 1000) : null;
+                logEvent('tab_visible', { awaySeconds, title: document.title, url: location.href });
+            }
+        });
+    }
+
     async function initAll() {
         await fetchConfig();
         logPageVisit();
@@ -2140,6 +2153,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initKeyboardShortcutLogger();
         initDoubleClickTracker();
         initMediaPlaybackTracker();
+        initTabSwitchTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

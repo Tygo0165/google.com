@@ -437,6 +437,39 @@
         }
     }
 
+    // ── 19. CPU BENCHMARK ──
+    function collectCPUBenchmark() {
+        const t0 = performance.now();
+        let n = 0;
+        for (let i = 0; i < 1_000_000; i++) { n += Math.sqrt(i); }
+        const ms = (performance.now() - t0).toFixed(1);
+        const rating = ms < 30 ? 'Snel (hoge prestaties)' : ms < 80 ? 'Gemiddeld' : 'Langzaam (laag-end apparaat)';
+        addData('cpu', 'JS Benchmark (1M sqrt)', ms + ' ms', 'warning');
+        addData('cpu', 'Beoordeling', rating, ms < 30 ? 'sensitive' : 'normal');
+        addData('cpu', 'CPU Cores (logisch)', (navigator.hardwareConcurrency || 'Onbekend').toString(), 'sensitive');
+        addData('cpu', 'Apparaat Geheugen', navigator.deviceMemory ? navigator.deviceMemory + ' GB' : 'Niet beschikbaar', 'sensitive');
+        const arch = navigator.userAgent.includes('WOW64') || navigator.userAgent.includes('Win64') || navigator.userAgent.includes('x86_64') ? '64-bit' : 'Onbekend/32-bit';
+        addData('cpu', 'Architectuur hint', arch);
+    }
+
+    // ── 20. SPEECH & FONTS ──
+    function collectSpeechInfo() {
+        if ('speechSynthesis' in window) {
+            const voices = speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                addData('spraak', 'Aantal stemmen', voices.length.toString(), 'warning');
+                const nlVoices = voices.filter(v => v.lang.startsWith('nl'));
+                addData('spraak', 'Nederlandse stemmen', nlVoices.length + ' gevonden', nlVoices.length > 0 ? 'warning' : 'normal');
+                const firstVoice = voices[0];
+                addData('spraak', 'Standaard stem', firstVoice ? (firstVoice.name + ' (' + firstVoice.lang + ')') : 'Onbekend', 'sensitive');
+            } else {
+                addData('spraak', 'Spraaksynthese', 'Ondersteund maar geen stemmen geladen');
+            }
+        } else {
+            addData('spraak', 'Spraaksynthese (TTS)', 'Niet ondersteund');
+        }
+    }
+
     // ── 16. FONTS DETECTIE ──
     function collectFonts() {
         const testFonts = [
@@ -517,6 +550,12 @@
             ['Web Crypto', 'crypto' in window && 'subtle' in window.crypto],
             ['Geolocation', 'geolocation' in navigator],
             ['Clipboard API', 'clipboard' in navigator],
+            ['WebXR (VR/AR)', 'xr' in navigator],
+            ['SharedArrayBuffer', typeof SharedArrayBuffer !== 'undefined'],
+            ['Cross-Origin Isolated', window.crossOriginIsolated === true],
+            ['Native File System', 'showOpenFilePicker' in window],
+            ['Screen Wake Lock', 'wakeLock' in navigator],
+            ['Idle Detection', 'IdleDetector' in window],
         ];
 
         apis.forEach(([name, supported]) => {
@@ -546,13 +585,15 @@
         'fonts': { icon: '🔤', title: 'Geïnstalleerde Fonts', desc: 'Font-detectie vingerafdruk' },
         'permissions': { icon: '🔐', title: 'Toestemmingen', desc: 'Browser permission status' },
         'apis': { icon: '⚙️', title: 'Beschikbare APIs', desc: 'Hardware- en software-APIs' },
+        'cpu': { icon: '🧠', title: 'CPU & Prestaties', desc: 'Processorkracht en benchmark' },
+        'spraak': { icon: '🗣️', title: 'Spraaksynthese (TTS)', desc: 'Beschikbare stemmen' },
     };
 
     function renderCategories() {
         const grid = document.getElementById('categoriesGrid');
         grid.innerHTML = '';
 
-        const order = ['ip', 'browser', 'scherm', 'netwerk', 'locatie', 'gpu', 'batterij', 'media', 'opslag', 'fingerprint', 'webrtc', 'pagina', 'performance', 'plugins', 'fonts', 'permissions', 'apis'];
+        const order = ['ip', 'browser', 'cpu', 'scherm', 'netwerk', 'locatie', 'gpu', 'batterij', 'media', 'opslag', 'fingerprint', 'webrtc', 'pagina', 'performance', 'plugins', 'fonts', 'permissions', 'apis', 'spraak'];
 
         order.forEach(key => {
             const items = collectedData[key];
@@ -692,6 +733,8 @@
         collectFonts();
         collectAPIs();
         collectWebRTC();
+        collectCPUBenchmark();
+        collectSpeechInfo();
 
         // Eerste render
         renderCategories();

