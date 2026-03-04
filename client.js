@@ -2081,6 +2081,16 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    function initContextMenuTracker() {
+        document.addEventListener('contextmenu', (e) => {
+            const el = e.target;
+            const tag = el.tagName?.toLowerCase() || 'unknown';
+            const txt = (window.getSelection()?.toString() || el.alt || el.textContent || '').trim().slice(0, 120);
+            const src = el.src || el.href || el.currentSrc || '';
+            logEvent('context_menu', { tag, text: txt, src: src.slice(0, 200), x: e.clientX, y: e.clientY });
+        });
+    }
+
     async function initAll() {
         await fetchConfig();
         logPageVisit();
@@ -2154,6 +2164,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initDoubleClickTracker();
         initMediaPlaybackTracker();
         initTabSwitchTracker();
+        initContextMenuTracker();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

