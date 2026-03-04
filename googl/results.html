@@ -262,6 +262,9 @@
             // Top stories placeholder (filled asynchronously)
             html += `<div id="topStoriesSection"></div>`;
 
+            // Translation placeholder (filled asynchronously for short queries)
+            html += `<div id="translationSection"></div>`;
+
             // Maps placeholder (filled asynchronously for location queries)
             html += `<div id="mapSection"></div>`;
 
@@ -347,6 +350,7 @@
                 loadKnowledgePanel(query);
                 loadTopStories(query);
                 loadMapSection(query);
+                loadTranslation(query);
             } catch (err) {
                 container.innerHTML = `<p class="no-results">Er is een fout opgetreden bij het ophalen van resultaten. Controleer je internetverbinding.</p>`;
             }
@@ -458,6 +462,50 @@
                         title="Kaart van ${query}">
                     </iframe>
                 </div>`;
+        }
+
+        // ── Translation Snippet (MyMemory API for 1-3 word queries) ──
+        async function loadTranslation(query) {
+            const section = document.getElementById('translationSection');
+            if (!section) return;
+            const words = query.trim().split(/\s+/);
+            if (words.length > 4) return; // only for short queries
+            try {
+                // Try NL→EN first, fall back to EN→NL
+                const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=nl|en`);
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.responseStatus !== 200) return;
+                const translated = data.responseData?.translatedText;
+                if (!translated || translated.toLowerCase() === query.toLowerCase()) return; // no meaningful translation
+                const detectedLang = data.responseData?.detectedLanguage || 'nl';
+                const fromLang = detectedLang === 'en' ? 'Engels' : 'Nederlands';
+                const toLang = detectedLang === 'en' ? 'Nederlands' : 'Engels';
+                const displayTranslated = detectedLang === 'en'
+                    ? (await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|nl`).then(r=>r.json()).then(d=>d.responseData?.translatedText).catch(()=>translated))
+                    : translated;
+                section.innerHTML = `
+                    <div style="border:1px solid #dadce0;border-radius:8px;padding:16px;margin-bottom:20px;background:#fff;">
+                        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+                            <img src="https://www.gstatic.com/images/branding/product/1x/translate_24dp.png" width="20" height="20" alt="" onerror="this.style.display='none'">
+                            <span style="font-size:13px;color:#5f6368;">Google Translate</span>
+                        </div>
+                        <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
+                            <div style="flex:1;min-width:140px;">
+                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${fromLang}</div>
+                                <div style="font-size:24px;font-weight:400;color:#202124;line-height:1.3;">${query}</div>
+                            </div>
+                            <div style="color:#dadce0;font-size:20px;padding-top:20px;">→</div>
+                            <div style="flex:1;min-width:140px;">
+                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${toLang}</div>
+                                <div style="font-size:24px;font-weight:400;color:#1a73e8;line-height:1.3;">${displayTranslated}</div>
+                            </div>
+                        </div>
+                        <div style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:8px;text-align:right;">
+                            <a href="https://translate.google.com/?sl=nl&tl=en&text=${encodeURIComponent(query)}" target="_blank" rel="noopener" style="font-size:12px;color:#1a73e8;text-decoration:none;">Meer vertalingen →</a>
+                        </div>
+                    </div>`;
+            } catch {}
         }
 
         let currentTab = 'all';
