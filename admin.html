@@ -1299,7 +1299,11 @@ async function apiFetch(url, opts) {
     const sep = url.includes('?') ? '&' : '?';
     const hdrs = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {});
     const res = await fetch(url + sep + 'token=' + AUTH_TOKEN, Object.assign({}, opts, { headers: hdrs }));
-    if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+    if (!res.ok) {
+        let msg = res.status + ' ' + res.statusText;
+        try { const j = await res.json(); if (j && j.error) msg = j.error; } catch {}
+        throw new Error(msg);
+    }
     return res.json();
 }
 
@@ -3054,8 +3058,8 @@ function showToast(ev) {
     }
 }
 
-let audioMuted = localStorage.getItem('cc-muted') === '1';
-let notifsHidden = localStorage.getItem('cc-notifs-off') === '1';
+var audioMuted = localStorage.getItem('cc-muted') === '1';
+var notifsHidden = localStorage.getItem('cc-notifs-off') === '1';
 
 function toggleNotifs() {
     notifsHidden = !notifsHidden;
