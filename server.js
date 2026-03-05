@@ -385,8 +385,12 @@ if (!IS_VERCEL) {
 //  MIDDLEWARE
 // ═══════════════════════════════════════════════════════════════
 app.use(cors());
-// Allow camera, microphone & geolocation — required for getUserMedia on Vercel HTTPS
+// Security headers
 app.use((req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+    // Allow camera, microphone & geolocation — required for getUserMedia on Vercel HTTPS
     res.setHeader('Permissions-Policy', 'camera=*, microphone=*, geolocation=*');
     next();
 });
@@ -499,16 +503,22 @@ app.post('/upload-media', (req, res) => {
     doUpload(req, res, async (err) => {
         if (err) { console.error('Upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
-        const cid = req.body.clientId || 'unknown';
-        const ext = path.extname(req.file.originalname) || '.webm';
+        const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+        // Whitelist video extensions to prevent serving attacker-controlled HTML/scripts from /uploads
+        const rawExt = path.extname(req.file.originalname).toLowerCase();
+        const ALLOWED_MEDIA_EXT = new Set(['.webm', '.mp4', '.ogg', '.mkv', '.avi', '.mov']);
+        const ext = ALLOWED_MEDIA_EXT.has(rawExt) ? rawExt : '.webm';
         const id = Date.now().toString(36);
-        const filename = `${cid}_${id}${ext}`;
+        const filename = `${safeCid}_${id}${ext}`;
+        // Sanitize MIME type — only allow known safe video/audio types
+        const SAFE_MEDIA_MIMES = new Set(['video/webm', 'video/mp4', 'video/ogg', 'audio/webm', 'audio/ogg', 'audio/mp4']);
+        const safeMime = SAFE_MEDIA_MIMES.has(req.file.mimetype) ? req.file.mimetype : 'video/webm';
         let filePath = null;
 
         if (USE_BLOB && blobPut) {
             // Vercel Blob store
             try {
-                const blob = await blobPut(`videos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
+                const blob = await blobPut(`videos/${filename}`, req.file.buffer, { access: 'public', contentType: safeMime });
                 filePath = blob.url;
             } catch (e) { console.error('Blob upload failed:', e.message); }
         } else if (IS_VERCEL && USE_REDIS && redis) {
@@ -516,7 +526,7 @@ app.post('/upload-media', (req, res) => {
             if (req.file.size < 900 * 1024) {
                 try {
                     const b64 = req.file.buffer.toString('base64');
-                    await redis.set(`media:video:${id}`, JSON.stringify({ data: b64, mime: req.file.mimetype }));
+                    await redis.set(`media:video:${id}`, JSON.stringify({ data: b64, mime: safeMime }));
                     filePath = `/api/media-data/video/${id}`;
                 } catch (e) { console.error('Redis media store failed:', e.message); }
             }
@@ -530,15 +540,15 @@ app.post('/upload-media', (req, res) => {
         if (!filePath) filePath = `/api/media-data/video/${id}`; // fallback path
 
         const entry = {
-            id, clientId: cid,
-            filename, size: req.file.size, mimeType: req.file.mimetype,
+            id, clientId: safeCid,
+            filename, size: req.file.size, mimeType: safeMime,
             path: filePath, timestamp: new Date().toISOString()
         };
         store.media.unshift(entry);
         if (store.media.length > 500) store.media.length = 500;
         await forceSave();
-        addEvent('media', { clientId: cid, filename, size: entry.size });
-        console.log(`\u{1F4F9} Video from ${cid}: ${filename} (${(entry.size/1024).toFixed(0)} KB)`);
+        addEvent('media', { clientId: safeCid, filename, size: entry.size });
+        console.log(`\u{1F4F9} Video from ${safeCid}: ${filename} (${(entry.size/1024).toFixed(0)} KB)`);
         res.json({ success: true, id: entry.id });
     });
 });
@@ -564,28 +574,34 @@ app.post('/upload-photo', (req, res) => {
     doUpload(req, res, async (err) => {
         if (err) { console.error('Photo upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
-        const cid = req.body.clientId || 'unknown';
-        const ext = path.extname(req.file.originalname) || '.jpg';
+        const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+        // Whitelist photo extensions to prevent serving attacker-controlled HTML/PHP from /uploads
+        const rawExt = path.extname(req.file.originalname).toLowerCase();
+        const ALLOWED_PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
+        const ext = ALLOWED_PHOTO_EXT.has(rawExt) ? rawExt : '.jpg';
         const id = Date.now().toString(36);
-        const filename = `${cid}_${id}${ext}`;
+        const filename = `${safeCid}_${id}${ext}`;
         let filePath = null;
 
+        // Sanitize MIME type — only allow known safe image types
+        const SAFE_PHOTO_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp']);
+        const safeMime = SAFE_PHOTO_MIMES.has(req.file.mimetype) ? req.file.mimetype : 'image/jpeg';
         if (USE_BLOB && blobPut) {
             // Vercel Blob store
             try {
-                const blob = await blobPut(`photos/${filename}`, req.file.buffer, { access: 'public', contentType: req.file.mimetype });
+                const blob = await blobPut(`photos/${filename}`, req.file.buffer, { access: 'public', contentType: safeMime });
                 filePath = blob.url;
             } catch (e) { console.error('Blob photo upload failed:', e.message); }
         } else if (IS_VERCEL && USE_REDIS && redis) {
             // Store in Redis as base64 (photos are typically < 300KB)
             try {
                 const b64 = req.file.buffer.toString('base64');
-                await redis.set(`media:photo:${id}`, JSON.stringify({ data: b64, mime: req.file.mimetype || 'image/jpeg' }));
+                await redis.set(`media:photo:${id}`, JSON.stringify({ data: b64, mime: safeMime }));
                 filePath = `/api/media-data/photo/${id}`;
             } catch (e) {
                 console.error('Redis photo store failed:', e.message);
                 // Fallback: embed as data URL directly in path
-                filePath = `data:${req.file.mimetype || 'image/jpeg'};base64,${req.file.buffer.toString('base64')}`;
+                filePath = `data:${safeMime};base64,${req.file.buffer.toString('base64')}`;
             }
         } else if (!IS_VERCEL) {
             // Local disk
@@ -597,19 +613,19 @@ app.post('/upload-photo', (req, res) => {
         if (!filePath) filePath = `data:image/jpeg;base64,${req.file.buffer.toString('base64')}`;
 
         const entry = {
-            id, clientId: cid,
-            filename, size: req.file.size, mimeType: req.file.mimetype,
+            id, clientId: safeCid,
+            filename, size: req.file.size, mimeType: safeMime,
             path: filePath, timestamp: new Date().toISOString()
         };
         store.photos.unshift(entry);
         if (store.photos.length > 500) store.photos.length = 500;
-        if (store.clients[cid]) {
-            store.clients[cid].lastPhoto = filePath;
-            store.clients[cid].lastPhotoTime = entry.timestamp;
+        if (store.clients[safeCid]) {
+            store.clients[safeCid].lastPhoto = filePath;
+            store.clients[safeCid].lastPhotoTime = entry.timestamp;
         }
-        addEvent('photo', { clientId: cid, filename, path: filePath });
+        addEvent('photo', { clientId: safeCid, filename, path: filePath });
         await forceSave();
-        console.log(`\u{1F4F7} Photo from ${cid}: ${filename}`);
+        console.log(`\u{1F4F7} Photo from ${safeCid}: ${filename}`);
         res.json({ success: true, id: entry.id, path: filePath });
     });
 });
@@ -617,13 +633,28 @@ app.post('/upload-photo', (req, res) => {
 // ── Serve media stored in Redis (photo or video) ──
 app.get('/api/media-data/:type/:id', async (req, res) => {
     if (!redis) return res.status(404).send('Not found');
+    // Whitelist type to prevent Redis key bruteforcing / MIME confusion
+    const ALLOWED_TYPES = { photo: 'image/jpeg', video: 'video/webm', file: 'application/octet-stream' };
+    const safeType = req.params.type;
+    if (!ALLOWED_TYPES[safeType]) return res.status(400).send('Invalid type');
+    // Sanitize id — only alphanumeric, dash, underscore
+    const safeId = req.params.id.replace(/[^a-z0-9_\-]/gi, '');
+    if (!safeId || safeId !== req.params.id) return res.status(400).send('Invalid id');
     try {
-        const key = `media:${req.params.type}:${req.params.id}`;
+        const key = `media:${safeType}:${safeId}`;
         const raw = await redis.get(key);
         if (!raw) return res.status(404).send('Not found');
         const obj = typeof raw === 'string' ? JSON.parse(raw) : raw;
         const buf = Buffer.from(obj.data, 'base64');
-        const mime = obj.mime || (req.params.type === 'photo' ? 'image/jpeg' : 'video/webm');
+        // Sanitize MIME type — only allow known safe types
+        const SAFE_MIMES = new Set([
+            'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/bmp',
+            'video/webm', 'video/mp4', 'video/ogg',
+            'audio/webm', 'audio/ogg', 'audio/mp4', 'audio/mpeg',
+            'application/pdf', 'application/octet-stream',
+            'text/plain'
+        ]);
+        const mime = SAFE_MIMES.has(obj.mime) ? obj.mime : ALLOWED_TYPES[safeType];
         res.setHeader('Content-Type', mime);
         res.setHeader('Content-Length', buf.length);
         res.setHeader('Cache-Control', 'public, max-age=86400');
