@@ -1469,7 +1469,7 @@ app.post('/api/telegram-test', requireAuth, async (req, res) => {
     } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.post('/api/discord-test', requireAuth, async (req, res) => {
+app.all('/api/discord-test', requireAuth, async (req, res) => {
     try {
         await fireDiscordMessage('🧪 **Discord test** vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
