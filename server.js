@@ -462,7 +462,8 @@ function makeUploader(subdir) {
             destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/${subdir}/`),
             filename: (req, file, cb) => {
                 const ext = path.extname(file.originalname) || '.webm';
-                cb(null, `${req.body.clientId || 'unknown'}_${Date.now()}${ext}`);
+                const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+                cb(null, `${safeCid}_${Date.now()}${ext}`);
             }
         }),
         limits: { fileSize: 50 * 1024 * 1024 }
@@ -910,7 +911,14 @@ app.get('/admin', (req, res) => {
 // Auth endpoints
 app.post('/api/auth/login', (req, res) => {
     const { password } = req.body;
-    if (password === ADMIN_PASSWORD) {
+    // Use timingSafeEqual to prevent timing-based brute-force enumeration
+    let passwordMatch = false;
+    try {
+        const a = Buffer.from(String(password || ''));
+        const b = Buffer.from(ADMIN_PASSWORD);
+        passwordMatch = a.length === b.length && crypto.timingSafeEqual(a, b);
+    } catch (_) { passwordMatch = false; }
+    if (passwordMatch) {
         const token = generateToken();
         // Set cookie server-side so it persists across cold starts on Vercel
         res.cookie('adminToken', token, { path: '/', sameSite: 'lax', maxAge: 30 * 24 * 3600 * 1000 });

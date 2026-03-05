@@ -855,9 +855,9 @@
                     const recent = JSON.parse(localStorage.getItem('_grs') || '[]');
                     if (!recent.length) return;
                     box.innerHTML = recent.slice(0, 6).map(s =>
-                        `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;cursor:pointer;font-size:16px;color:#202124;" onmouseenter="this.style.background='#f8f9fa'" onmouseleave="this.style.background=''" onclick="document.getElementById('searchInput').value='${s.replace(/'/g,"\\'")}';document.getElementById('rSuggestionsBox').style.display='none';document.getElementById('searchFormR').submit();">
-                            ${clockSvg}<span style="flex:1">${s}</span>
-                            <span onclick="event.stopPropagation();try{let r=JSON.parse(localStorage.getItem('_grs')||'[]').filter(x=>x!=='${s.replace(/'/g,"\\'")}');localStorage.setItem('_grs',JSON.stringify(r));}catch{}this.parentElement.remove();" style="opacity:.6">${removeSvg}</span>
+                        `<div style="display:flex;align-items:center;gap:12px;padding:9px 14px;cursor:pointer;font-size:16px;color:#202124;" data-search="${escHtml(s)}" onmouseenter="this.style.background='#f8f9fa'" onmouseleave="this.style.background=''" onclick="document.getElementById('searchInput').value=this.dataset.search;document.getElementById('rSuggestionsBox').style.display='none';document.getElementById('searchFormR').submit();">
+                            ${clockSvg}<span style="flex:1">${escHtml(s)}</span>
+                            <span data-val="${escHtml(s)}" onclick="event.stopPropagation();try{let v=this.dataset.val;let r=JSON.parse(localStorage.getItem('_grs')||'[]').filter(x=>x!==v);localStorage.setItem('_grs',JSON.stringify(r));}catch{}this.parentElement.remove();" style="opacity:.6">${removeSvg}</span>
                         </div>`
                     ).join('');
                     box.style.display = 'block';

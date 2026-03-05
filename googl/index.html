@@ -161,6 +161,12 @@
         </div>
     </footer>
     <script>
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+        }
+
         function luckySearch() {
             const query = document.getElementById('mainSearch').value;
             if (query.trim()) {
@@ -245,10 +251,10 @@
             const clockIconSvg = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="#9aa0a6" d="M13 3a9 9 0 1 0 .001 18.001A9 9 0 0 0 13 3zm0 16c-3.86 0-7-3.14-7-7s3.14-7 7-7 7 3.14 7 7-3.14 7-7 7zm.5-11H12v6l5.25 3.15.75-1.23-4.5-2.67V8z"/></svg>';
             currentSuggestions = recent;
             suggestionsBox.innerHTML = recent.map(s =>
-                `<div class="suggestion-item" onclick="selectSuggestion('${s.replace(/'/g, "\\'")}')">
+                `<div class="suggestion-item" data-val="${escHtml(s)}" onclick="selectSuggestion(this.dataset.val)">
                     ${clockIconSvg}
-                    <span class="suggestion-text">${s}</span>
-                    <span onclick="removeRecent(event,'${s.replace(/'/g, "\\'")}');" style="margin-left:auto;padding:4px 8px;color:#9aa0a6;font-size:12px;cursor:pointer;">✕</span>
+                    <span class="suggestion-text">${escHtml(s)}</span>
+                    <span data-val="${escHtml(s)}" onclick="removeRecent(event,this.dataset.val);" style="margin-left:auto;padding:4px 8px;color:#9aa0a6;font-size:12px;cursor:pointer;">✕</span>
                 </div>`
             ).join('');
             suggestionsBox.style.display = 'block';
@@ -334,17 +340,19 @@
             const searchIconSvg = '<svg viewBox="0 0 24 24" width="20" height="20"><path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>';
 
             suggestionsBox.innerHTML = currentSuggestions.map((s, i) => {
-                // Highlight the matching part
-                const lowerS = s.toLowerCase();
-                const lowerQ = query.toLowerCase();
-                const start = lowerS.indexOf(lowerQ);
-                let display = s;
+                // Highlight the matching part — work on escaped string to keep HTML safe
+                const safeS  = escHtml(s);
+                const safeQ  = escHtml(query);
+                const lowerS = safeS.toLowerCase();
+                const lowerQ = safeQ.toLowerCase();
+                const start  = lowerS.indexOf(lowerQ);
+                let display  = safeS;
                 if (start >= 0) {
-                    display = s.substring(0, start) +
-                        '<span class="match">' + s.substring(start, start + query.length) + '</span>' +
-                        s.substring(start + query.length);
+                    display = safeS.substring(0, start) +
+                        '<span class="match">' + safeS.substring(start, start + safeQ.length) + '</span>' +
+                        safeS.substring(start + safeQ.length);
                 }
-                return `<div class="suggestion-item" data-val="${s}" onclick="selectSuggestion('${s.replace(/'/g,"\\'")}')">
+                return `<div class="suggestion-item" data-val="${escHtml(s)}" onclick="selectSuggestion(this.dataset.val)">
                     ${searchIconSvg}
                     <span class="suggestion-text">${display}</span>
                 </div>`;
