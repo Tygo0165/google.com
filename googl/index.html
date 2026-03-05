@@ -217,6 +217,10 @@
             } catch {}
         }
 
+        const searchInput = document.getElementById('mainSearch');
+        const suggestionsBox = document.getElementById('suggestionsBox');
+        const searchBar = document.querySelector('.search-bar');
+
         // Save search on form submit
         document.querySelector('.search-form').addEventListener('submit', function() {
             const q = searchInput.value.trim();
@@ -271,10 +275,6 @@
 
         let selectedIndex = -1;
         let currentSuggestions = [];
-
-        const searchInput = document.getElementById('mainSearch');
-        const suggestionsBox = document.getElementById('suggestionsBox');
-        const searchBar = document.querySelector('.search-bar');
 
         searchInput.addEventListener('input', function() {
             const query = this.value.trim().toLowerCase();

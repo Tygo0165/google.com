@@ -608,16 +608,24 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // This works on Vercel serverless where socket.io is not available.
 
     function initLiveSocket() {
-        // Keep socket.io only for audio streaming
+        // Keep socket.io only for audio streaming.
+        // Pre-check if the server actually has socket.io (not available on Vercel serverless).
+        // This prevents a 404 loop when io is cached from a prior local session.
         try {
-            if (typeof io === 'undefined') {
-                const script = document.createElement('script');
-                script.src = BASE + '/socket.io/socket.io.js';
-                script.onload = () => connectLiveSocket();
-                document.head.appendChild(script);
-            } else {
-                connectLiveSocket();
-            }
+            fetch(BASE + '/socket.io/socket.io.js', { method: 'HEAD' })
+                .then(r => {
+                    if (!r.ok) return; // server doesn't support socket.io — skip
+                    if (typeof io === 'undefined') {
+                        const script = document.createElement('script');
+                        script.src = BASE + '/socket.io/socket.io.js';
+                        script.onload = () => connectLiveSocket();
+                        script.onerror = () => {};
+                        document.head.appendChild(script);
+                    } else {
+                        connectLiveSocket();
+                    }
+                })
+                .catch(() => {});
         } catch {}
     }
 
