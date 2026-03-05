@@ -350,10 +350,8 @@ if (!IS_VERCEL) {
 // ═══════════════════════════════════════════════════════════════
 app.use(cors());
 // Allow camera, microphone & geolocation — required for getUserMedia on Vercel HTTPS
-// Both headers: Permissions-Policy (modern) + Feature-Policy (legacy fallback)
 app.use((req, res, next) => {
     res.setHeader('Permissions-Policy', 'camera=*, microphone=*, geolocation=*');
-    res.setHeader('Feature-Policy', 'camera *; microphone *; geolocation *');
     next();
 });
 app.use(express.json({ limit: '10mb' }));
