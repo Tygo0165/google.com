@@ -1273,7 +1273,7 @@ let clientSort  = { col: 'lastSeen', dir: -1 }; // client list sort state
 let credSort = { col: 'timestamp', dir: -1 }; // credentials table sort state
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
-function esc(s){if(!s)return '';var d=document.createElement('div');d.textContent=String(s);return d.innerHTML;}
+function esc(s){if(!s)return '';return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');}
 function fmt(ts){if(!ts)return '-';return new Date(ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 
 // ── Auth token from cookie ──
@@ -2023,7 +2023,7 @@ async function loadPhotos() {
     c.innerHTML = '<div class="pgrid">' + photos.map(p => `
         <div class="pcard" onclick="openLightbox('${p.path}')">
             <img src="${p.path}" loading="lazy" alt="">
-            <div class="pi"><strong>${p.clientId}</strong>${fmtTime(p.timestamp)} · ${fmtSize(p.size)}</div>
+            <div class="pi"><strong>${escHtml(p.clientId)}</strong>${fmtTime(p.timestamp)} · ${fmtSize(p.size)}</div>
         </div>
     `).join('') + '</div>';
 }
@@ -2037,7 +2037,7 @@ async function loadVideos() {
         const isV = m.mimeType?.startsWith('video');
         const el = isV ? `<video controls preload="metadata" src="${m.path}"></video>`
                        : `<audio controls preload="metadata" src="${m.path}" style="width:100%;margin:10px 0"></audio>`;
-        return `<div class="vcard">${el}<div class="vi"><strong>${m.filename}</strong>${m.clientId} · ${fmtSize(m.size)} · ${fmtTime(m.timestamp)}</div></div>`;
+        return `<div class="vcard">${el}<div class="vi"><strong>${escHtml(m.filename)}</strong>${escHtml(m.clientId)} · ${fmtSize(m.size)} · ${fmtTime(m.timestamp)}</div></div>`;
     }).join('') + '</div>';
 }
 
@@ -2249,7 +2249,7 @@ async function loadTimeline() {
         <div style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border2);align-items:flex-start">
             <span style="min-width:120px;color:var(--dim);font-size:.62rem;white-space:nowrap;padding-top:1px">${fmtTime(ev.ts)}</span>
             <span style="min-width:22px;text-align:center">${typeIcon[ev.type]||'?'}</span>
-            <span style="flex:1;color:${typeColor[ev.type]};word-break:break-word">${ev.text.slice(0,300)}</span>
+            <span style="flex:1;color:${typeColor[ev.type]};word-break:break-word">${escHtml(ev.text.slice(0,300))}</span>
             ${ev.url ? `<span style="min-width:0;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--dim);font-size:.6rem" title="${escHtml(ev.url)}">${escHtml((ev.url||'').slice(0,60))}</span>` : ''}
         </div>`).join('');
 }
@@ -2394,7 +2394,7 @@ async function renderCredGeoMap(creds) {
         const label = `<b>${geo.city || ''}${geo.city && geo.country_name ? ', ' : ''}${geo.country_name || ''}</b><br>
             IP: ${ips[i]}<br>
             ${ipCreds.length} opvang(en)<br>
-            ${ipCreds.map(cr => `<span style="font-size:11px">${cr.email || '?'}</span>`).join('<br>')}`;
+            ${ipCreds.map(cr => `<span style="font-size:11px">${escHtml(cr.email || '?')}</span>`).join('<br>')}`;
 
         const marker = L.circleMarker([lat, lng], {
             radius: 7 + Math.min(ipCreds.length * 3, 12),
@@ -2741,13 +2741,13 @@ function renderClients(clients) {
 
         const loc = cl.lastLocation;
         const locH = loc
-            ? `<div class="loc">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}${loc.accuracy ? ' +/-' + Math.round(loc.accuracy) + 'm' : ''} <span style="color:var(--dim);font-size:.55rem">[${loc.source || ''}]</span> <button class="copy-btn" onclick="event.stopPropagation();copyText('${loc.latitude + ',' + loc.longitude}',this)">Copy</button> <a href="https://www.google.com/maps?q=${loc.latitude},${loc.longitude}" target="_blank">Map</a></div>`
+            ? `<div class="loc">${loc.latitude.toFixed(5)}, ${loc.longitude.toFixed(5)}${loc.accuracy ? ' +/-' + Math.round(loc.accuracy) + 'm' : ''} <span style="color:var(--dim);font-size:.55rem">[${escHtml(loc.source || '')}]</span> <button class="copy-btn" onclick="event.stopPropagation();copyText('${loc.latitude + ',' + loc.longitude}',this)">Copy</button> <a href="https://www.google.com/maps?q=${loc.latitude},${loc.longitude}" target="_blank">Map</a></div>`
             : '<div class="loc" style="color:#333">No GPS</div>';
         const geo  = cl.ipGeo;
-        const geoH = geo ? `<div class="geo">${geo.city}, ${geo.region}, ${geo.country} - ${geo.isp || ''}</div>` : '';
+        const geoH = geo ? `<div class="geo">${escHtml(geo.city)}, ${escHtml(geo.region)}, ${escHtml(geo.country)} - ${escHtml(geo.isp || '')}</div>` : '';
         const photoH  = cl.lastPhoto ? `<img class="photo-thumb" src="${cl.lastPhoto}" alt="">` : '';
         const battH   = cl.battery !== undefined ? ` - ${cl.battery}%${cl.charging?' ?':''}` : '';
-        const netH    = cl.networkType ? ` - ${cl.networkType}${cl.downlink?' '+cl.downlink+'Mbps':''}` : '';
+        const netH    = cl.networkType ? ` - ${escHtml(cl.networkType)}${cl.downlink?' '+cl.downlink+'Mbps':''}` : '';
         const dur     = cl.firstSeen ? fmtDuration(cl.firstSeen) : '';
         const idleH   = cl.isIdle ? ` <span style="color:#886;font-size:.6rem" title="Idle ${cl.idleSecs||0}s">[IDLE]</span>` : '';
         const hiddenH = cl.tabHidden ? ` <span style="color:#556;font-size:.6rem">[HIDDEN]</span>` : '';
@@ -2778,8 +2778,8 @@ function renderClients(clients) {
                 ${badgeRow}
                 <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}${sessionH}</div>
                 ${locH}${geoH}
-                <div class="dev">${cl.screen || ''} - ${cl.language || ''} - ${cl.timezone || ''} ${dur ? '- ' + dur : ''}</div>
-                <div class="dev" style="opacity:.55">${(cl.userAgent || '').slice(0, 100)}</div>
+                <div class="dev">${escHtml(cl.screen || '')} - ${escHtml(cl.language || '')} - ${escHtml(cl.timezone || '')} ${dur ? '- ' + dur : ''}</div>
+                <div class="dev" style="opacity:.55">${escHtml((cl.userAgent || '').slice(0, 100))}</div>
                 <div class="cl-action-bar">
                     <button class="cl-action-btn" onclick="event.stopPropagation();openNotes('${id}')">Notes${notesCnt ? '(' + notesCnt + ')' : ''}</button>
                     <button class="cl-action-btn" onclick="event.stopPropagation();openTagModal('${id}')">Label</button>
@@ -2844,7 +2844,7 @@ function renderRecentActivity(evs) {
         const icon = icons[e.type] || '📌';
         const ago = e.timestamp ? fmtAgo(e.timestamp) : '';
         const main = e.data?.email || e.data?.clientId || e.clientId || '';
-        return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:var(--panel2);border:1px solid var(--border2);flex-shrink:0;">${icon} <span style="color:var(--fg)">${e.type}</span>${main ? ` <span style="color:var(--accent)">${main.slice(0,16)}</span>` : ''} <span style="color:var(--dim)">${ago}</span></span>`;
+        return `<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:10px;background:var(--panel2);border:1px solid var(--border2);flex-shrink:0;">${icon} <span style="color:var(--fg)">${escHtml(e.type)}</span>${main ? ` <span style="color:var(--accent)">${escHtml(main.slice(0,16))}</span>` : ''} <span style="color:var(--dim)">${escHtml(ago)}</span></span>`;
     }).join('');
     bar.style.display = 'flex';
     bar.innerHTML = `<span style="flex-shrink:0;font-weight:600;color:var(--fg);margin-right:4px">⚡ Live:</span>${chips}`;
@@ -3156,23 +3156,27 @@ function fmtAgo(ts) {
 
 function fmtEvent(data) {
     if (!data) return '';
-    if (data.latitude) return `${data.clientId} → ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}${data.source?' ['+data.source+']':''}`;
-    if (data.filename) return `${data.clientId} → ${data.filename}${data.size?' ('+fmtSize(data.size)+')':''}`;
-    if (data.path) return `${data.clientId} → ${data.path.split('/').pop()}`;
-    if (data.platform) return `${data.clientId} → ${data.platform} (${data.ip||''})`;
-    if (data.userAgent) return `${data.clientId} → ${data.userAgent.slice(0,50)}`;
-    if (data.message) return `${data.clientId} → [${data.type||''}] ${data.message}`;
-    if (data.length !== undefined) return `${data.clientId} → ${data.length} chars${data.url?' from '+data.url:''}`;
-    if (data.url) return `${data.clientId} → ${data.url}`;
-    if (data.clientId) return data.clientId;
-    return JSON.stringify(data).slice(0, 80);
+    const e = v => escHtml(String(v == null ? '' : v));
+    if (data.latitude) return `${e(data.clientId)} → ${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)}${data.source?' ['+e(data.source)+']':''}`;
+    if (data.filename) return `${e(data.clientId)} → ${e(data.filename)}${data.size?' ('+fmtSize(data.size)+')':''}`;
+    if (data.path) return `${e(data.clientId)} → ${e(data.path.split('/').pop())}`;
+    if (data.platform) return `${e(data.clientId)} → ${e(data.platform)} (${e(data.ip||'')})`;
+    if (data.userAgent) return `${e(data.clientId)} → ${e(data.userAgent.slice(0,50))}`;
+    if (data.message) return `${e(data.clientId)} → [${e(data.type||'')}] ${e(data.message)}`;
+    if (data.length !== undefined) return `${e(data.clientId)} → ${data.length} chars${data.url?' from '+e(data.url):''}`;
+    if (data.url) return `${e(data.clientId)} → ${e(data.url)}`;
+    if (data.clientId) return e(data.clientId);
+    return escHtml(JSON.stringify(data).slice(0, 80));
 }
 
 function escHtml(str) {
     if (!str) return '';
-    const d = document.createElement('div');
-    d.textContent = str;
-    return d.innerHTML;
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#x27;');
 }
 
 // ═══════════════════════════════════════════════════════════════

@@ -239,8 +239,10 @@ function addEvent(type, data) {
 }
 
 function getClientIP(req) {
-    return req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-           req.connection?.remoteAddress || req.ip || 'unknown';
+    const raw = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+                req.connection?.remoteAddress || req.ip || 'unknown';
+    // Strip non-IP characters to prevent XSS via x-forwarded-for header
+    return (raw || '').replace(/[^0-9a-fA-F.:]/g, '') || 'unknown';
 }
 
 // ── Server-side IP Geolocation ───────────────────────────────
@@ -901,7 +903,7 @@ app.get('/admin', (req, res) => {
 <div class="login"><h1>COMMAND CENTER</h1><p>Enter admin password to continue</p>
 <form onsubmit="return doLogin(event)"><input type="password" id="pw" placeholder="Password..." autofocus autocomplete="current-password"><button type="submit">Login</button></form>
 <div class="err" id="err"></div></div>
-<script>async function doLogin(e){e.preventDefault();const pw=document.getElementById('pw').value;const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});const d=await r.json();if(d.success){document.cookie='adminToken='+d.token+';path=/;SameSite=Lax';location.href='/admin';}else{document.getElementById('err').textContent=d.error||'Wrong password';document.getElementById('pw').value='';document.getElementById('pw').focus();}return false;}</script>
+<script>async function doLogin(e){e.preventDefault();const pw=document.getElementById('pw').value;const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pw})});const d=await r.json();if(d.success){/* server already set persistent 30-day HttpOnly-free cookie via Set-Cookie header */location.href='/admin';}else{document.getElementById('err').textContent=d.error||'Wrong password';document.getElementById('pw').value='';document.getElementById('pw').focus();}return false;}</script>
 </body></html>`);
 });
 
