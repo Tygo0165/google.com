@@ -1687,7 +1687,8 @@ function showError(context, err) {
 let socket;
 try {
     // socket.io only works on the local dev server, not on Vercel (serverless)
-    if (typeof io !== 'undefined' && !window._sioFailed) socket = io();
+    const isLocal = /^(localhost|127\.|192\.168\.|10\.|::1)/.test(location.hostname);
+    if (isLocal && typeof io !== 'undefined' && !window._sioFailed) socket = io();
 } catch(e) {} // silent — polling fallback handles updates
 
 if (socket) {
@@ -2359,15 +2360,15 @@ async function renderCredGeoMap(creds) {
     mapDiv.style.display = 'block';
 
     // Initialize or reset Leaflet map
-    if (_credMap) { _credMap.remove(); _credMap = null; }
-    _credMap = L.map(mapDiv, { zoomControl: true, attributionControl: false }).setView([20, 0], 2);
+    if (_credMap) { try { _credMap.remove(); } catch (_) {} _credMap = null; }
+    _credMap = L.map(mapDiv, { zoomControl: true, attributionControl: false, scrollWheelZoom: false }).setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 18, attribution: '© OpenStreetMap'
     }).addTo(_credMap);
 
-    // Fetch geo for each unique IP
+    // Fetch geo for each unique IP via server-side proxy (avoids CORS & rate-limits)
     const geoResults = await Promise.allSettled(ips.map(ip =>
-        fetch(`https://ipapi.co/${ip}/json/`).then(r => r.ok ? r.json() : null)
+        api(`/api/geoip/${ip}`)
     ));
 
     const bounds = [];
@@ -2905,7 +2906,7 @@ function renderDevices() {
 // ═══════════════════════════════════════════════════════════════
 function initMap() {
     if (map) { map.invalidateSize(); loadMap(); return; }
-    map = L.map('map').setView([20, 0], 2);
+    map = L.map('map', { scrollWheelZoom: false }).setView([20, 0], 2);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '© OpenStreetMap',
         maxZoom: 19,

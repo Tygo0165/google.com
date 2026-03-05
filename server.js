@@ -947,6 +947,20 @@ app.get('/api/search', requireAuth, (req, res) => {
     res.json({ query: q, results });
 });
 
+// ── GeoIP proxy — avoids CORS/rate-limit when admin calls ipapi.co directly ──
+app.get('/api/geoip/:ip', requireAuth, async (req, res) => {
+    const ip = req.params.ip;
+    if (!/^[\d.a-fA-F:]+$/.test(ip)) return res.status(400).json({ error: 'invalid ip' });
+    try {
+        const r = await fetch(`https://ipapi.co/${ip}/json/`);
+        if (!r.ok) return res.status(r.status).json({ error: 'lookup failed' });
+        const data = await r.json();
+        res.json(data);
+    } catch (e) {
+        res.status(500).json({ error: 'lookup failed' });
+    }
+});
+
 app.get('/api/stats', requireAuth, (req, res) => {
     const cutoff20s = Date.now() - 20000;
     const cutoff5m  = Date.now() - 300000;
