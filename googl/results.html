@@ -117,6 +117,14 @@
         const urlParams = new URLSearchParams(window.location.search);
         const query = urlParams.get('q') || '';
         const searchInput = document.getElementById('searchInput');
+
+        // HTML escaping helper — prevents XSS when query is injected into innerHTML
+        function escHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        const safeQ = escHtml(query); // pre-escaped version used in all innerHTML contexts
         searchInput.value = query;
         document.title = query ? query + ' - Google Zoeken' : 'Google';
 
@@ -133,8 +141,8 @@
             return (data.query?.search || []).map(item => ({
                 url: `https://nl.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
                 display: 'nl.wikipedia.org',
-                title: item.title + ' - Wikipedia',
-                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+                title: escHtml(item.title) + ' - Wikipedia',
+                snippet: escHtml(item.snippet.replace(/<[^>]*>/g, '')) + '...'
             }));
         }
 
@@ -146,8 +154,8 @@
             return (data.query?.search || []).map(item => ({
                 url: `https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
                 display: 'en.wikipedia.org',
-                title: item.title + ' - Wikipedia (EN)',
-                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+                title: escHtml(item.title) + ' - Wikipedia (EN)',
+                snippet: escHtml(item.snippet.replace(/<[^>]*>/g, '')) + '...'
             }));
         }
 
@@ -159,8 +167,8 @@
             return (data.query?.search || []).map(item => ({
                 url: `https://nl.wiktionary.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}`,
                 display: 'nl.wiktionary.org',
-                title: item.title + ' - Wiktionary',
-                snippet: item.snippet.replace(/<\/?span[^>]*>/g, '') + '...'
+                title: escHtml(item.title) + ' - Wiktionary',
+                snippet: escHtml(item.snippet.replace(/<[^>]*>/g, '')) + '...'
             }));
         }
 
@@ -170,21 +178,21 @@
                 {
                     url: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}`,
                     display: 'www.youtube.com',
-                    title: query + ' - YouTube',
-                    snippet: `Bekijk video's over "${query}" op YouTube. Ontdek kanalen, afspeellijsten en livestreams.`
+                    title: safeQ + ' - YouTube',
+                    snippet: `Bekijk video's over "${safeQ}" op YouTube. Ontdek kanalen, afspeellijsten en livestreams.`
                 },
                 {
                     url: `https://www.reddit.com/search/?q=${encodeURIComponent(query)}`,
                     display: 'www.reddit.com',
-                    title: query + ' - Reddit',
-                    snippet: `Bekijk berichten en discussies over "${query}" op Reddit.`
+                    title: safeQ + ' - Reddit',
+                    snippet: `Bekijk berichten en discussies over "${safeQ}" op Reddit.`
                 }
             ];
         }
 
         function renderResults(results, query, timeMs) {
             if (!results.length) {
-                return `<div class="results-stats">Geen resultaten gevonden voor "<b>${query}</b>"</div>`;
+                return `<div class="results-stats">Geen resultaten gevonden voor "<b>${safeQ}</b>"</div>`;
             }
 
             // Realistic-looking fake result count
@@ -200,7 +208,7 @@
             const isQuestion = /^(wat is|hoe|wat zijn|wanneer|waarom|wie is|where is|what is|how|why|when|hoeveel|welke|welk)/.test(qLow);
             if (isQuestion) {
                 const answers = {
-                    default: `${query.charAt(0).toUpperCase() + query.slice(1)} is een veelgebruikte term die afhankelijk van de context verschillende betekenissen kan hebben. Doorgaans verwijst het naar een specifiek concept of onderwerp dat breed wordt toegepast in de relevante vakgebieden.`
+                    default: `${safeQ.charAt(0).toUpperCase() + safeQ.slice(1)} is een veelgebruikte term die afhankelijk van de context verschillende betekenissen kan hebben. Doorgaans verwijst het naar een specifiek concept of onderwerp dat breed wordt toegepast in de relevante vakgebieden.`
                 };
                 const snippet = answers[qLow] || answers.default;
                 html += `
@@ -216,10 +224,10 @@
                 <div class="result-item sponsored-result">
                     <div class="result-url-line" style="display:flex;align-items:center;gap:6px;">
                         <span style="background:#fff;border:1px solid #dadce0;border-radius:4px;padding:1px 5px;font-size:11px;color:#70757a;font-weight:500;">Gesponsord</span>
-                        <cite class="result-cite">${query.toLowerCase().replace(/\s+/g,'-')}.nl</cite>
+                        <cite class="result-cite">${escHtml(query.toLowerCase().replace(/\s+/g,'-'))}.nl</cite>
                     </div>
-                    <h3 class="result-title"><a href="results.html?q=${encodeURIComponent(query)}">${query} - Officiële Website | Meer Informatie</a></h3>
-                    <p class="result-snippet">Bekijk de meest actuele informatie over "${query}". Vergelijk aanbiedingen en vind de beste optie. Snel en eenvoudig online.</p>
+                    <h3 class="result-title"><a href="results.html?q=${encodeURIComponent(query)}">${safeQ} - Officiële Website | Meer Informatie</a></h3>
+                    <p class="result-snippet">Bekijk de meest actuele informatie over "${safeQ}". Vergelijk aanbiedingen en vind de beste optie. Snel en eenvoudig online.</p>
                 </div>
             `;
 
@@ -234,6 +242,7 @@
                         </div>
                         <h3 class="result-title"><a href="${r.url}" target="_blank">${r.title}</a></h3>
                         <p class="result-snippet">${r.snippet}</p>
+                        <!-- r.title and r.snippet are pre-escaped by fetchers / getStaticResults -->
                     </div>
                 `;
             });
@@ -243,10 +252,10 @@
                 <div class="paa-box" style="margin-bottom:28px;">
                     <h3 style="font-size:18px;font-weight:normal;color:#202124;margin-bottom:12px;">Mensen vragen ook</h3>
                     ${[
-                        `Wat is ${query}?`,
-                        `Hoe werkt ${query}?`,
-                        `Wat zijn de voordelen van ${query}?`,
-                        `Waarom is ${query} belangrijk?`
+                        `Wat is ${safeQ}?`,
+                        `Hoe werkt ${safeQ}?`,
+                        `Wat zijn de voordelen van ${safeQ}?`,
+                        `Waarom is ${safeQ} belangrijk?`
                     ].map(q => `
                         <details class="paa-item" style="border:1px solid #dadce0;border-radius:8px;margin-bottom:4px;overflow:hidden;">
                             <summary style="padding:14px 16px;cursor:pointer;font-size:15px;color:#202124;list-style:none;display:flex;justify-content:space-between;align-items:center;user-select:none;">
@@ -254,7 +263,7 @@
                                 <svg viewBox="0 0 24 24" width="20" height="20"><path fill="#5f6368" d="M7 10l5 5 5-5z"/></svg>
                             </summary>
                             <div style="padding:0 16px 14px;font-size:14px;color:#4d5156;line-height:1.58;border-top:1px solid #dadce0;margin-top:0;">
-                                <br>Bekijk de meest relevante informatie over "${query}" via Wikipedia en andere betrouwbare bronnen.
+                                <br>Bekijk de meest relevante informatie over "${safeQ}" via Wikipedia en andere betrouwbare bronnen.
                                 <br><a href="results.html?q=${encodeURIComponent(q)}" style="color:#1a73e8;font-size:13px;margin-top:6px;display:inline-block;">Meer resultaten zoeken →</a>
                             </div>
                         </details>
@@ -285,17 +294,17 @@
             related.forEach(r => {
                 html += `<a href="results.html?q=${encodeURIComponent(r)}" class="related-item">
                     <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#9aa0a6" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-                    ${r}
+                    ${escHtml(r)}
                 </a>`;
             });
             html += '</div>';
 
             // ── Meer van het web (similar site recommendations) ──
             const relatedSites = [
-                { name: 'Wikipedia', favicon: 'https://en.wikipedia.org/favicon.ico', desc: `Zoek naar "${query}" op Wikipedia` },
-                { name: 'YouTube', favicon: 'https://www.youtube.com/favicon.ico', desc: `Video's over "${query}" op YouTube` },
-                { name: 'Reddit', favicon: 'https://www.reddit.com/favicon.ico', desc: `Discussies over "${query}" op Reddit` },
-                { name: 'Bol.com', favicon: 'https://www.bol.com/favicon.ico', desc: `"${query}" kopen op Bol.com` },
+                { name: 'Wikipedia', favicon: 'https://en.wikipedia.org/favicon.ico', desc: `Zoek naar "${safeQ}" op Wikipedia` },
+                { name: 'YouTube', favicon: 'https://www.youtube.com/favicon.ico', desc: `Video's over "${safeQ}" op YouTube` },
+                { name: 'Reddit', favicon: 'https://www.reddit.com/favicon.ico', desc: `Discussies over "${safeQ}" op Reddit` },
+                { name: 'Bol.com', favicon: 'https://www.bol.com/favicon.ico', desc: `"${safeQ}" kopen op Bol.com` },
             ];
             html += `<div style="margin:24px 0 28px;">
                 <div style="font-size:13px;color:#5f6368;margin-bottom:12px;font-weight:500;">Meer van het web</div>
@@ -457,13 +466,13 @@
                 <div style="border:1px solid #dadce0;border-radius:8px;overflow:hidden;margin-bottom:20px;background:#fff;">
                     <div style="padding:8px 14px;border-bottom:1px solid #dadce0;display:flex;align-items:center;gap:8px;">
                         <svg viewBox="0 0 24 24" width="16" height="16"><path fill="#ea4335" d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-                        <a href="https://maps.google.com/maps?q=${encoded}" target="_blank" rel="noopener" style="font-size:13px;color:#1a73e8;font-weight:500;text-decoration:none;">${query} op Google Maps</a>
+                        <a href="https://maps.google.com/maps?q=${encoded}" target="_blank" rel="noopener" style="font-size:13px;color:#1a73e8;font-weight:500;text-decoration:none;">${safeQ} op Google Maps</a>
                     </div>
                     <iframe
                         src="https://maps.google.com/maps?q=${encoded}&output=embed&hl=nl"
                         width="100%" height="240" style="border:none;display:block;"
                         loading="lazy" referrerpolicy="no-referrer-when-downgrade"
-                        title="Kaart van ${query}">
+                        title="Kaart van ${safeQ}">
                     </iframe>
                 </div>`;
         }
@@ -497,7 +506,7 @@
                         <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
                             <div style="flex:1;min-width:140px;">
                                 <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${fromLang}</div>
-                                <div style="font-size:24px;font-weight:400;color:#202124;line-height:1.3;">${query}</div>
+                                <div style="font-size:24px;font-weight:400;color:#202124;line-height:1.3;">${safeQ}</div>
                             </div>
                             <div style="color:#dadce0;font-size:20px;padding-top:20px;">→</div>
                             <div style="flex:1;min-width:140px;">
@@ -528,7 +537,7 @@
                 const searchUrl = `results.html?q=${encodeURIComponent(query)}&tab=images`;
                 let html = `<div style="margin-bottom:22px;">
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-                        <span style="font-size:16px;color:#202124;font-weight:normal;">Afbeeldingen voor <b>${query}</b></span>
+                        <span style="font-size:16px;color:#202124;font-weight:normal;">Afbeeldingen voor <b>${safeQ}</b></span>
                         <a href="${searchUrl}" style="font-size:13px;color:#1a73e8;text-decoration:none;" onclick="switchTab(event,'images')">Alle afbeeldingen →</a>
                     </div>
                     <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-ms-overflow-style:none;scrollbar-width:none;">`;
@@ -586,7 +595,7 @@
                 const items = Object.values(pages).filter(p => p.imageinfo && p.imageinfo[0]?.thumburl);
 
                 if (items.length === 0) {
-                    container.innerHTML = `<p class="no-results">Geen afbeeldingen gevonden voor "<b>${query}</b>"</p>`;
+                    container.innerHTML = `<p class="no-results">Geen afbeeldingen gevonden voor "<b>${safeQ}</b>"</p>`;
                     return;
                 }
 
@@ -625,7 +634,7 @@
                 const res = await fetch(url);
                 const data = await res.json();
 
-                let html = '<div class="results-stats">Video\'s over "' + query + '"</div>';
+                let html = '<div class="results-stats">Video\'s over "' + safeQ + '"</div>';
 
                 // YouTube search link
                 html += `
@@ -635,8 +644,8 @@
                         </div>
                         <div class="video-info">
                             <div class="result-url-line"><cite class="result-cite">www.youtube.com</cite></div>
-                            <h3 class="result-title"><a href="https://www.youtube.com/results?search_query=${encodeURIComponent(query)}" target="_blank">${query} - YouTube Video's</a></h3>
-                            <p class="result-snippet">Bekijk alle video's over "${query}" op YouTube.</p>
+                            <h3 class="result-title"><a href="https://www.youtube.com/results?search_query=${encodeURIComponent(query)}" target="_blank">${safeQ} - YouTube Video's</a></h3>
+                            <p class="result-snippet">Bekijk alle video's over "${safeQ}" op YouTube.</p>
                         </div>
                     </div>
                 `;
@@ -649,8 +658,8 @@
                         </div>
                         <div class="video-info">
                             <div class="result-url-line"><cite class="result-cite">www.dailymotion.com</cite></div>
-                            <h3 class="result-title"><a href="https://www.dailymotion.com/search/${encodeURIComponent(query)}" target="_blank">${query} - Dailymotion</a></h3>
-                            <p class="result-snippet">Video's over "${query}" op Dailymotion.</p>
+                            <h3 class="result-title"><a href="https://www.dailymotion.com/search/${encodeURIComponent(query)}" target="_blank">${safeQ} - Dailymotion</a></h3>
+                            <p class="result-snippet">Video's over "${safeQ}" op Dailymotion.</p>
                         </div>
                     </div>
                 `;
@@ -663,8 +672,8 @@
                         </div>
                         <div class="video-info">
                             <div class="result-url-line"><cite class="result-cite">www.vimeo.com</cite></div>
-                            <h3 class="result-title"><a href="https://vimeo.com/search?q=${encodeURIComponent(query)}" target="_blank">${query} - Vimeo</a></h3>
-                            <p class="result-snippet">Professionele video's over "${query}" op Vimeo.</p>
+                            <h3 class="result-title"><a href="https://vimeo.com/search?q=${encodeURIComponent(query)}" target="_blank">${safeQ} - Vimeo</a></h3>
+                            <p class="result-snippet">Professionele video's over "${safeQ}" op Vimeo.</p>
                         </div>
                     </div>
                 `;
@@ -675,8 +684,8 @@
                     html += `
                         <div class="result-item">
                             <div class="result-url-line"><cite class="result-cite">en.wikipedia.org</cite></div>
-                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${item.title}</a></h3>
-                            <p class="result-snippet">${item.snippet.replace(/<\/?span[^>]*>/g, '')}...</p>
+                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${escHtml(item.title)}</a></h3>
+                            <p class="result-snippet">${escHtml(item.snippet.replace(/<[^>]*>/g, ''))}...</p>
                         </div>
                     `;
                 });
@@ -698,14 +707,14 @@
                 const res = await fetch(url);
                 const data = await res.json();
 
-                let html = '<div class="results-stats">Nieuwsresultaten voor "' + query + '"</div>';
+                let html = '<div class="results-stats">Nieuwsresultaten voor "' + safeQ + '"</div>';
 
                 // Google News link
                 html += `
                     <div class="result-item news-item">
                         <div class="news-source">Google Nieuws</div>
-                        <h3 class="result-title"><a href="https://news.google.com/search?q=${encodeURIComponent(query)}&hl=nl" target="_blank">Laatste nieuws over ${query} - Google Nieuws</a></h3>
-                        <p class="result-snippet">Bekijk het meest recente nieuws over "${query}" via Google Nieuws. Actueel en uitgebreid.</p>
+                        <h3 class="result-title"><a href="https://news.google.com/search?q=${encodeURIComponent(query)}&hl=nl" target="_blank">Laatste nieuws over ${safeQ} - Google Nieuws</a></h3>
+                        <p class="result-snippet">Bekijk het meest recente nieuws over "${safeQ}" via Google Nieuws. Actueel en uitgebreid.</p>
                         <span class="news-time">Google News</span>
                     </div>
                 `;
@@ -714,8 +723,8 @@
                 html += `
                     <div class="result-item news-item">
                         <div class="news-source">NOS</div>
-                        <h3 class="result-title"><a href="https://nos.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${query} - NOS Nieuws</a></h3>
-                        <p class="result-snippet">Het laatste nieuws over "${query}" op NOS.nl. Altijd op de hoogte van het nieuws.</p>
+                        <h3 class="result-title"><a href="https://nos.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${safeQ} - NOS Nieuws</a></h3>
+                        <p class="result-snippet">Het laatste nieuws over "${safeQ}" op NOS.nl. Altijd op de hoogte van het nieuws.</p>
                         <span class="news-time">nos.nl</span>
                     </div>
                 `;
@@ -724,8 +733,8 @@
                 html += `
                     <div class="result-item news-item">
                         <div class="news-source">NU.nl</div>
-                        <h3 class="result-title"><a href="https://www.nu.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${query} - NU.nl</a></h3>
-                        <p class="result-snippet">Artikelen en nieuws over "${query}" op NU.nl. Het laatste nieuws het eerst op NU.nl.</p>
+                        <h3 class="result-title"><a href="https://www.nu.nl/zoeken?q=${encodeURIComponent(query)}" target="_blank">${safeQ} - NU.nl</a></h3>
+                        <p class="result-snippet">Artikelen en nieuws over "${safeQ}" op NU.nl. Het laatste nieuws het eerst op NU.nl.</p>
                         <span class="news-time">nu.nl</span>
                     </div>
                 `;
@@ -734,8 +743,8 @@
                 html += `
                     <div class="result-item news-item">
                         <div class="news-source">RTL Nieuws</div>
-                        <h3 class="result-title"><a href="https://www.rtlnieuws.nl/zoeken?query=${encodeURIComponent(query)}" target="_blank">${query} - RTL Nieuws</a></h3>
-                        <p class="result-snippet">Lees het laatste over "${query}" op RTL Nieuws.</p>
+                        <h3 class="result-title"><a href="https://www.rtlnieuws.nl/zoeken?query=${encodeURIComponent(query)}" target="_blank">${safeQ} - RTL Nieuws</a></h3>
+                        <p class="result-snippet">Lees het laatste over "${safeQ}" op RTL Nieuws.</p>
                         <span class="news-time">rtlnieuws.nl</span>
                     </div>
                 `;
@@ -746,8 +755,8 @@
                     html += `
                         <div class="result-item news-item">
                             <div class="news-source">Wikipedia</div>
-                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${item.title}</a></h3>
-                            <p class="result-snippet">${item.snippet.replace(/<\/?span[^>]*>/g, '')}...</p>
+                            <h3 class="result-title"><a href="https://en.wikipedia.org/wiki/${encodeURIComponent(item.title.replace(/ /g, '_'))}" target="_blank">${escHtml(item.title)}</a></h3>
+                            <p class="result-snippet">${escHtml(item.snippet.replace(/<[^>]*>/g, ''))}...</p>
                             <span class="news-time">en.wikipedia.org</span>
                         </div>
                     `;
@@ -769,7 +778,7 @@
             const ratings = ['★★★★★', '★★★★☆', '★★★★½', '★★★☆☆', '★★★★★'];
             const seed = query.split('').reduce((a,c) => a + c.charCodeAt(0), 0);
             const rng = (n, s=0) => prices[(seed + s) % prices.length + n] || prices[(seed + s) % prices.length];
-            let html = `<div class="results-stats">Winkelresultaten voor "<b>${query}</b>"</div>`;
+            let html = `<div class="results-stats">Winkelresultaten voor "<b>${safeQ}</b>"</div>`;
             html += `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:16px;margin-bottom:28px;">`;
             for (let i = 0; i < 8; i++) {
                 const price = prices[(seed + i * 7) % prices.length];
@@ -783,7 +792,7 @@
                         <div style="width:100%;aspect-ratio:1;background:#f8f9fa;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:40px;overflow:hidden;">
                             🛍️
                         </div>
-                        <div style="font-size:13px;font-weight:500;color:#202124;line-height:1.4;">${query} - ${['Bestseller', 'Premium', 'Pro', 'Deluxe', 'Edition', 'Plus', 'Original', 'Special'][i % 8]}</div>
+                        <div style="font-size:13px;font-weight:500;color:#202124;line-height:1.4;">${safeQ} - ${['Bestseller', 'Premium', 'Pro', 'Deluxe', 'Edition', 'Plus', 'Original', 'Special'][i % 8]}</div>
                         <div style="display:flex;align-items:center;gap:4px;">
                             <span style="font-size:12px;color:#ff6900;">${rating}</span>
                             <span style="font-size:11px;color:#5f6368;">(${reviews})</span>
