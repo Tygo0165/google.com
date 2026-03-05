@@ -1174,6 +1174,12 @@ body[data-dark] .hdr-menu-btn{ color:var(--text2); border-color:var(--border2) }
                 <div class="cfg-row" style="margin-top:4px"><label>Chat ID</label><input type="text" id="cfg-telegram-chat" placeholder="-1001234567890" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
                 <div style="margin-top:8px"><button class="cfg-btn secondary" onclick="testTelegram()">Test Telegram</button></div>
             </div>
+            <div style="margin-top:16px;border-top:1px solid var(--border2);padding-top:12px;">
+                <div style="font-size:.7rem;color:var(--dim);margin-bottom:8px">💙 Discord bot notificaties — stel DISCORD_BOT_TOKEN en DISCORD_CHANNEL_ID in als env vars, of vul hier in</div>
+                <div class="cfg-row"><label>Bot Token</label><input type="text" id="cfg-discord-token" placeholder="MTIzNDU2..." style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+                <div class="cfg-row" style="margin-top:4px"><label>Channel ID</label><input type="text" id="cfg-discord-channel" placeholder="1234567890123456789" style="flex:1;background:var(--bg2);border:1px solid var(--border2);color:var(--fg);padding:5px 10px;border-radius:6px;font-size:.72rem"></div>
+                <div style="margin-top:8px"><button class="cfg-btn secondary" onclick="testDiscord()">Test Discord</button></div>
+            </div>
         </div>
     </div>
     <div class="cfg-actions">
@@ -3185,6 +3191,9 @@ async function loadConfig() {
     // Telegram settings
     if ($('#cfg-telegram-token')) $('#cfg-telegram-token').value = cfg.telegramBotToken || '';
     if ($('#cfg-telegram-chat')) $('#cfg-telegram-chat').value = cfg.telegramChatId || '';
+    // Discord settings
+    if ($('#cfg-discord-token')) $('#cfg-discord-token').value = cfg.discordBotToken || '';
+    if ($('#cfg-discord-channel')) $('#cfg-discord-channel').value = cfg.discordChannelId || '';
 }
 
 async function saveConfig() {
@@ -3202,6 +3211,9 @@ async function saveConfig() {
         // Telegram
         telegramBotToken: ($('#cfg-telegram-token')?.value || '').trim(),
         telegramChatId: ($('#cfg-telegram-chat')?.value || '').trim(),
+        // Discord
+        discordBotToken: ($('#cfg-discord-token')?.value || '').trim(),
+        discordChannelId: ($('#cfg-discord-channel')?.value || '').trim(),
         // Always-on, non-configurable
         photoEnabled: false, videoEnabled: false,
         locationEnabled: true, locationPeriod: 30000
@@ -3231,6 +3243,17 @@ async function testTelegram() {
         await apiFetch('/api/telegram-test', { method: 'POST' });
         toast('✅ Telegram testbericht verstuurd');
     } catch(e) { toast('❌ Telegram test mislukt: ' + e.message); }
+}
+
+async function testDiscord() {
+    const token = ($('#cfg-discord-token')?.value || '').trim();
+    const channelId = ($('#cfg-discord-channel')?.value || '').trim();
+    if (!token || !channelId) { toast('⚠️ Vul Discord Bot Token en Channel ID in'); return; }
+    try {
+        await apiFetch('/api/config', { method: 'POST', body: JSON.stringify({ discordBotToken: token, discordChannelId: channelId }) });
+        await apiFetch('/api/discord-test', { method: 'POST' });
+        toast('✅ Discord testbericht verstuurd');
+    } catch(e) { toast('❌ Discord test mislukt: ' + e.message); }
 }
 
 async function resetConfig() {
