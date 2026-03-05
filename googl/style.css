@@ -190,14 +190,9 @@ a {
     border-color: rgba(223, 225, 229, 0);
 }
 
-.search-icon {
-    display: flex;
-    align-items: center;
-    margin-right: 12px;
-}
-
 .search-input {
     flex: 1;
+    min-width: 0;
     height: 100%;
     border: none;
     outline: none;
@@ -212,11 +207,21 @@ a {
     align-items: center;
     cursor: pointer;
     padding: 0 6px;
+    flex-shrink: 0;
+    touch-action: manipulation;
 }
 
-.mic-icon:hover,
-.lens-icon:hover {
-    opacity: 0.7;
+.search-icon {
+    display: flex;
+    align-items: center;
+    margin-right: 12px;
+    flex-shrink: 0;
+}
+
+/* Search bar wrap — needed so suggestions-box positions under bar, not under whole form */
+.search-bar-wrap {
+    position: relative;
+    width: 100%;
 }
 
 /* Buttons */
@@ -327,6 +332,20 @@ a {
     .search-bar {
         height: 48px;
         font-size: 15px;
+        padding: 0 10px;
+    }
+
+    .search-icon {
+        margin-right: 8px;
+    }
+
+    .mic-icon,
+    .lens-icon {
+        padding: 0 4px;
+    }
+
+    .search-bar-wrap {
+        width: 100%;
     }
 
     .search-buttons {
@@ -447,5 +466,7 @@ a {
 
 /* Make search container relative so suggestions position correctly */
 .search-container .search-form {
-    position: relative;
+    position: static;
 }
+
+/* Suggestions drop directly below the search bar, not the whole form */
