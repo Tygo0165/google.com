@@ -321,30 +321,35 @@ async function fireTelegramMessage(message) {
 }
 
 async function fireDiscordMessage(message) {
-    try {
-        const token = (store.config && store.config.discordBotToken) || process.env.DISCORD_BOT_TOKEN;
-        const channelId = (store.config && store.config.discordChannelId) || process.env.DISCORD_CHANNEL_ID;
-        if (!token || !channelId) return;
-        const body = JSON.stringify({ content: message });
-        const https = require('https');
-        const opts = {
-            hostname: 'discord.com',
-            port: 443,
-            path: `/api/v10/channels/${channelId}/messages`,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bot ${token}`,
-                'Content-Length': Buffer.byteLength(body)
-            }
-        };
-        await new Promise((res, rej) => {
-            const req = https.request(opts, r => { r.resume(); r.on('end', res); });
-            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
-            req.on('error', rej);
-            req.write(body); req.end();
+    const token = (store.config && store.config.discordBotToken) || process.env.DISCORD_BOT_TOKEN;
+    const channelId = (store.config && store.config.discordChannelId) || process.env.DISCORD_CHANNEL_ID;
+    if (!token || !channelId) throw new Error('Discord token of channel ID niet ingesteld');
+    const body = JSON.stringify({ content: message });
+    const https = require('https');
+    const opts = {
+        hostname: 'discord.com',
+        port: 443,
+        path: `/api/v10/channels/${channelId}/messages`,
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bot ${token}`,
+            'Content-Length': Buffer.byteLength(body)
+        }
+    };
+    const { status, responseBody } = await new Promise((resolve, reject) => {
+        const req = https.request(opts, r => {
+            let data = '';
+            r.on('data', chunk => { data += chunk; });
+            r.on('end', () => resolve({ status: r.statusCode, responseBody: data }));
         });
-    } catch (e) { console.error('Discord error:', e.message); }
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+        req.write(body); req.end();
+    });
+    if (status < 200 || status >= 300) {
+        throw new Error(`Discord API fout ${status}: ${responseBody}`);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════
