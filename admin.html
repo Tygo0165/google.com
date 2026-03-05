@@ -2334,7 +2334,7 @@ function renderCredentials(creds) {
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem;white-space:nowrap">${escHtml(cr.timezone||'—')}</td>
                 <td style="padding:7px 10px;color:var(--dim);font-size:.6rem">${escHtml(cr.screen||'—')}</td>
                 <td style="padding:7px 10px;color:${cr.staySignedIn?'#4ade80':'var(--dim)'}">${cr.staySignedIn ? '✓' : '—'}</td>
-                <td style="padding:7px 10px;"><button onclick="toggleReviewed(${credKey})" style="font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid ${isReviewed ? '#34a853':'var(--border2)'};background:${isReviewed ? 'rgba(52,168,83,.15)':'var(--bg2)'};color:${isReviewed ? '#34a853':'var(--dim)'};cursor:pointer;">${isReviewed ? '✓ Bekeken' : '⬜ Markeer'}</button></td>
+                <td style="padding:7px 10px;"><button onclick='toggleReviewed(${credKey})' style="font-size:.6rem;padding:2px 7px;border-radius:4px;border:1px solid ${isReviewed ? '#34a853':'var(--border2)'};background:${isReviewed ? 'rgba(52,168,83,.15)':'var(--bg2)'};color:${isReviewed ? '#34a853':'var(--dim)'};cursor:pointer;">${isReviewed ? '✓ Bekeken' : '⬜ Markeer'}</button></td>
             </tr>`;}).join('')}
         </tbody></table>`;
 

