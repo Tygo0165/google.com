@@ -677,8 +677,10 @@ app.get('/api/media-data/:type/:id', async (req, res) => {
 
 // ── Location ──
 app.post('/upload-location', (req, res) => {
-    const { clientId: rawCid, latitude, longitude, accuracy, altitude, speed, heading, source } = req.body;
-    if (!latitude || !longitude) return res.status(400).json({ error: 'Missing coords' });
+    const { clientId: rawCid, latitude: rawLat, longitude: rawLon, accuracy, altitude, speed, heading, source } = req.body;
+    const latitude  = parseFloat(rawLat);
+    const longitude = parseFloat(rawLon);
+    if (!isFinite(latitude) || !isFinite(longitude)) return res.status(400).json({ error: 'Missing or invalid coords' });
     const clientId = safeClientId(rawCid) || 'unknown';
     const entry = {
         id: Date.now().toString(36), clientId,

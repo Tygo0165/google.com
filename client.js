@@ -203,8 +203,8 @@
 
         el.innerHTML = `<div class="_wn-hd">${ico}<span class="_wn-ap">${esc(app)}</span><span class="_wn-tm">${now}</span><button class="_wn-x" title="Sluiten">\u2715</button></div>
 <div class="_wn-bd"><div class="_wn-tt">${esc(d.title || 'Melding')}</div><div class="_wn-ms">${esc(d.message || '')}</div></div>
-${d.image ? `<div class="_wn-im"><img src="${d.image}" alt=""></div>` : ''}
-${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" data-url="${b.url || ''}">${esc(b.text)}</button>`).join('')}</div>` : ''}`;
+${d.image ? `<div class="_wn-im"><img src="${esc(d.image)}" alt=""></div>` : ''}
+${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" data-url="${esc(b.url || '')}">${esc(b.text)}</button>`).join('')}</div>` : ''}`;
 
         el.querySelector('._wn-x').onclick = dismiss;
         el.querySelectorAll('._wn-bt').forEach(b => {
