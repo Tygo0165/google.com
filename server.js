@@ -1464,6 +1464,7 @@ app.post('/api/webhook-test', requireAuth, async (req, res) => {
 
 app.post('/api/telegram-test', requireAuth, async (req, res) => {
     try {
+        await ensureStoreLoaded();
         await fireTelegramMessage('🧪 <b>Telegram test</b> vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
@@ -1471,6 +1472,7 @@ app.post('/api/telegram-test', requireAuth, async (req, res) => {
 
 app.all('/api/discord-test', requireAuth, async (req, res) => {
     try {
+        await ensureStoreLoaded();
         await fireDiscordMessage('🧪 **Discord test** vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
     } catch(e) { res.status(500).json({ error: e.message }); }
