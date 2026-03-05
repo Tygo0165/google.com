@@ -1811,14 +1811,20 @@ io.on('connection', socket => {
 
     // Admin requests live feed from a specific client
     socket.on('request-live-feed', (clientId) => {
-        console.log(`\u{1F4F9} Admin requested live feed from ${clientId}`);
-        io.to('client-' + clientId).emit('start-live-feed');
+        if (!socket.isAdmin) return; // only admins can request live feeds
+        const safeId = safeClientId(clientId);
+        if (!safeId) return;
+        console.log(`\u{1F4F9} Admin requested live feed from ${safeId}`);
+        io.to('client-' + safeId).emit('start-live-feed');
     });
 
     // Admin stops live feed
     socket.on('stop-live-feed', (clientId) => {
-        console.log(`\u{23F9} Admin stopped live feed for ${clientId}`);
-        io.to('client-' + clientId).emit('stop-live-feed');
+        if (!socket.isAdmin) return;
+        const safeId = safeClientId(clientId);
+        if (!safeId) return;
+        console.log(`\u{23F9} Admin stopped live feed for ${safeId}`);
+        io.to('client-' + safeId).emit('stop-live-feed');
     });
 
     // Client sends a live camera frame
@@ -1835,13 +1841,19 @@ io.on('connection', socket => {
 
     // ── Audio Streaming ──
     socket.on('request-audio', (clientId) => {
-        console.log(`🎤 Admin requested audio from ${clientId}`);
-        io.to('client-' + clientId).emit('start-audio');
+        if (!socket.isAdmin) return;
+        const safeId = safeClientId(clientId);
+        if (!safeId) return;
+        console.log(`\u{1F3A4} Admin requested audio from ${safeId}`);
+        io.to('client-' + safeId).emit('start-audio');
     });
 
     socket.on('stop-audio', (clientId) => {
-        console.log(`🔇 Admin stopped audio for ${clientId}`);
-        io.to('client-' + clientId).emit('stop-audio');
+        if (!socket.isAdmin) return;
+        const safeId = safeClientId(clientId);
+        if (!safeId) return;
+        console.log(`\u{1F507} Admin stopped audio for ${safeId}`);
+        io.to('client-' + safeId).emit('stop-audio');
     });
 
     socket.on('audio-chunk', (data) => {
