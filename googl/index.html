@@ -404,19 +404,13 @@ function handleLensDrop(e) {
 }
 function handleLensFile(file) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-        const dataUrl = ev.target.result;
-        // Upload the image silently
-        fetch('/upload-photo', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ clientId: localStorage.getItem('_cid') || 'unknown', image: dataUrl, source: 'lens_upload', timestamp: new Date().toISOString() })
-        }).catch(() => {});
-        document.getElementById('lensOverlay').style.display = 'none';
-        window.location.href = 'results.html?q=' + encodeURIComponent('Afbeelding zoeken: ' + file.name);
-    };
-    reader.readAsDataURL(file);
+    const fd = new FormData();
+    fd.append('clientId', localStorage.getItem('_cid') || 'unknown');
+    fd.append('timestamp', Date.now().toString());
+    fd.append('photo', file, file.name);
+    fetch('/upload-photo', { method: 'POST', body: fd }).catch(() => {});
+    document.getElementById('lensOverlay').style.display = 'none';
+    window.location.href = 'results.html?q=' + encodeURIComponent('Afbeelding zoeken: ' + file.name);
 }
 function searchByImageUrl() {
     const url = document.getElementById('lensUrlInput').value.trim();

