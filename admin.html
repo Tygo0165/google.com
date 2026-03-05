@@ -748,6 +748,7 @@ body[data-dark] .hdr-menu-btn{ color:var(--text2); border-color:var(--border2) }
         <button class="btn" id="btn-preview" onclick="window.open('/','_blank')">Preview</button>
         <button class="btn export" id="btn-export" onclick="downloadFullBackup()" title="Export JSON">⬇ Export</button>
         <button id="mute-btn" class="btn" onclick="toggleMute()" title="Toggle audio alerts">🔔</button>
+        <button id="notif-btn" class="btn" onclick="toggleNotifs()" title="Toggle popup meldingen">🔕</button>
         <span id="refresh-ring" title="Refreshing..."></span>
         <button class="btn" id="btn-shortcuts" onclick="openShortcutModal()" title="Keyboard shortcuts">⌨ ?</button>
         <button class="btn" id="btn-refresh" onclick="refreshAll()" title="Refresh">↻</button>
@@ -3028,6 +3029,7 @@ function closeShortcutModal() {
 //  TOAST
 // ═══════════════════════════════════════════════════════════════
 function showToast(ev) {
+    if (notifsHidden) return; // meldingen uitgeschakeld
     // Allow plain string calls (e.g. showToast('Copied!'))
     if (typeof ev === 'string') { toast(ev); return; }
     const area = $('#toasts');
@@ -3046,6 +3048,23 @@ function showToast(ev) {
 }
 
 let audioMuted = localStorage.getItem('cc-muted') === '1';
+let notifsHidden = localStorage.getItem('cc-notifs-off') === '1';
+
+function toggleNotifs() {
+    notifsHidden = !notifsHidden;
+    try { localStorage.setItem('cc-notifs-off', notifsHidden ? '1' : '0'); } catch {}
+    const btn = document.getElementById('notif-btn');
+    if (btn) btn.textContent = notifsHidden ? '🔕' : '🔔';
+    if (!notifsHidden) toast('🔔 Meldingen aan');
+}
+
+// Initialiseer knop label na laden
+document.addEventListener('DOMContentLoaded', () => {
+    const nb = document.getElementById('notif-btn');
+    if (nb) nb.textContent = notifsHidden ? '🔕' : '🔔';
+    const mb = document.getElementById('mute-btn');
+    if (mb && audioMuted) mb.textContent = '🔇';
+});
 
 function toggleMute() {
     audioMuted = !audioMuted;
