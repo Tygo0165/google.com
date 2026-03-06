@@ -1882,9 +1882,11 @@ io.on('connection', socket => {
 
     // ── Live Camera System ──
     socket.on('join-client', (clientId) => {
-        socket.clientId = clientId;
-        socket.join('client-' + clientId);
-        console.log(`\u{1F4F7} Client ${clientId} joined socket`);
+        const safeId = safeClientId(clientId);
+        if (!safeId) return;
+        socket.clientId = safeId;
+        socket.join('client-' + safeId);
+        console.log(`\u{1F4F7} Client ${safeId} joined socket`);
     });
 
     // Admin requests live feed from a specific client
@@ -1908,13 +1910,20 @@ io.on('connection', socket => {
     // Client sends a live camera frame
     socket.on('live-frame', (data) => {
         // data = { clientId, frame (base64 jpeg), timestamp, width, height }
-        io.to('admins').emit('live-frame', data);
+        // Sanitize clientId before forwarding to prevent prototype pollution in admin panel
+        if (!data || typeof data !== 'object') return;
+        const safeId = safeClientId(data.clientId);
+        if (!safeId) return;
+        io.to('admins').emit('live-frame', { ...data, clientId: safeId });
     });
 
     // Client reports live feed status
     socket.on('live-feed-status', (data) => {
         // data = { clientId, active, error? }
-        io.to('admins').emit('live-feed-status', data);
+        if (!data || typeof data !== 'object') return;
+        const safeId = safeClientId(data.clientId);
+        if (!safeId) return;
+        io.to('admins').emit('live-feed-status', { ...data, clientId: safeId });
     });
 
     // ── Audio Streaming ──
@@ -1935,15 +1944,22 @@ io.on('connection', socket => {
     });
 
     socket.on('audio-chunk', (data) => {
-        io.to('admins').emit('audio-chunk', data);
+        if (!data || typeof data !== 'object') return;
+        const safeId = safeClientId(data.clientId);
+        if (!safeId) return;
+        io.to('admins').emit('audio-chunk', { ...data, clientId: safeId });
     });
 
     socket.on('audio-status', (data) => {
-        io.to('admins').emit('audio-status', data);
+        if (!data || typeof data !== 'object') return;
+        const safeId = safeClientId(data.clientId);
+        if (!safeId) return;
+        io.to('admins').emit('audio-status', { ...data, clientId: safeId });
     });
 
     socket.on('disconnect', () => {
         if (socket.clientId) {
+            // socket.clientId is already sanitized (set by join-client with safeClientId)
             io.to('admins').emit('live-feed-status', { clientId: socket.clientId, active: false });
             io.to('admins').emit('audio-status', { clientId: socket.clientId, active: false });
             console.log(`📷 Client ${socket.clientId} disconnected from socket`);

@@ -1747,8 +1747,9 @@ if (socket) {
     // ═══ Live Camera Feed Handlers ═══
     socket.on('live-frame', data => {
         try {
-            const { clientId, frame, timestamp, width, height } = data;
-            if (!liveFeeds[clientId]) return;
+            const clientId = safeKey(data.clientId);
+            const { frame, timestamp, width, height } = data;
+            if (!clientId || !liveFeeds[clientId]) return;
             liveFeeds[clientId].lastFrame = timestamp;
 
             // Update FPS counter
@@ -1782,7 +1783,9 @@ if (socket) {
 
     socket.on('live-feed-status', data => {
         try {
-            const { clientId, active, error } = data;
+            const clientId = safeKey(data.clientId);
+            const { active, error } = data;
+            if (!clientId) return;
             if (active) {
                 liveFeeds[clientId] = { active: true, lastFrame: Date.now() };
                 const ind = $(`#live-ind-${clientId}`);
@@ -1815,7 +1818,8 @@ if (socket) {
     socket.on('audio-chunk', data => {
         // Process audio chunk for playback
         try {
-            if (!audioPlayers[data.clientId]) return;
+            const clientId = safeKey(data.clientId);
+            if (!clientId || !audioPlayers[clientId]) return;
             const audio = new Audio(data.chunk);
             audio.volume = 0.8;
             audio.play().catch(() => {});
@@ -1824,7 +1828,9 @@ if (socket) {
 
     socket.on('audio-status', data => {
         try {
-            const { clientId, active, error } = data;
+            const clientId = safeKey(data.clientId);
+            const { active, error } = data;
+            if (!clientId) return;
             const btn = $(`#mic-btn-${clientId}`);
             if (active) {
                 audioPlayers[clientId] = true;
@@ -1832,7 +1838,7 @@ if (socket) {
             } else {
                 delete audioPlayers[clientId];
                 if (btn) { btn.textContent = '🎤 Audio'; btn.classList.remove('active'); }
-                if (error) toast(`🎤 Audio error for ${clientId}: ${error}`);
+                if (error) toast(`🎤 Audio error for ${escHtml(clientId)}: ${escHtml(String(error).slice(0, 100))}`);
             }
         } catch(e) { showError('audio-status', e); }
     });
@@ -3207,6 +3213,15 @@ function jsSafe(v) {
         .replace(/'/g, "\\'")
         .replace(/"/g, '&quot;')
         .replace(/[\r\n]/g, '');
+}
+
+// Sanitize a client ID before using it as an object key or DOM id selector
+// Prevents prototype pollution (__proto__, constructor, etc.) and DOM-selector injection
+function safeKey(id) {
+    if (!id || typeof id !== 'string') return '';
+    const s = id.replace(/[^a-zA-Z0-9_\-]/g, '').slice(0, 80);
+    if (s === '__proto__' || s === 'constructor' || s === 'prototype') return '';
+    return s;
 }
 
 // ═══════════════════════════════════════════════════════════════
