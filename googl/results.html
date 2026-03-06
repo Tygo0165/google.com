@@ -121,8 +121,15 @@
         // HTML escaping helper — prevents XSS when query is injected into innerHTML
         function escHtml(str) {
             const div = document.createElement('div');
-            div.textContent = str;
+            div.textContent = String(str ?? '');
             return div.innerHTML;
+        }
+        // URL safety — block javascript: and data: href values
+        function safeUrl(url) {
+            if (!url) return '#';
+            const s = String(url).trim().toLowerCase();
+            if (s.startsWith('javascript:') || s.startsWith('data:')) return '#';
+            return url;
         }
         const safeQ = escHtml(query); // pre-escaped version used in all innerHTML contexts
         searchInput.value = query;
@@ -395,18 +402,20 @@
                     }
                 }
                 if (!data || !data.extract) return;
+                const safeTitle = escHtml(data.title);
+                const safeExtract = escHtml(data.extract || '');
                 const img = data.thumbnail?.source
-                    ? `<img src="${data.thumbnail.source}" alt="${data.title}" style="width:100%;border-radius:6px 6px 0 0;object-fit:cover;max-height:180px;">`
+                    ? `<img src="${safeUrl(data.thumbnail.source)}" alt="${safeTitle}" style="width:100%;border-radius:6px 6px 0 0;object-fit:cover;max-height:180px;">`
                     : '';
-                const wikiLink = data.content_urls?.desktop?.page || data.url || '#';
+                const wikiLink = safeUrl(data.content_urls?.desktop?.page || data.url || '#');
                 const lang = wikiLink.includes('nl.wikipedia') ? 'nl' : 'en';
                 panel.innerHTML = `
                     <div style="border:1px solid #dadce0;border-radius:8px;overflow:hidden;font-family:'Google Sans',sans-serif;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);">
                         ${img}
                         <div style="padding:16px;">
                             <div style="font-size:11px;color:#5f6368;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;">${lang === 'nl' ? 'Uit Wikipedia' : 'From Wikipedia'}</div>
-                            <h2 style="font-size:17px;font-weight:600;color:#202124;margin:0 0 10px;">${data.title}</h2>
-                            <p style="font-size:13px;color:#4d5156;line-height:1.6;margin:0 0 12px;">${data.extract.slice(0, 350)}${data.extract.length > 350 ? '...' : ''}</p>
+                            <h2 style="font-size:17px;font-weight:600;color:#202124;margin:0 0 10px;">${safeTitle}</h2>
+                            <p style="font-size:13px;color:#4d5156;line-height:1.6;margin:0 0 12px;">${safeExtract.slice(0, 350)}${safeExtract.length > 350 ? '...' : ''}</p>
                             <a href="${wikiLink}" target="_blank" rel="noopener" style="font-size:13px;color:#1a73e8;text-decoration:none;font-weight:500;">
                                 Meer lezen op Wikipedia →
                             </a>
@@ -431,14 +440,15 @@
                 const items = data.items || [];
                 if (!items.length) return;
                 const cards = items.slice(0, 5).map(item => {
-                    const src = item.author || new URL(item.link).hostname.replace('www.', '');
-                    const pub = new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
-                    const thumb = item.thumbnail || item.enclosure?.link || '';
-                    const imgHtml = thumb ? `<img src="${thumb}" alt="" style="width:80px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : '';
-                    return `<a href="${item.link}" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #f0f0f0;text-decoration:none;color:inherit;">
+                    const src = escHtml(item.author || new URL(safeUrl(item.link)).hostname.replace('www.', ''));
+                    const pub = escHtml(new Date(item.pubDate).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' }));
+                    const thumb = safeUrl(item.thumbnail || item.enclosure?.link || '');
+                    const imgHtml = thumb && thumb !== '#' ? `<img src="${thumb}" alt="" style="width:80px;height:60px;object-fit:cover;border-radius:6px;flex-shrink:0;" onerror="this.style.display='none'">` : '';
+                    const safeLink = safeUrl(item.link);
+                    return `<a href="${safeLink}" target="_blank" rel="noopener" style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #f0f0f0;text-decoration:none;color:inherit;">
                         <div style="flex:1;min-width:0;">
                             <div style="font-size:12px;color:#5f6368;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${src} · ${pub}</div>
-                            <div style="font-size:14px;font-weight:500;color:#202124;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${item.title}</div>
+                            <div style="font-size:14px;font-weight:500;color:#202124;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">${escHtml(item.title)}</div>
                         </div>
                         ${imgHtml}
                     </a>`;
@@ -505,13 +515,13 @@
                         </div>
                         <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">
                             <div style="flex:1;min-width:140px;">
-                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${fromLang}</div>
+                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${escHtml(fromLang)}</div>
                                 <div style="font-size:24px;font-weight:400;color:#202124;line-height:1.3;">${safeQ}</div>
                             </div>
                             <div style="color:#dadce0;font-size:20px;padding-top:20px;">→</div>
                             <div style="flex:1;min-width:140px;">
-                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${toLang}</div>
-                                <div style="font-size:24px;font-weight:400;color:#1a73e8;line-height:1.3;">${displayTranslated}</div>
+                                <div style="font-size:11px;color:#5f6368;margin-bottom:6px;font-weight:500;">${escHtml(toLang)}</div>
+                                <div style="font-size:24px;font-weight:400;color:#1a73e8;line-height:1.3;">${escHtml(displayTranslated)}</div>
                             </div>
                         </div>
                         <div style="border-top:1px solid #f0f0f0;margin-top:12px;padding-top:8px;text-align:right;">
@@ -542,9 +552,9 @@
                     </div>
                     <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;-ms-overflow-style:none;scrollbar-width:none;">`;
                 items.forEach(page => {
-                    const thumb = page.imageinfo[0].thumburl;
-                    const full = page.imageinfo[0].descriptionurl || page.imageinfo[0].url;
-                    const alt = page.title.replace('File:','').replace(/\.[^.]+$/,'').substring(0,35);
+                    const thumb = safeUrl(page.imageinfo[0].thumburl);
+                    const full = safeUrl(page.imageinfo[0].descriptionurl || page.imageinfo[0].url);
+                    const alt = escHtml(page.title.replace('File:','').replace(/\.[^.]+$/,'').substring(0,35));
                     html += `<a href="${full}" target="_blank" rel="noopener" style="flex-shrink:0;display:block;width:120px;border-radius:8px;overflow:hidden;border:1px solid #dadce0;text-decoration:none;" title="${alt}">
                         <img src="${thumb}" alt="${alt}" loading="lazy" style="width:120px;height:90px;object-fit:cover;display:block;">
                     </a>`;
@@ -601,9 +611,9 @@
 
                 items.forEach(page => {
                     const info = page.imageinfo[0];
-                    const thumbUrl = info.thumburl;
-                    const fullUrl = info.descriptionurl || info.url;
-                    const title = page.title.replace('File:', '').replace(/\.[^.]+$/, '').substring(0, 50);
+                    const thumbUrl = safeUrl(info.thumburl);
+                    const fullUrl = safeUrl(info.descriptionurl || info.url);
+                    const title = escHtml(page.title.replace('File:', '').replace(/\.[^.]+$/, '').substring(0, 50));
 
                     html += `
                         <a href="${fullUrl}" target="_blank" class="image-card">
