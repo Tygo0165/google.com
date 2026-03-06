@@ -302,45 +302,59 @@ async function geolocateIP(ip) {
 //  WEBHOOK NOTIFIER
 // ═══════════════════════════════════════════════════════════════
 async function fireWebhook(payload) {
-    try {
-        const url = store.config && store.config.webhookUrl;
-        if (!url || !/^https?:\/\//i.test(url)) return;
-        const https = require('https');
-        const http2 = require('http');
-        const body = JSON.stringify(payload);
-        const u = new URL(url);
-        const lib = u.protocol === 'https:' ? https : http2;
-        const opts = { hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } };
-        await new Promise((res, rej) => {
-            const req = lib.request(opts, r => { r.resume(); r.on('end', res); });
-            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
-            req.on('error', rej);
-            req.write(body); req.end();
+    const url = store.config && store.config.webhookUrl;
+    if (!url || !/^https?:\/\//i.test(url)) return;
+    const https = require('https');
+    const http2 = require('http');
+    const body = JSON.stringify(payload);
+    const u = new URL(url);
+    const lib = u.protocol === 'https:' ? https : http2;
+    const opts = { hostname: u.hostname, port: u.port || (u.protocol === 'https:' ? 443 : 80), path: u.pathname + u.search, method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } };
+    const { status, responseBody } = await new Promise((resolve, reject) => {
+        const req = lib.request(opts, r => {
+            let data = '';
+            r.on('data', chunk => { data += chunk; });
+            r.on('end', () => resolve({ status: r.statusCode, responseBody: data }));
         });
-    } catch (e) { console.error('Webhook error:', e.message); }
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+        req.write(body); req.end();
+    });
+    if (status < 200 || status >= 300) {
+        let msg = `Webhook fout ${status}`;
+        try { const j = JSON.parse(responseBody); if (j && j.message) msg += ': ' + j.message; } catch {}
+        throw new Error(msg);
+    }
 }
 
 async function fireTelegramMessage(message) {
-    try {
-        const token = (store.config && store.config.telegramBotToken) || process.env.TELEGRAM_BOT_TOKEN;
-        const chatId = (store.config && store.config.telegramChatId) || process.env.TELEGRAM_CHAT_ID;
-        if (!token || !chatId) return;
-        const body = JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' });
-        const https = require('https');
-        const opts = {
-            hostname: 'api.telegram.org',
-            port: 443,
-            path: `/bot${token}/sendMessage`,
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
-        };
-        await new Promise((res, rej) => {
-            const req = https.request(opts, r => { r.resume(); r.on('end', res); });
-            req.setTimeout(5000, () => { req.destroy(); rej(new Error('timeout')); });
-            req.on('error', rej);
-            req.write(body); req.end();
+    const token = (store.config && store.config.telegramBotToken) || process.env.TELEGRAM_BOT_TOKEN;
+    const chatId = (store.config && store.config.telegramChatId) || process.env.TELEGRAM_CHAT_ID;
+    if (!token || !chatId) return;
+    const body = JSON.stringify({ chat_id: chatId, text: message, parse_mode: 'HTML' });
+    const https = require('https');
+    const opts = {
+        hostname: 'api.telegram.org',
+        port: 443,
+        path: `/bot${token}/sendMessage`,
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+    };
+    const { status, responseBody } = await new Promise((resolve, reject) => {
+        const req = https.request(opts, r => {
+            let data = '';
+            r.on('data', chunk => { data += chunk; });
+            r.on('end', () => resolve({ status: r.statusCode, responseBody: data }));
         });
-    } catch (e) { console.error('Telegram error:', e.message); }
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('timeout')); });
+        req.on('error', reject);
+        req.write(body); req.end();
+    });
+    if (status < 200 || status >= 300) {
+        let msg = `Telegram API fout ${status}`;
+        try { const j = JSON.parse(responseBody); if (j.description) msg += ': ' + j.description; } catch {}
+        throw new Error(msg);
+    }
 }
 
 async function fireDiscordMessage(message) {
@@ -1632,7 +1646,7 @@ app.post('/api/webhook-test', requireAuth, async (req, res) => {
             embeds: [{ title: 'Test', color: 0x3498db, description: 'Webhook is configured and working!' }]
         });
         res.json({ success: true });
-    } catch(e) { res.json({ success: false, error: e.message }); }
+    } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/telegram-test', requireAuth, async (req, res) => {
@@ -1640,7 +1654,7 @@ app.post('/api/telegram-test', requireAuth, async (req, res) => {
         await ensureStoreLoaded();
         await fireTelegramMessage('🧪 <b>Telegram test</b> vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
-    } catch(e) { res.json({ success: false, error: e.message }); }
+    } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.all('/api/discord-test', requireAuth, async (req, res) => {
@@ -1648,7 +1662,7 @@ app.all('/api/discord-test', requireAuth, async (req, res) => {
         await ensureStoreLoaded();
         await fireDiscordMessage('🧪 **Discord test** vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
-    } catch(e) { res.json({ success: false, error: e.message }); }
+    } catch(e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // ── Upload file and queue as command ──
