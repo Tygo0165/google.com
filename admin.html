@@ -2879,13 +2879,14 @@ function renderEvents() {
         if (list2) list2.innerHTML = e;
         return;
     }
-    const html = evs => evs.map(ev => `
-        <div class="ev">
+    const html = evs => evs.map(ev => {
+        const safeType = escHtml(ev.type || '');
+        return `<div class="ev">
             <span class="t">${fmtTime(ev.timestamp)}</span>
-            <span class="tp ${ev.type}">${ev.type.replace(/_/g,' ')}</span>
+            <span class="tp ${safeType}">${safeType.replace(/_/g,' ')}</span>
             <span class="d">${fmtEvent(ev.data)}</span>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
     const filteredEvs = (() => {
         let d = events;
         if (evTypeFilter) d = d.filter(e => (e.type || '') === evTypeFilter);
@@ -2901,7 +2902,7 @@ function renderEvents() {
         // Preserve scroll position so reading old events isn't disrupted by auto-refresh
         const prevScroll = list2.scrollTop;
         if (!filteredEvs.length) {
-            list2.innerHTML = '<div class="empty">No events' + (evTypeFilter ? ' of type "' + evTypeFilter + '"' : '') + '</div>';
+            list2.innerHTML = '<div class="empty">No events' + (evTypeFilter ? ' of type &quot;' + escHtml(evTypeFilter) + '&quot;' : '') + '</div>';
         } else {
             list2.innerHTML = html(filteredEvs.slice(0, 300));
         }

