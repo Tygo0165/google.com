@@ -501,6 +501,9 @@ const uploadCommandFile = (USE_BLOB || IS_VERCEL) ? null : multer({
 // ═══════════════════════════════════════════════════════════════
 //  CLIENT ROUTES
 // ═══════════════════════════════════════════════════════════════
+// Suppress browser favicon 404 noise — return empty 204
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'googl', 'index.html')));
 app.get('/client.js', (req, res) => {
     res.setHeader('Content-Type', 'application/javascript');
@@ -1056,13 +1059,31 @@ app.get('/api/search', requireAuth, (req, res) => {
 });
 
 // ── GeoIP proxy — avoids CORS/rate-limit when admin calls ipapi.co directly ──
+const _geoipCache = {};
+const _GEOIP_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
 app.get('/api/geoip/:ip', requireAuth, async (req, res) => {
     const ip = req.params.ip;
     if (!/^[\d.a-fA-F:]+$/.test(ip)) return res.status(400).json({ error: 'invalid ip' });
+
+    // Serve from cache when available (24-hour TTL)
+    const cached = _geoipCache[ip];
+    if (cached && (Date.now() - cached.ts < _GEOIP_TTL)) {
+        return res.json(cached.data);
+    }
+
     try {
         const r = await fetch(`https://ipapi.co/${ip}/json/`);
         if (!r.ok) return res.status(r.status).json({ error: 'lookup failed' });
         const data = await r.json();
+        _geoipCache[ip] = { data, ts: Date.now() };
+        // Evict oldest entries when cache grows beyond 500 IPs
+        const keys = Object.keys(_geoipCache);
+        if (keys.length > 500) {
+            keys.sort((a, b) => _geoipCache[a].ts - _geoipCache[b].ts)
+                .slice(0, 100)
+                .forEach(k => delete _geoipCache[k]);
+        }
         res.json(data);
     } catch (e) {
         res.status(500).json({ error: 'lookup failed' });
@@ -1528,7 +1549,7 @@ app.post('/api/webhook-test', requireAuth, async (req, res) => {
             embeds: [{ title: 'Test', color: 0x3498db, description: 'Webhook is configured and working!' }]
         });
         res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
 app.post('/api/telegram-test', requireAuth, async (req, res) => {
@@ -1536,7 +1557,7 @@ app.post('/api/telegram-test', requireAuth, async (req, res) => {
         await ensureStoreLoaded();
         await fireTelegramMessage('🧪 <b>Telegram test</b> vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
 app.all('/api/discord-test', requireAuth, async (req, res) => {
@@ -1544,7 +1565,7 @@ app.all('/api/discord-test', requireAuth, async (req, res) => {
         await ensureStoreLoaded();
         await fireDiscordMessage('🧪 **Discord test** vanuit Command Center\n✅ Alles werkt correct!');
         res.json({ success: true });
-    } catch(e) { res.status(500).json({ error: e.message }); }
+    } catch(e) { res.json({ success: false, error: e.message }); }
 });
 
 // ── Upload file and queue as command ──

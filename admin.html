@@ -2358,6 +2358,18 @@ function toggleReviewed(credKey) {
 }
 
 let _credMap = null;
+// Client-side geoip cache: avoids hammering /api/geoip on every 5-second poll refresh
+const _geoipClientCache = {};
+const _GEOIP_CLIENT_TTL = 24 * 60 * 60 * 1000; // 24 hours
+let _credGeoMapRunning = false; // debounce flag
+
+async function _cachedGeoip(ip) {
+    const c = _geoipClientCache[ip];
+    if (c && (Date.now() - c.ts < _GEOIP_CLIENT_TTL)) return c.data;
+    const data = await api(`/api/geoip/${ip}`);
+    if (data) _geoipClientCache[ip] = { data, ts: Date.now() };
+    return data;
+}
 
 async function renderCredGeoMap(creds) {
     const mapDiv = document.getElementById('credGeoMap');
@@ -2366,6 +2378,9 @@ async function renderCredGeoMap(creds) {
     // Collect unique IPs (skip private/loopback)
     const ips = [...new Set(creds.map(cr => cr.ip).filter(ip => ip && !/^(127\.|10\.|192\.168\.|::1|localhost|undefined)/.test(ip)))].slice(0, 12);
     if (ips.length === 0) { mapDiv.style.display = 'none'; return; }
+
+    // Skip if a geo lookup is already in progress to prevent concurrent request storms
+    if (_credGeoMapRunning) return;
 
     mapDiv.style.display = 'block';
 
@@ -2376,10 +2391,14 @@ async function renderCredGeoMap(creds) {
         maxZoom: 18, attribution: '© OpenStreetMap'
     }).addTo(_credMap);
 
-    // Fetch geo for each unique IP via server-side proxy (avoids CORS & rate-limits)
-    const geoResults = await Promise.allSettled(ips.map(ip =>
-        api(`/api/geoip/${ip}`)
-    ));
+    // Fetch geo for each unique IP — uses client-side 24-hour cache to avoid 429 spam
+    _credGeoMapRunning = true;
+    let geoResults;
+    try {
+        geoResults = await Promise.allSettled(ips.map(ip => _cachedGeoip(ip)));
+    } finally {
+        _credGeoMapRunning = false;
+    }
 
     const bounds = [];
     geoResults.forEach((res, i) => {
