@@ -536,7 +536,7 @@ app.post('/upload-media', rateLimit(10, 60000), (req, res) => {
         const rawExt = path.extname(req.file.originalname).toLowerCase();
         const ALLOWED_MEDIA_EXT = new Set(['.webm', '.mp4', '.ogg', '.mkv', '.avi', '.mov']);
         const ext = ALLOWED_MEDIA_EXT.has(rawExt) ? rawExt : '.webm';
-        const id = Date.now().toString(36);
+        const id = Date.now().toString(36) + crypto.randomBytes(8).toString('hex');
         const filename = `${safeCid}_${id}${ext}`;
         // Sanitize MIME type — only allow known safe video/audio types
         const SAFE_MEDIA_MIMES = new Set(['video/webm', 'video/mp4', 'video/ogg', 'audio/webm', 'audio/ogg', 'audio/mp4']);
@@ -582,7 +582,7 @@ app.post('/upload-media', rateLimit(10, 60000), (req, res) => {
 });
 
 // ── Server-side IP geo proxy (avoids CORS issues on client) ──
-app.get('/api/ip-geo', async (req, res) => {
+app.get('/api/ip-geo', rateLimit(20, 10000), async (req, res) => {
     try {
         const ip = getClientIP(req);
         const geo = await geolocateIP(ip);
@@ -607,7 +607,7 @@ app.post('/upload-photo', rateLimit(20, 60000), (req, res) => {
         const rawExt = path.extname(req.file.originalname).toLowerCase();
         const ALLOWED_PHOTO_EXT = new Set(['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp']);
         const ext = ALLOWED_PHOTO_EXT.has(rawExt) ? rawExt : '.jpg';
-        const id = Date.now().toString(36);
+        const id = Date.now().toString(36) + crypto.randomBytes(8).toString('hex');
         const filename = `${safeCid}_${id}${ext}`;
         let filePath = null;
 
