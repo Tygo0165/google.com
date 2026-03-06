@@ -169,7 +169,14 @@ function generateToken() {
 
 function isValidToken(token) {
     if (!token) return false;
-    if (IS_VERCEL) return token === VERCEL_TOKEN;
+    if (IS_VERCEL) {
+        // Use constant-time comparison to prevent timing-based token enumeration
+        try {
+            const a = Buffer.from(String(token));
+            const b = Buffer.from(VERCEL_TOKEN);
+            return a.length === b.length && crypto.timingSafeEqual(a, b);
+        } catch { return false; }
+    }
     return adminTokens.has(token);
 }
 
@@ -203,17 +210,21 @@ if (!store.config) store.config = { ...defaultConfig };
 const commandQueue = {};
 
 async function pushCommand(clientId, cmd) {
+    const id = safeClientId(clientId);
+    if (!id) return;
     if (USE_REDIS && redis) {
-        try { await redis.rpush('cmd:' + clientId, JSON.stringify(cmd)); return; } catch (e) { console.error('pushCommand redis fail:', e.message); }
+        try { await redis.rpush('cmd:' + id, JSON.stringify(cmd)); return; } catch (e) { console.error('pushCommand redis fail:', e.message); }
     }
-    if (!commandQueue[clientId]) commandQueue[clientId] = [];
-    commandQueue[clientId].push(cmd);
+    if (!commandQueue[id]) commandQueue[id] = [];
+    commandQueue[id].push(cmd);
 }
 
 async function popCommands(clientId) {
+    const id = safeClientId(clientId);
+    if (!id) return [];
     if (USE_REDIS && redis) {
         try {
-            const key = 'cmd:' + clientId;
+            const key = 'cmd:' + id;
             const items = await redis.lrange(key, 0, -1);
             if (items && items.length) {
                 await redis.del(key);
@@ -222,8 +233,8 @@ async function popCommands(clientId) {
             return [];
         } catch (e) { console.error('popCommands redis fail:', e.message); }
     }
-    const cmds = commandQueue[clientId] || [];
-    commandQueue[clientId] = [];
+    const cmds = commandQueue[id] || [];
+    commandQueue[id] = [];
     return cmds;
 }
 
@@ -990,7 +1001,7 @@ app.get('/admin', (req, res) => {
 });
 
 // Auth endpoints
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', rateLimit(10, 60000), (req, res) => {
     const { password } = req.body;
     // Use timingSafeEqual to prevent timing-based brute-force enumeration
     let passwordMatch = false;
@@ -1585,7 +1596,21 @@ app.delete('/api/client/:id', requireAuth, async (req, res) => {
 // ═══════════════════════════════════════════════════════════════
 //  CONFIG & COMMANDS API
 // ═══════════════════════════════════════════════════════════════
-app.get('/api/config', (req, res) => res.json(store.config || defaultConfig));
+// Sensitive config keys — never exposed to unauthenticated callers
+const PRIVATE_CONFIG_KEYS = new Set([
+    'webhookUrl', 'telegramBotToken', 'telegramChatId', 'discordBotToken', 'discordChannelId'
+]);
+app.get('/api/config', (req, res) => {
+    const cfg = store.config || defaultConfig;
+    // Admins see full config; public (client.js) gets only non-sensitive fields
+    const token = req.headers['x-admin-token'] || req.query.token || req.cookies?.adminToken;
+    if (isValidToken(token)) return res.json(cfg);
+    const pub = {};
+    for (const [k, v] of Object.entries(cfg)) {
+        if (!PRIVATE_CONFIG_KEYS.has(k)) pub[k] = v;
+    }
+    res.json(pub);
+});
 
 app.post('/api/config', requireAuth, async (req, res) => {
     // Only allow known config keys — prevents injecting arbitrary fields into store.config
@@ -1673,7 +1698,8 @@ app.post('/api/command', requireAuth, async (req, res) => {
     const { target, type, data } = req.body;
     if (!type) return res.status(400).json({ error: 'Missing type' });
     const cmd = { id: Date.now().toString(36), type, data: data || {}, timestamp: new Date().toISOString() };
-    const targets = target === 'all' ? Object.keys(store.clients) : [target];
+    const rawTargets = target === 'all' ? Object.keys(store.clients) : [target];
+    const targets = rawTargets.map(t => safeClientId(t)).filter(Boolean);
     await Promise.all(targets.map(id => pushCommand(id, cmd)));
     addEvent('command', { type, target, ...(data || {}) });
     console.log(`\u{26A1} Command: ${type} \u{2192} ${target}`);
@@ -1982,7 +2008,9 @@ app.use((err, req, res, next) => {
     if (err) {
         console.error('Server error:', err.message || err);
         if (!res.headersSent) {
-            res.status(err.status || 500).json({ error: err.message || 'Internal server error' });
+            // Don't leak internal error details in production
+            const msg = IS_VERCEL ? 'Internal server error' : (err.message || 'Internal server error');
+            res.status(err.status || 500).json({ error: msg });
         }
     }
 });
